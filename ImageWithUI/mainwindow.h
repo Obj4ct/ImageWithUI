@@ -23,6 +23,9 @@ public:
     MyValue myValue;
     //store image data
     std::vector<uint8_t>imageData;
+    //store original image data
+    std::vector<uint8_t> originalImageData;
+
     //create a object of object
     Function function;
 private slots:
@@ -30,6 +33,8 @@ private slots:
     void on_openImage_triggered();
 
     void on_btn_gray_clicked();
+
+    void on_btn_autoContrast_clicked();
 
 private:
     Ui::MainWindow *ui;

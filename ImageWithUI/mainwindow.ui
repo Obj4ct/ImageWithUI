@@ -49,6 +49,19 @@
       <string>转为灰度图</string>
      </property>
     </widget>
+    <widget class="QPushButton" name="btn_autoContrast">
+     <property name="geometry">
+      <rect>
+       <x>40</x>
+       <y>90</y>
+       <width>131</width>
+       <height>31</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>自动调整对比度</string>
+     </property>
+    </widget>
    </widget>
   </widget>
   <widget class="QMenuBar" name="menubar">
