@@ -17,6 +17,12 @@ set(PROJECT_SOURCES
         mainwindow.cpp
         mainwindow.h
         mainwindow.ui
+        BMPFile.h
+        BMPFile.cpp
+        Debug.h
+        #two diffrent header
+        stdcpp.h
+        QTHeader.h
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
