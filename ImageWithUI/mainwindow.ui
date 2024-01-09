@@ -27,6 +27,29 @@
      <string/>
     </property>
    </widget>
+   <widget class="QWidget" name="widget" native="true">
+    <property name="geometry">
+     <rect>
+      <x>610</x>
+      <y>30</y>
+      <width>201</width>
+      <height>491</height>
+     </rect>
+    </property>
+    <widget class="QPushButton" name="btn_gray">
+     <property name="geometry">
+      <rect>
+       <x>40</x>
+       <y>30</y>
+       <width>92</width>
+       <height>29</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>转为灰度图</string>
+     </property>
+    </widget>
+   </widget>
   </widget>
   <widget class="QMenuBar" name="menubar">
    <property name="geometry">

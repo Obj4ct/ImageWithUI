@@ -23,6 +23,8 @@ set(PROJECT_SOURCES
         #two diffrent header
         stdcpp.h
         QTHeader.h
+        Function.h
+        Function.cpp
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)

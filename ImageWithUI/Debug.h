@@ -1,8 +1,6 @@
 
 #ifndef DEBUG_H
 #define DEBUG_H
-
-
 #include "BMPFile.h"
 
 void ImgInfo(BMP &inBmp, BMPInfo &inBmpInfo)
