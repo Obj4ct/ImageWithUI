@@ -14,8 +14,8 @@ class MainWindow : public QMainWindow
 
 public:
     MainWindow(QWidget *parent = nullptr);
-    //test function, removeable
-    void TestImage();
+    //reset image
+    void ResetImage(MyValue &myValue);
     ~MainWindow();
 public:
     //QImage
@@ -35,6 +35,14 @@ private slots:
     void on_btn_gray_clicked();
 
     void on_btn_autoContrast_clicked();
+
+    void on_btn_averBlur_clicked();
+
+    void on_btn_small_biCubic_clicked();
+
+    void on_btn_large_biCubic_clicked();
+
+    void on_btn_resetAll_clicked();
 
 private:
     Ui::MainWindow *ui;

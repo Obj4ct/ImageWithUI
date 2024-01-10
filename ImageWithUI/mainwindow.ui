@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>864</width>
-    <height>661</height>
+    <width>1384</width>
+    <height>738</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -19,8 +19,8 @@
      <rect>
       <x>20</x>
       <y>40</y>
-      <width>511</width>
-      <height>461</height>
+      <width>731</width>
+      <height>581</height>
      </rect>
     </property>
     <property name="text">
@@ -30,10 +30,10 @@
    <widget class="QWidget" name="widget" native="true">
     <property name="geometry">
      <rect>
-      <x>610</x>
-      <y>30</y>
-      <width>201</width>
-      <height>491</height>
+      <x>780</x>
+      <y>0</y>
+      <width>541</width>
+      <height>611</height>
      </rect>
     </property>
     <widget class="QPushButton" name="btn_gray">
@@ -52,14 +52,127 @@
     <widget class="QPushButton" name="btn_autoContrast">
      <property name="geometry">
       <rect>
-       <x>40</x>
-       <y>90</y>
+       <x>30</x>
+       <y>100</y>
        <width>131</width>
        <height>31</height>
       </rect>
      </property>
      <property name="text">
       <string>自动调整对比度</string>
+     </property>
+    </widget>
+    <widget class="QPushButton" name="btn_averBlur">
+     <property name="geometry">
+      <rect>
+       <x>50</x>
+       <y>170</y>
+       <width>92</width>
+       <height>29</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>均值模糊</string>
+     </property>
+    </widget>
+    <widget class="QWidget" name="widget_2" native="true">
+     <property name="geometry">
+      <rect>
+       <x>190</x>
+       <y>10</y>
+       <width>141</width>
+       <height>401</height>
+      </rect>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout">
+      <item>
+       <widget class="QLabel" name="label_3">
+        <property name="text">
+         <string>双立方插值</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="label">
+        <property name="text">
+         <string>缩小</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="label_4">
+        <property name="text">
+         <string>高度</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLineEdit" name="lineEdit_small_biCubic_height"/>
+      </item>
+      <item>
+       <widget class="QLabel" name="label_8">
+        <property name="text">
+         <string>宽度</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLineEdit" name="lineEdit_small_biCubic_width"/>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_small_biCubic">
+        <property name="text">
+         <string>确定</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="label_2">
+        <property name="text">
+         <string>放大</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="label_5">
+        <property name="text">
+         <string>高度</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLineEdit" name="lineEdit_large_biCubic_height"/>
+      </item>
+      <item>
+       <widget class="QLabel" name="label_7">
+        <property name="text">
+         <string>宽度</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLineEdit" name="lineEdit_large_biCubic_width"/>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_large_biCubic">
+        <property name="text">
+         <string>确定</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+    <widget class="QPushButton" name="btn_resetAll">
+     <property name="geometry">
+      <rect>
+       <x>190</x>
+       <y>540</y>
+       <width>119</width>
+       <height>26</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>重置图像</string>
      </property>
     </widget>
    </widget>
@@ -69,7 +182,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>864</width>
+     <width>1384</width>
      <height>25</height>
     </rect>
    </property>
