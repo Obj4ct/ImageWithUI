@@ -19,8 +19,8 @@
      <rect>
       <x>20</x>
       <y>40</y>
-      <width>731</width>
-      <height>581</height>
+      <width>541</width>
+      <height>511</height>
      </rect>
     </property>
     <property name="text">
@@ -30,10 +30,10 @@
    <widget class="QWidget" name="widget" native="true">
     <property name="geometry">
      <rect>
-      <x>780</x>
+      <x>580</x>
       <y>0</y>
-      <width>541</width>
-      <height>611</height>
+      <width>741</width>
+      <height>651</height>
      </rect>
     </property>
     <widget class="QPushButton" name="btn_gray">
@@ -52,7 +52,7 @@
     <widget class="QPushButton" name="btn_autoContrast">
      <property name="geometry">
       <rect>
-       <x>30</x>
+       <x>20</x>
        <y>100</y>
        <width>131</width>
        <height>31</height>
@@ -78,7 +78,7 @@
     <widget class="QWidget" name="widget_2" native="true">
      <property name="geometry">
       <rect>
-       <x>190</x>
+       <x>370</x>
        <y>10</y>
        <width>141</width>
        <height>401</height>
@@ -165,14 +165,114 @@
     <widget class="QPushButton" name="btn_resetAll">
      <property name="geometry">
       <rect>
-       <x>190</x>
-       <y>540</y>
+       <x>40</x>
+       <y>380</y>
        <width>119</width>
        <height>26</height>
       </rect>
      </property>
      <property name="text">
       <string>重置图像</string>
+     </property>
+    </widget>
+    <widget class="QWidget" name="widget_3" native="true">
+     <property name="geometry">
+      <rect>
+       <x>520</x>
+       <y>10</y>
+       <width>141</width>
+       <height>401</height>
+      </rect>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_2">
+      <item>
+       <widget class="QLabel" name="label_6">
+        <property name="text">
+         <string>双线性插值</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="label_9">
+        <property name="text">
+         <string>缩小</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="label_10">
+        <property name="text">
+         <string>高度</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLineEdit" name="lineEdit_small_bilinear_height"/>
+      </item>
+      <item>
+       <widget class="QLabel" name="label_11">
+        <property name="text">
+         <string>宽度</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLineEdit" name="lineEdit_small_bilinear_width"/>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_small_bilinear">
+        <property name="text">
+         <string>确定</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="label_12">
+        <property name="text">
+         <string>放大</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="label_13">
+        <property name="text">
+         <string>高度</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLineEdit" name="lineEdit_large_bilinear_height"/>
+      </item>
+      <item>
+       <widget class="QLabel" name="label_14">
+        <property name="text">
+         <string>宽度</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLineEdit" name="lineEdit_large_bilinear_width"/>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_large_bilinear">
+        <property name="text">
+         <string>确定</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+    <widget class="QPushButton" name="btn_blend">
+     <property name="geometry">
+      <rect>
+       <x>50</x>
+       <y>220</y>
+       <width>92</width>
+       <height>29</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>图层混合</string>
      </property>
     </widget>
    </widget>

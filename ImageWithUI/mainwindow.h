@@ -3,6 +3,7 @@
 #include"QTHeader.h"
 #include "BMPFile.h"
 #include "Function.h"
+#include "blendwindow.h"
 //QString test_path="D:\\Documents\\1Projects\\QT\\ImageWithUI\\ImageWithUI\\image\\Lenna.bmp";
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -44,8 +45,14 @@ private slots:
 
     void on_btn_resetAll_clicked();
 
+    void on_btn_small_bilinear_clicked();
+
+    void on_btn_large_bilinear_clicked();
+
+    void on_btn_blend_clicked();
+
 private:
     Ui::MainWindow *ui;
-
+    BlendWindow * blendWindow;
 };
 #endif // MAINWINDOW_H

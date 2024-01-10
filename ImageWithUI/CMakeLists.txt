@@ -25,6 +25,11 @@ set(PROJECT_SOURCES
         QTHeader.h
         Function.h
         Function.cpp
+        #create a new ui include cpp and head file
+        blendwindow.h
+        blendwindow.cpp
+        blendwindow.ui
+
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
