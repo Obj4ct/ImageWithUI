@@ -91,19 +91,6 @@
     <string/>
    </property>
   </widget>
-  <widget class="QPushButton" name="btn_blend">
-   <property name="geometry">
-    <rect>
-     <x>630</x>
-     <y>410</y>
-     <width>92</width>
-     <height>29</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string> 混合</string>
-   </property>
-  </widget>
   <widget class="QWidget" name="widget_select_blendMode" native="true">
    <property name="geometry">
     <rect>
@@ -123,6 +110,32 @@
     </item>
     <item>
      <widget class="QComboBox" name="comboBox_blendMode"/>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QWidget" name="widget_select_alpha" native="true">
+   <property name="geometry">
+    <rect>
+     <x>640</x>
+     <y>390</y>
+     <width>381</width>
+     <height>51</height>
+    </rect>
+   </property>
+   <layout class="QHBoxLayout" name="horizontalLayout_3">
+    <item>
+     <widget class="QLabel" name="label_2">
+      <property name="text">
+       <string>选择强度(alpha值):</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QSlider" name="horizontalSlider_alpha">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
+      </property>
+     </widget>
     </item>
    </layout>
   </widget>

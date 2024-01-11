@@ -8,6 +8,21 @@ BlendWindow::BlendWindow(QWidget *parent) :
     ui(new Ui::BlendWindow) {
     ui->setupUi(this);
     ui->widget_select_blendMode->setVisible(false);
+    ui->widget_select_alpha->setVisible(false);
+
+    // 设置滑块的最小值和最大值
+    ui->horizontalSlider_alpha->setMinimum(0);  // 设置最小值
+    ui->horizontalSlider_alpha->setMaximum(10);  // 设置最大值
+
+
+    // 初始状态为中间值
+    currentAlpha = 0; // 或者设置为你期望的初始值
+    // 设置下拉框的初始状态
+    ui->comboBox_blendMode->addItem("<请选择>");
+    ui->comboBox_blendMode->addItem("正常");
+    ui->comboBox_blendMode->addItem("正片叠底");
+    ui->comboBox_blendMode->addItem("滤色");
+    ui->comboBox_blendMode->addItem("叠加");
 
 }
 int BlendWindow::selectCount=0;
@@ -29,7 +44,7 @@ void BlendWindow::on_btn_open_1_clicked() {
     myValue_1 = MYFunction::ReadBMPFile(BMPPath);
 
     originalImageData_1 = myValue_1.imageData;
-
+    originalImageData_1_temp=originalImageData_1;
     bmpImage_1 = QImage(originalImageData_1.data(), myValue_1.bmpInfo.GetWidth(),
                         myValue_1.bmpInfo.GetHeight(), QImage::Format_BGR888);
 
@@ -59,7 +74,7 @@ void BlendWindow::on_btn_open_2_clicked() {
     myValue_2 = MYFunction::ReadBMPFile(BMPPath);
 
     originalImageData_2 = myValue_2.imageData;
-
+    originalImageData_2_temp=originalImageData_2;
     bmpImage_2 = QImage(originalImageData_2.data(), myValue_2.bmpInfo.GetWidth(),
                         myValue_2.bmpInfo.GetHeight(), QImage::Format_BGR888);
 
@@ -75,26 +90,19 @@ void BlendWindow::on_btn_open_2_clicked() {
     }
 }
 
-void BlendWindow::on_btn_blend_clicked() {
-    BlendImages();
-    //    QPixmap blendedPixmap = QPixmap::fromImage(blendedImage);
-    //    ui->blendImageLabel->setPixmap(blendedPixmap);
-    //    ui->blendImageLabel->setScaledContents(true);
-}
-
 void BlendWindow::BlendImages()
 {
     int32_t width = myValue_1.bmpInfo.GetWidth();
     int32_t height = myValue_1.bmpInfo.GetHeight();
-
-
-    BlendMode blendMode = BLEND_NORMAL;
+    BlendMode blendMode = currentBlendMode;
     Effect(originalImageData_1, originalImageData_2, width, height, blendMode);
 
 
     //out image for debug
     //    MYFunction::WriteBMPFile("outputBlendedImage.bmp", originalImageData_1, myValue_1.bmp,
     //                             myValue_1.bmpInfo);
+
+
     //store to blendedimage
 
     ShowImage();
@@ -175,7 +183,7 @@ void BlendWindow::SwitchBlendMode(uint8_t &destR, uint8_t &destG, uint8_t &destB
 
 void BlendWindow::Effect(std::vector<uint8_t> &imageData, const std::vector<uint8_t> &effectData, int width, int height,
                          BlendMode blendMode) {
-    double alpha = 0.5;
+    double alpha=currentAlpha;
     if (imageData.size() != effectData.size()) {
         QMessageBox* myBox = new QMessageBox;
         QPushButton* okBtn = new QPushButton("确定");
@@ -207,4 +215,42 @@ void BlendWindow::Effect(std::vector<uint8_t> &imageData, const std::vector<uint
     }
 }
 
+
+
+void BlendWindow::on_comboBox_blendMode_currentIndexChanged(int index)
+{
+    originalImageData_1=originalImageData_1_temp;
+    originalImageData_2=originalImageData_2_temp;
+    if (index == 0) {
+        qDebug()<<"current index is 0";
+    } else if (index == 1) {
+        // "正常"
+        ui->widget_select_alpha->setVisible(true);
+        currentBlendMode = BLEND_NORMAL;
+        BlendImages();
+    } else if (index == 2) {
+        // "正片叠底"
+        ui->widget_select_alpha->setVisible(false);
+        currentBlendMode = BLEND_MULTIPLY;
+        BlendImages();
+    } else if (index == 3) {
+        // "滤色"
+        ui->widget_select_alpha->setVisible(false);
+        currentBlendMode = BLEND_SCREEN;
+        BlendImages();
+    } else if (index == 4) {
+        // "叠加"
+        ui->widget_select_alpha->setVisible(false);
+        currentBlendMode = BLEND_OVERLAY;
+        BlendImages();
+    }
+}
+
+
+void BlendWindow::on_horizontalSlider_alpha_valueChanged(int value)
+{
+    currentAlpha = static_cast<double>(value) / ui->horizontalSlider_alpha->maximum();
+    qDebug() << "current alpha is " << currentAlpha;
+    BlendImages();
+}
 

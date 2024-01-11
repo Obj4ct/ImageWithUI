@@ -26,7 +26,10 @@ public:
 private slots:
     void on_btn_open_1_clicked();
     void on_btn_open_2_clicked();
-    void on_btn_blend_clicked();
+
+    void on_comboBox_blendMode_currentIndexChanged(int index);
+
+    void on_horizontalSlider_alpha_valueChanged(int value);
 
 private:
     Ui::BlendWindow *ui;
@@ -40,12 +43,18 @@ private:
     MyValue myValue_2;
 
     static int selectCount;
-
+    //下拉框选项
+    BlendMode currentBlendMode;
+    double currentAlpha;
     //first image data
     std::vector<uint8_t> originalImageData_1;
+    std::vector<uint8_t> originalImageData_1_temp;
     //seconde image data
     std::vector<uint8_t> originalImageData_2;
+    std::vector<uint8_t> originalImageData_2_temp;
     std::vector<uint8_t> blendedImageData;
+
+
 
 private:
     void SwitchBlendMode(uint8_t &destR, uint8_t &destG, uint8_t &destB,
@@ -59,6 +68,7 @@ private:
 
     void BlendImages();
     void ShowImage();
+    void UpdateBlendEffect();
 
 };
 
