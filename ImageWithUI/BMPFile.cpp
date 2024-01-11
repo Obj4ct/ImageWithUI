@@ -34,20 +34,20 @@ MyValue MYFunction::ReadBMPFile(const std::string &fileName)
 }
 
 
-//void MYFunction::WriteBMPFile(const std::string &fileName, const std::vector<uint8_t> &imageData, BMP &bmp, BMPInfo &bmpInfo)
-//{
-//    std::ofstream outputFile(SAVE_PATH + fileName, std::ios::binary);
-//    if (!outputFile.is_open()) {
-//        std::cout << "Unable to create output file!" << std::endl;
-//        return;
-//    }
-//    outputFile.write(reinterpret_cast<const char *>(&bmp), sizeof(BMP));
-//    outputFile.write(reinterpret_cast<const char *>(&bmpInfo), sizeof(BMPInfo));
-//    outputFile.seekp(bmp.GetDataOffset());
-//    outputFile.write(reinterpret_cast<const char *>(imageData.data()), imageData.size());
-//    outputFile.close();
-//    std::cout << "success write ,file called " << fileName << std::endl;
-//}
+void MYFunction::WriteBMPFile(const std::string &fileName, const std::vector<uint8_t> &imageData, BMP &bmp, BMPInfo &bmpInfo)
+{
+    std::ofstream outputFile(SAVE_PATH + fileName, std::ios::binary);
+    if (!outputFile.is_open()) {
+        std::cout << "Unable to create output file!" << std::endl;
+        return;
+    }
+    outputFile.write(reinterpret_cast<const char *>(&bmp), sizeof(BMP));
+    outputFile.write(reinterpret_cast<const char *>(&bmpInfo), sizeof(BMPInfo));
+    outputFile.seekp(bmp.GetDataOffset());
+    outputFile.write(reinterpret_cast<const char *>(imageData.data()), imageData.size());
+    outputFile.close();
+    std::cout << "success write ,file called " << fileName << std::endl;
+}
 
 void MYFunction::SetBMPHeaderValues(BMP &bmp, BMPInfo &bmpInfo, int width, int height, uint16_t bitsPerPixel)
 {

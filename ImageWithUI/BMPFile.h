@@ -2,7 +2,7 @@
 #define BMPFILE_H
 
 #include "stdcpp.h"
-
+#define SAVE_PATH "D:\\Desktop\\"
 #pragma pack(push, 1)
 class BMP
 {
@@ -189,7 +189,8 @@ class MYFunction
 {
 public:
     static MyValue ReadBMPFile(const std::string &fileName);
-    //static void WriteBMPFile(const std::string &fileName, const std::vector<uint8_t> &imageData, BMP &bmp, BMPInfo &bmpInfo);
+    //save image for debug
+    static void WriteBMPFile(const std::string &fileName, const std::vector<uint8_t> &imageData, BMP &bmp, BMPInfo &bmpInfo);
     static void SetBMPHeaderValues(BMP &bmp, BMPInfo &bmpInfo, int width, int height, uint16_t bitsPerPixel);
 };
 

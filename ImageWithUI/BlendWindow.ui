@@ -6,46 +6,20 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>965</width>
-    <height>745</height>
+    <width>1062</width>
+    <height>748</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>图层混合</string>
   </property>
-  <widget class="QLabel" name="imageLabel_1">
-   <property name="geometry">
-    <rect>
-     <x>40</x>
-     <y>20</y>
-     <width>391</width>
-     <height>381</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string/>
-   </property>
-  </widget>
-  <widget class="QLabel" name="imageLabel_2">
-   <property name="geometry">
-    <rect>
-     <x>510</x>
-     <y>20</y>
-     <width>391</width>
-     <height>381</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string/>
-   </property>
-  </widget>
   <widget class="QWidget" name="widget" native="true">
    <property name="geometry">
     <rect>
-     <x>150</x>
-     <y>400</y>
-     <width>771</width>
-     <height>81</height>
+     <x>140</x>
+     <y>290</y>
+     <width>421</width>
+     <height>71</height>
     </rect>
    </property>
    <layout class="QHBoxLayout" name="horizontalLayout">
@@ -57,20 +31,7 @@
      </widget>
     </item>
     <item>
-     <spacer name="horizontalSpacer">
-      <property name="orientation">
-       <enum>Qt::Horizontal</enum>
-      </property>
-      <property name="sizeHint" stdset="0">
-       <size>
-        <width>40</width>
-        <height>20</height>
-       </size>
-      </property>
-     </spacer>
-    </item>
-    <item>
-     <spacer name="horizontalSpacer_3">
+     <spacer name="horizontalSpacer_2">
       <property name="orientation">
        <enum>Qt::Horizontal</enum>
       </property>
@@ -89,18 +50,79 @@
       </property>
      </widget>
     </item>
+   </layout>
+  </widget>
+  <widget class="QLabel" name="blendImageLabel">
+   <property name="geometry">
+    <rect>
+     <x>150</x>
+     <y>370</y>
+     <width>431</width>
+     <height>351</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string/>
+   </property>
+  </widget>
+  <widget class="QLabel" name="imageLabel_2">
+   <property name="geometry">
+    <rect>
+     <x>340</x>
+     <y>40</y>
+     <width>231</width>
+     <height>211</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string/>
+   </property>
+  </widget>
+  <widget class="QLabel" name="imageLabel_1">
+   <property name="geometry">
+    <rect>
+     <x>30</x>
+     <y>30</y>
+     <width>231</width>
+     <height>211</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string/>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="btn_blend">
+   <property name="geometry">
+    <rect>
+     <x>630</x>
+     <y>410</y>
+     <width>92</width>
+     <height>29</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string> 混合</string>
+   </property>
+  </widget>
+  <widget class="QWidget" name="widget_select_blendMode" native="true">
+   <property name="geometry">
+    <rect>
+     <x>670</x>
+     <y>290</y>
+     <width>301</width>
+     <height>61</height>
+    </rect>
+   </property>
+   <layout class="QHBoxLayout" name="horizontalLayout_2">
     <item>
-     <spacer name="horizontalSpacer_2">
-      <property name="orientation">
-       <enum>Qt::Horizontal</enum>
+     <widget class="QLabel" name="label">
+      <property name="text">
+       <string>选择你的混合模式:</string>
       </property>
-      <property name="sizeHint" stdset="0">
-       <size>
-        <width>20</width>
-        <height>20</height>
-       </size>
-      </property>
-     </spacer>
+     </widget>
+    </item>
+    <item>
+     <widget class="QComboBox" name="comboBox_blendMode"/>
     </item>
    </layout>
   </widget>

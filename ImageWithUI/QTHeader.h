@@ -10,6 +10,6 @@
 #include <QDialog>
 #include <QPushButton>
 #include <QWidget>
-
-
+#include <QPainter>
+#include <QPixmap>
 #endif // QTHEADER_H
