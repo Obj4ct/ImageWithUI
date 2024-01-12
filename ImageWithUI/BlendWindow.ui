@@ -113,32 +113,6 @@
     </item>
    </layout>
   </widget>
-  <widget class="QWidget" name="widget_select_alpha" native="true">
-   <property name="geometry">
-    <rect>
-     <x>640</x>
-     <y>390</y>
-     <width>381</width>
-     <height>51</height>
-    </rect>
-   </property>
-   <layout class="QHBoxLayout" name="horizontalLayout_3">
-    <item>
-     <widget class="QLabel" name="label_2">
-      <property name="text">
-       <string>选择强度(alpha值):</string>
-      </property>
-     </widget>
-    </item>
-    <item>
-     <widget class="QSlider" name="horizontalSlider_alpha">
-      <property name="orientation">
-       <enum>Qt::Horizontal</enum>
-      </property>
-     </widget>
-    </item>
-   </layout>
-  </widget>
  </widget>
  <resources/>
  <connections/>
