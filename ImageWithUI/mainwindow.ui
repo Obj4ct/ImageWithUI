@@ -102,7 +102,7 @@
       <item>
        <widget class="QLabel" name="label_4">
         <property name="text">
-         <string>高度</string>
+         <string>高度倍数</string>
         </property>
        </widget>
       </item>
@@ -112,7 +112,7 @@
       <item>
        <widget class="QLabel" name="label_8">
         <property name="text">
-         <string>宽度</string>
+         <string>宽度倍数</string>
         </property>
        </widget>
       </item>
@@ -136,7 +136,7 @@
       <item>
        <widget class="QLabel" name="label_5">
         <property name="text">
-         <string>高度</string>
+         <string>高度倍数</string>
         </property>
        </widget>
       </item>
@@ -146,7 +146,7 @@
       <item>
        <widget class="QLabel" name="label_7">
         <property name="text">
-         <string>宽度</string>
+         <string>宽度倍数</string>
         </property>
        </widget>
       </item>
@@ -166,9 +166,9 @@
      <property name="geometry">
       <rect>
        <x>40</x>
-       <y>380</y>
-       <width>119</width>
-       <height>26</height>
+       <y>560</y>
+       <width>141</width>
+       <height>61</height>
       </rect>
      </property>
      <property name="text">
@@ -202,7 +202,7 @@
       <item>
        <widget class="QLabel" name="label_10">
         <property name="text">
-         <string>高度</string>
+         <string>高度倍数</string>
         </property>
        </widget>
       </item>
@@ -212,7 +212,7 @@
       <item>
        <widget class="QLabel" name="label_11">
         <property name="text">
-         <string>宽度</string>
+         <string>宽度倍数</string>
         </property>
        </widget>
       </item>
@@ -236,7 +236,7 @@
       <item>
        <widget class="QLabel" name="label_13">
         <property name="text">
-         <string>高度</string>
+         <string>高度倍数</string>
         </property>
        </widget>
       </item>
@@ -246,7 +246,7 @@
       <item>
        <widget class="QLabel" name="label_14">
         <property name="text">
-         <string>宽度</string>
+         <string>宽度倍数</string>
         </property>
        </widget>
       </item>
@@ -273,6 +273,29 @@
      </property>
      <property name="text">
       <string>图层混合</string>
+     </property>
+    </widget>
+    <widget class="QPushButton" name="btn_brightness">
+     <property name="geometry">
+      <rect>
+       <x>160</x>
+       <y>330</y>
+       <width>92</width>
+       <height>29</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>改变亮度</string>
+     </property>
+    </widget>
+    <widget class="QLineEdit" name="lineEdit_brightness">
+     <property name="geometry">
+      <rect>
+       <x>30</x>
+       <y>330</y>
+       <width>119</width>
+       <height>26</height>
+      </rect>
      </property>
     </widget>
    </widget>

@@ -17,6 +17,7 @@ public:
     MainWindow(QWidget *parent = nullptr);
     //reset image
     void ResetImage(MyValue &myValue);
+
     ~MainWindow();
 public:
     //QImage
@@ -50,6 +51,8 @@ private slots:
     void on_btn_large_bilinear_clicked();
 
     void on_btn_blend_clicked();
+
+    void on_btn_brightness_clicked();
 
 private:
     Ui::MainWindow *ui;

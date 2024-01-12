@@ -20,6 +20,7 @@ void MainWindow::ResetImage(MyValue &myValue)
     ui->imageLabel->setPixmap(originalPixmap);
 
 }
+
 MainWindow::~MainWindow()
 {
     delete ui;
@@ -167,37 +168,15 @@ void MainWindow::on_btn_small_biCubic_clicked()
     bool widthIsNumeric;
     int32_t widthValue = inputTextWidth.toInt(&widthIsNumeric); // 将文本转换为int32_t
     //no text in it
-    if(ui->lineEdit_small_biCubic_height->text()==nullptr&&ui->lineEdit_small_biCubic_width->text()==nullptr)
+    if(ui->lineEdit_small_biCubic_height->text()==nullptr||ui->lineEdit_small_biCubic_width->text()==nullptr)
     {
-        QMessageBox* myBox = new QMessageBox;
-        QPushButton* okBtn = new QPushButton("确定");
-        QString str = "请输入高和宽";
-        myBox->setWindowTitle("提示");
-        myBox->setText(str);
-        myBox->addButton(okBtn, QMessageBox::AcceptRole);
-        myBox->show();
-        myBox->exec();//阻塞等待用户输入
-
-        if (myBox->clickedButton() == okBtn)
-        {
+        if(!function.CreateMessagebox("提示","请输入宽和高"))
             return;
-        }
     }
     //not a number
     else if(!heightIsNumeric||!widthIsNumeric){
-        QMessageBox* myBox = new QMessageBox;
-        QPushButton* okBtn = new QPushButton("确定");
-        QString str = "请输入数字";
-        myBox->setWindowTitle("提示");
-        myBox->setText(str);
-        myBox->addButton(okBtn, QMessageBox::AcceptRole);
-        myBox->show();
-        myBox->exec();//阻塞等待用户输入
-
-        if (myBox->clickedButton() == okBtn)
-        {
+        if(!function.CreateMessagebox("提示","请输入倍数"))
             return;
-        }
     }
     else{
         std::vector<uint8_t> smallImageData=function.SmallImage_BiCubic(biCubicImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),myValue.bmpInfo.GetWidth()/widthValue,myValue.bmpInfo.GetHeight()/heightValue);
@@ -225,37 +204,15 @@ void MainWindow::on_btn_large_biCubic_clicked()
     bool widthIsNumeric;
     int32_t widthValue = inputTextWidth.toInt(&widthIsNumeric); // 将文本转换为int32_t
     //no text in it
-    if(ui->lineEdit_large_biCubic_height->text()==nullptr&&ui->lineEdit_large_biCubic_width->text()==nullptr)
+    if(ui->lineEdit_large_biCubic_height->text()==nullptr||ui->lineEdit_large_biCubic_width->text()==nullptr)
     {
-        QMessageBox* myBox = new QMessageBox;
-        QPushButton* okBtn = new QPushButton("确定");
-        QString str = "请输入高和宽";
-        myBox->setWindowTitle("提示");
-        myBox->setText(str);
-        myBox->addButton(okBtn, QMessageBox::AcceptRole);
-        myBox->show();
-        myBox->exec();//阻塞等待用户输入
-
-        if (myBox->clickedButton() == okBtn)
-        {
+        if(!function.CreateMessagebox("提示","请输入宽和高"))
             return;
-        }
     }
     //not a number
     else if(!heightIsNumeric||!widthIsNumeric){
-        QMessageBox* myBox = new QMessageBox;
-        QPushButton* okBtn = new QPushButton("确定");
-        QString str = "请输入数字";
-        myBox->setWindowTitle("提示");
-        myBox->setText(str);
-        myBox->addButton(okBtn, QMessageBox::AcceptRole);
-        myBox->show();
-        myBox->exec();//阻塞等待用户输入
-
-        if (myBox->clickedButton() == okBtn)
-        {
+        if(!function.CreateMessagebox("提示","请输入倍数"))
             return;
-        }
     }
     else{
         std::vector<uint8_t> largeImageData=function.LargeImage_BiCubic(biCubicImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),myValue.bmpInfo.GetWidth()*widthValue,myValue.bmpInfo.GetHeight()*heightValue);
@@ -289,37 +246,15 @@ void MainWindow::on_btn_small_bilinear_clicked()
     bool widthIsNumeric;
     int32_t widthValue = inputTextWidth.toInt(&widthIsNumeric); // 将文本转换为int32_t
     //no text in it
-    if(ui->lineEdit_small_bilinear_height->text()==nullptr&&ui->lineEdit_small_bilinear_width->text()==nullptr)
+    if(ui->lineEdit_small_bilinear_height->text()==nullptr||ui->lineEdit_small_bilinear_width->text()==nullptr)
     {
-        QMessageBox* myBox = new QMessageBox;
-        QPushButton* okBtn = new QPushButton("确定");
-        QString str = "请输入高和宽";
-        myBox->setWindowTitle("提示");
-        myBox->setText(str);
-        myBox->addButton(okBtn, QMessageBox::AcceptRole);
-        myBox->show();
-        myBox->exec();//阻塞等待用户输入
-
-        if (myBox->clickedButton() == okBtn)
-        {
-            return;
-        }
+         if(!function.CreateMessagebox("提示","请输入宽和高"))
+             return;
     }
     //not a number
     else if(!heightIsNumeric||!widthIsNumeric){
-        QMessageBox* myBox = new QMessageBox;
-        QPushButton* okBtn = new QPushButton("确定");
-        QString str = "请输入数字";
-        myBox->setWindowTitle("提示");
-        myBox->setText(str);
-        myBox->addButton(okBtn, QMessageBox::AcceptRole);
-        myBox->show();
-        myBox->exec();//阻塞等待用户输入
-
-        if (myBox->clickedButton() == okBtn)
-        {
+        if(!function.CreateMessagebox("提示","请输"))
             return;
-        }
     }
     else{
         std::vector<uint8_t> smallImageData=function.LargeImage_Bilinear(bilinearImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),myValue.bmpInfo.GetWidth()/widthValue,myValue.bmpInfo.GetHeight()/heightValue);
@@ -338,7 +273,7 @@ void MainWindow::on_btn_small_bilinear_clicked()
 void MainWindow::on_btn_large_bilinear_clicked()
 {
     std::vector<uint8_t> bilinearImageData=imageData;
-    //判断高和宽是否正确输入数字
+    //判断高和宽是否正确输入
     QString inputTextHeight = ui->lineEdit_large_bilinear_height->text(); // 获取输入的文本
     bool heightIsNumeric;
     int32_t heightValue = inputTextHeight.toInt(&heightIsNumeric); // 将文本转换为int32_t
@@ -347,37 +282,15 @@ void MainWindow::on_btn_large_bilinear_clicked()
     bool widthIsNumeric;
     int32_t widthValue = inputTextWidth.toInt(&widthIsNumeric); // 将文本转换为int32_t
     //no text in it
-    if(ui->lineEdit_large_bilinear_height->text()==nullptr&&ui->lineEdit_large_bilinear_width->text()==nullptr)
+    if(ui->lineEdit_large_bilinear_height->text()==nullptr||ui->lineEdit_large_bilinear_width->text()==nullptr)
     {
-        QMessageBox* myBox = new QMessageBox;
-        QPushButton* okBtn = new QPushButton("确定");
-        QString str = "请输入高和宽";
-        myBox->setWindowTitle("提示");
-        myBox->setText(str);
-        myBox->addButton(okBtn, QMessageBox::AcceptRole);
-        myBox->show();
-        myBox->exec();//阻塞等待用户输入
-
-        if (myBox->clickedButton() == okBtn)
-        {
+        if(!function.CreateMessagebox("提示","请输入宽和高"))
             return;
-        }
     }
     //not a number
     else if(!heightIsNumeric||!widthIsNumeric){
-        QMessageBox* myBox = new QMessageBox;
-        QPushButton* okBtn = new QPushButton("确定");
-        QString str = "请输入数字";
-        myBox->setWindowTitle("提示");
-        myBox->setText(str);
-        myBox->addButton(okBtn, QMessageBox::AcceptRole);
-        myBox->show();
-        myBox->exec();//阻塞等待用户输入
-
-        if (myBox->clickedButton() == okBtn)
-        {
+        if(!function.CreateMessagebox("提示","请输入倍数"))
             return;
-        }
     }
     else{
         std::vector<uint8_t> largeImageData=function.LargeImage_Bilinear(bilinearImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),myValue.bmpInfo.GetWidth()*widthValue,myValue.bmpInfo.GetHeight()*heightValue);
@@ -399,5 +312,33 @@ void MainWindow::on_btn_blend_clicked()
     blendWindow = new BlendWindow();
     blendWindow->show();
 
+}
+
+
+void MainWindow::on_btn_brightness_clicked()
+{
+    QString inputText = ui->lineEdit_brightness->text(); // 获取输入的文本
+    bool isNumeric;
+    double_t value = inputText.toInt(&isNumeric); // 将文本转换为int32_t
+
+    if(ui->lineEdit_brightness->text()==nullptr)
+    {
+        if(!function.CreateMessagebox("提示","请输入"))
+            return;
+    }else if(!isNumeric){
+        if(!function.CreateMessagebox("提示","输入数字"))
+            return;
+    }else{
+        std::vector<uint8_t> brightnessImageData=imageData;
+        function.Brightness(brightnessImageData,value);
+        // 创建 QImage
+        QImage image(brightnessImageData.data(), myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(), QImage::Format_BGR888);
+
+        // 进行垂直翻转
+        image = image.mirrored(false, true);
+        QPixmap pixmap = QPixmap::fromImage(image);
+        ui->imageLabel->setPixmap(pixmap);
+        //ui->imageLabel->setScaledContents(true); // 使图像适应 label 大小
+    }
 }
 

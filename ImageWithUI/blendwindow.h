@@ -42,8 +42,7 @@ private:
     static int selectCount;
     //下拉框选项
     BlendMode currentBlendMode;
-    double currentAlpha;
-    static double previousSliderValue;
+
     //first image data
     std::vector<uint8_t> originalImageData_1;
     std::vector<uint8_t> originalImageData_1_temp;

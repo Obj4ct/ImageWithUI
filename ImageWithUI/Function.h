@@ -3,10 +3,13 @@
 #include "BMPFile.h"
 #include "stdcpp.h"
 #include "QTHeader.h"
+
 class Function
 {
 public:
     Function();
+    //create messagebox
+    bool CreateMessagebox(QString title,QString message);
     //gray
     void ConvertToGray(std::vector<uint8_t>& imageData);
 
@@ -37,9 +40,11 @@ public:
     LargeImage_Bilinear(const std::vector<uint8_t> &imageData, int32_t width, int32_t height, int32_t newWidth,
                int32_t newHeight);
 
-
+    //色彩通道
+    void Brightness(std::vector<uint8_t> &brightnessImageData, double_t brightnessValue);
     //重置图像
     void RestImage(MyValue &myValue);
+
 };
 
 

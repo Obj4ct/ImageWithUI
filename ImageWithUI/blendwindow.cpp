@@ -17,7 +17,6 @@ BlendWindow::BlendWindow(QWidget *parent) :
 
 }
 int BlendWindow::selectCount=0;
-double BlendWindow::previousSliderValue=0;
 BlendWindow::~BlendWindow() {
     delete ui;
 }
@@ -168,8 +167,7 @@ void BlendWindow::SwitchBlendMode(uint8_t &destR, uint8_t &destG, uint8_t &destB
 
 void BlendWindow::Effect(std::vector<uint8_t> &imageData, const std::vector<uint8_t> &effectData, int width, int height,
                          BlendMode blendMode) {
-    double alpha=currentAlpha;
-    qDebug() << "current alpha is " << alpha;
+
     if (imageData.size() != effectData.size()) {
         QMessageBox* myBox = new QMessageBox;
         QPushButton* okBtn = new QPushButton("确定");

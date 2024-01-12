@@ -4,6 +4,24 @@ Function::Function()
 {
 
 }
+
+
+bool Function::CreateMessagebox(QString title,QString message)
+{
+    QMessageBox* myBox = new QMessageBox;
+    QPushButton* okBtn = new QPushButton("确定");
+    QString str = message;
+    myBox->setWindowTitle(title);
+    myBox->setText(str);
+    myBox->addButton(okBtn, QMessageBox::AcceptRole);
+    myBox->show();
+    myBox->exec();//阻塞等待用户输入
+
+    if (myBox->clickedButton() == okBtn)
+    {
+        return false;
+    }
+}
 //to gray
 void Function::ConvertToGray(std::vector<uint8_t>& imageData)
 {
@@ -281,6 +299,28 @@ std::vector<uint8_t> Function::LargeImage_Bilinear(const std::vector<uint8_t> &i
         }
     }
     return resizedImage;
+}
+
+void Function::Brightness(std::vector<uint8_t> &brightnessImageData, double_t brightnessValue)
+{
+    if (brightnessValue >= -150 && brightnessValue <= 150) {
+            for (unsigned char &i: brightnessImageData) {
+                double_t newValue = static_cast<double_t>(i) + brightnessValue;
+                if (newValue < 0) {
+                    newValue = 0;
+                } else if (newValue > 255) {
+                    newValue = 255;
+                }
+                i = static_cast<uint8_t>(newValue);
+            }
+        } else {
+            std::cout << "out of range,brightnessValue is between -150 to 150, please try again!" << std::endl;
+            if(!CreateMessagebox("提示","超出范围,范围是[-150,150]"))
+            {
+                return;
+            }
+
+        }
 }
 
 
