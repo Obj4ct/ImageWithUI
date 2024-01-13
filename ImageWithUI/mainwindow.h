@@ -5,6 +5,11 @@
 #include "Function.h"
 #include "blendwindow.h"
 //QString test_path="D:\\Documents\\1Projects\\QT\\ImageWithUI\\ImageWithUI\\image\\Lenna.bmp";
+struct ReturnValue{
+    bool isNull;
+    bool isNumeric;
+    int32_t value;
+};
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
@@ -17,7 +22,8 @@ public:
     MainWindow(QWidget *parent = nullptr);
     //reset image
     void ResetImage(MyValue &myValue);
-
+    void ShowImage(std::vector<uint8_t> &inImageData,int32_t width,int32_t height);
+    ReturnValue CheckOK(QLineEdit* lineEdit);
     ~MainWindow();
 public:
     //QImage
@@ -53,6 +59,12 @@ private slots:
     void on_btn_blend_clicked();
 
     void on_btn_brightness_clicked();
+
+    void on_btn_contrast_clicked();
+
+    void on_btn_saturation_clicked();
+
+    void on_btn_color_balance_clicked();
 
 private:
     Ui::MainWindow *ui;

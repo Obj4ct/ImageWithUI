@@ -21,6 +21,46 @@ void MainWindow::ResetImage(MyValue &myValue)
 
 }
 
+void MainWindow::ShowImage(std::vector<uint8_t> &inImageData,int32_t width,int32_t height)
+{
+
+    QImage image(inImageData.data(), width, height, QImage::Format_BGR888);
+
+    // 进行垂直翻转
+    image = image.mirrored(false, true);
+
+    // 显示灰度图像在imageLabel上
+    QPixmap pixmap = QPixmap::fromImage(image);
+    ui->imageLabel->setPixmap(pixmap);
+    ui->imageLabel->setScaledContents(true); // 使图像适应 label 大小
+}
+
+ReturnValue MainWindow::CheckOK(QLineEdit * lineEdit)
+{
+    ReturnValue returnValue;
+    if(lineEdit->text()==nullptr)
+    {
+        returnValue.isNull=true;
+        return returnValue;
+    }
+    //判断高和宽是否正确输入数字
+    QString inputText= lineEdit->text(); // 获取输入的文本
+    bool isNumeric;
+    int32_t value = inputText.toInt(&isNumeric);
+    qDebug()<<"read value is "<<value;
+    if(!isNumeric)
+    {
+        returnValue.isNumeric=false;
+        return returnValue;
+    }else{
+        returnValue.isNumeric=true;
+        returnValue.value=value;
+        return returnValue;
+    }
+
+}
+
+
 MainWindow::~MainWindow()
 {
     delete ui;
@@ -68,17 +108,7 @@ void MainWindow::on_btn_gray_clicked()
         // 转换为灰度图
         function.ConvertToGray(grayImageData);
 
-        // 创建 QImage
-        int width = myValue.bmpInfo.GetWidth();
-        int height = myValue.bmpInfo.GetHeight();
-        QImage image(grayImageData.data(), width, height, QImage::Format_BGR888);
-
-        // 进行垂直翻转
-        image = image.mirrored(false, true);
-
-        // 显示灰度图像在imageLabel上
-        QPixmap pixmap = QPixmap::fromImage(image);
-        ui->imageLabel->setPixmap(pixmap);
+        ShowImage(grayImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
 
         // 更新按钮文本
         ui->btn_gray->setText("取消");
@@ -101,17 +131,7 @@ void MainWindow::on_btn_autoContrast_clicked()
         // 转换为灰度图
         function.AutoContrast(contrastImageData);
 
-        // 创建 QImage
-        int width = myValue.bmpInfo.GetWidth();
-        int height = myValue.bmpInfo.GetHeight();
-        QImage image(contrastImageData.data(), width, height, QImage::Format_BGR888);
-
-        // 进行垂直翻转
-        image = image.mirrored(false, true);
-
-        // 显示灰度图像在imageLabel上
-        QPixmap pixmap = QPixmap::fromImage(image);
-        ui->imageLabel->setPixmap(pixmap);
+        ShowImage(contrastImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
 
         // 更新按钮文本
         ui->btn_autoContrast->setText("取消");
@@ -133,18 +153,7 @@ void MainWindow::on_btn_averBlur_clicked()
     if (ui->btn_averBlur->text() == "均值模糊") {
         // 转换为灰度图
         function.AverageBlur(averBLurImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
-
-        // 创建 QImage
-        int width = myValue.bmpInfo.GetWidth();
-        int height = myValue.bmpInfo.GetHeight();
-        QImage image(averBLurImageData.data(), width, height, QImage::Format_BGR888);
-
-        // 进行垂直翻转
-        image = image.mirrored(false, true);
-
-        // 显示灰度图像在imageLabel上
-        QPixmap pixmap = QPixmap::fromImage(image);
-        ui->imageLabel->setPixmap(pixmap);
+        ShowImage(averBLurImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
 
         // 更新按钮文本
         ui->btn_averBlur->setText("取消");
@@ -160,34 +169,23 @@ void MainWindow::on_btn_small_biCubic_clicked()
 {
     std::vector<uint8_t> biCubicImageData=imageData;
     //判断高和宽是否正确输入数字
-    QString inputTextHeight = ui->lineEdit_small_biCubic_height->text(); // 获取输入的文本
-    bool heightIsNumeric;
-    int32_t heightValue = inputTextHeight.toInt(&heightIsNumeric); // 将文本转换为int32_t
-
-    QString inputTextWidth = ui->lineEdit_small_biCubic_width->text(); // 获取输入的文本
-    bool widthIsNumeric;
-    int32_t widthValue = inputTextWidth.toInt(&widthIsNumeric); // 将文本转换为int32_t
+    ReturnValue returnValueHeight=CheckOK(ui->lineEdit_small_biCubic_height);
+    ReturnValue returnValueWidth=CheckOK(ui->lineEdit_small_biCubic_width);
     //no text in it
-    if(ui->lineEdit_small_biCubic_height->text()==nullptr||ui->lineEdit_small_biCubic_width->text()==nullptr)
+    if(returnValueHeight.isNull==true||returnValueWidth.isNull==true)
     {
         if(!function.CreateMessagebox("提示","请输入宽和高"))
             return;
     }
     //not a number
-    else if(!heightIsNumeric||!widthIsNumeric){
+    else if(returnValueHeight.isNumeric==false||returnValueWidth.isNumeric==false){
         if(!function.CreateMessagebox("提示","请输入倍数"))
             return;
     }
     else{
-        std::vector<uint8_t> smallImageData=function.SmallImage_BiCubic(biCubicImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),myValue.bmpInfo.GetWidth()/widthValue,myValue.bmpInfo.GetHeight()/heightValue);
-        // 创建 QImage
-        QImage image(smallImageData.data(), myValue.bmpInfo.GetWidth()/widthValue, myValue.bmpInfo.GetHeight()/heightValue, QImage::Format_BGR888);
+        std::vector<uint8_t> smallImageData=function.SmallImage_BiCubic(biCubicImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),myValue.bmpInfo.GetWidth()/returnValueWidth.value,myValue.bmpInfo.GetHeight()/returnValueHeight.value);
+        ShowImage(smallImageData,myValue.bmpInfo.GetWidth()/returnValueWidth.value, myValue.bmpInfo.GetHeight()/returnValueHeight.value);
 
-        // 进行垂直翻转
-        image = image.mirrored(false, true);
-        QPixmap pixmap = QPixmap::fromImage(image);
-        ui->imageLabel->setPixmap(pixmap);
-        //ui->imageLabel->setScaledContents(true); // 使图像适应 label 大小
     }
 }
 
@@ -196,34 +194,25 @@ void MainWindow::on_btn_large_biCubic_clicked()
 {
     std::vector<uint8_t> biCubicImageData=imageData;
     //判断高和宽是否正确输入数字
-    QString inputTextHeight = ui->lineEdit_large_biCubic_height->text(); // 获取输入的文本
-    bool heightIsNumeric;
-    int32_t heightValue = inputTextHeight.toInt(&heightIsNumeric); // 将文本转换为int32_t
 
-    QString inputTextWidth = ui->lineEdit_large_biCubic_width->text(); // 获取输入的文本
-    bool widthIsNumeric;
-    int32_t widthValue = inputTextWidth.toInt(&widthIsNumeric); // 将文本转换为int32_t
+    //判断高和宽是否正确输入数字
+    ReturnValue returnValueHeight=CheckOK(ui->lineEdit_large_biCubic_height);
+    ReturnValue returnValueWidth=CheckOK(ui->lineEdit_large_biCubic_width);
     //no text in it
-    if(ui->lineEdit_large_biCubic_height->text()==nullptr||ui->lineEdit_large_biCubic_width->text()==nullptr)
+    if(returnValueHeight.isNull==true||returnValueWidth.isNull==true)
     {
         if(!function.CreateMessagebox("提示","请输入宽和高"))
             return;
     }
     //not a number
-    else if(!heightIsNumeric||!widthIsNumeric){
+    else if(returnValueHeight.isNumeric==false||returnValueWidth.isNumeric==false){
         if(!function.CreateMessagebox("提示","请输入倍数"))
             return;
     }
     else{
-        std::vector<uint8_t> largeImageData=function.LargeImage_BiCubic(biCubicImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),myValue.bmpInfo.GetWidth()*widthValue,myValue.bmpInfo.GetHeight()*heightValue);
-        // 创建 QImage
-        QImage image(largeImageData.data(), myValue.bmpInfo.GetWidth()*widthValue, myValue.bmpInfo.GetHeight()*heightValue, QImage::Format_BGR888);
+        std::vector<uint8_t> largeImageData=function.LargeImage_BiCubic(biCubicImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),myValue.bmpInfo.GetWidth()*returnValueWidth.value,myValue.bmpInfo.GetHeight()*returnValueHeight.value);
+        ShowImage(largeImageData,myValue.bmpInfo.GetWidth()*returnValueWidth.value, myValue.bmpInfo.GetHeight()*returnValueHeight.value);
 
-        // 进行垂直翻转
-        image = image.mirrored(false, true);
-        QPixmap pixmap = QPixmap::fromImage(image);
-        ui->imageLabel->setPixmap(pixmap);
-        //ui->imageLabel->setScaledContents(true); // 使图像适应 label 大小
     }
 
 }
@@ -238,34 +227,23 @@ void MainWindow::on_btn_small_bilinear_clicked()
 {
     std::vector<uint8_t> bilinearImageData=imageData;
     //判断高和宽是否正确输入数字
-    QString inputTextHeight = ui->lineEdit_small_bilinear_height->text(); // 获取输入的文本
-    bool heightIsNumeric;
-    int32_t heightValue = inputTextHeight.toInt(&heightIsNumeric); // 将文本转换为int32_t
-
-    QString inputTextWidth = ui->lineEdit_small_bilinear_width->text(); // 获取输入的文本
-    bool widthIsNumeric;
-    int32_t widthValue = inputTextWidth.toInt(&widthIsNumeric); // 将文本转换为int32_t
+    ReturnValue returnValueHeight=CheckOK(ui->lineEdit_small_bilinear_height);
+    ReturnValue returnValueWidth=CheckOK(ui->lineEdit_small_bilinear_width);
     //no text in it
-    if(ui->lineEdit_small_bilinear_height->text()==nullptr||ui->lineEdit_small_bilinear_width->text()==nullptr)
+    if(returnValueHeight.isNull==true||returnValueWidth.isNull==true)
     {
-         if(!function.CreateMessagebox("提示","请输入宽和高"))
-             return;
+        if(!function.CreateMessagebox("提示","请输入宽和高"))
+            return;
     }
     //not a number
-    else if(!heightIsNumeric||!widthIsNumeric){
-        if(!function.CreateMessagebox("提示","请输"))
+    else if(returnValueHeight.isNumeric==false||returnValueWidth.isNumeric==false){
+        if(!function.CreateMessagebox("提示","请输入倍数"))
             return;
     }
     else{
-        std::vector<uint8_t> smallImageData=function.LargeImage_Bilinear(bilinearImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),myValue.bmpInfo.GetWidth()/widthValue,myValue.bmpInfo.GetHeight()/heightValue);
-        // 创建 QImage
-        QImage image(smallImageData.data(), myValue.bmpInfo.GetWidth()/widthValue, myValue.bmpInfo.GetHeight()/heightValue, QImage::Format_BGR888);
+        std::vector<uint8_t> smallImageData=function.LargeImage_Bilinear(bilinearImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),myValue.bmpInfo.GetWidth()/returnValueWidth.value,myValue.bmpInfo.GetHeight()/returnValueHeight.value);
+        ShowImage(smallImageData,myValue.bmpInfo.GetWidth()/returnValueWidth.value, myValue.bmpInfo.GetHeight()/returnValueHeight.value);
 
-        // 进行垂直翻转
-        image = image.mirrored(false, true);
-        QPixmap pixmap = QPixmap::fromImage(image);
-        ui->imageLabel->setPixmap(pixmap);
-        //ui->imageLabel->setScaledContents(true); // 使图像适应 label 大小
     }
 }
 
@@ -273,35 +251,23 @@ void MainWindow::on_btn_small_bilinear_clicked()
 void MainWindow::on_btn_large_bilinear_clicked()
 {
     std::vector<uint8_t> bilinearImageData=imageData;
-    //判断高和宽是否正确输入
-    QString inputTextHeight = ui->lineEdit_large_bilinear_height->text(); // 获取输入的文本
-    bool heightIsNumeric;
-    int32_t heightValue = inputTextHeight.toInt(&heightIsNumeric); // 将文本转换为int32_t
-
-    QString inputTextWidth = ui->lineEdit_large_bilinear_width->text(); // 获取输入的文本
-    bool widthIsNumeric;
-    int32_t widthValue = inputTextWidth.toInt(&widthIsNumeric); // 将文本转换为int32_t
+    ReturnValue returnValueHeight=CheckOK(ui->lineEdit_large_bilinear_height);
+    ReturnValue returnValueWidth=CheckOK(ui->lineEdit_large_bilinear_width);
     //no text in it
-    if(ui->lineEdit_large_bilinear_height->text()==nullptr||ui->lineEdit_large_bilinear_width->text()==nullptr)
+    if(returnValueHeight.isNull==true||returnValueWidth.isNull==true)
     {
         if(!function.CreateMessagebox("提示","请输入宽和高"))
             return;
     }
     //not a number
-    else if(!heightIsNumeric||!widthIsNumeric){
+    else if(returnValueHeight.isNumeric==false||returnValueWidth.isNumeric==false){
         if(!function.CreateMessagebox("提示","请输入倍数"))
             return;
     }
     else{
-        std::vector<uint8_t> largeImageData=function.LargeImage_Bilinear(bilinearImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),myValue.bmpInfo.GetWidth()*widthValue,myValue.bmpInfo.GetHeight()*heightValue);
-        // 创建 QImage
-        QImage image(largeImageData.data(), myValue.bmpInfo.GetWidth()*widthValue, myValue.bmpInfo.GetHeight()*heightValue, QImage::Format_BGR888);
+        std::vector<uint8_t> largeImageData=function.LargeImage_Bilinear(bilinearImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),myValue.bmpInfo.GetWidth()*returnValueWidth.value,myValue.bmpInfo.GetHeight()*returnValueHeight.value);
 
-        // 进行垂直翻转
-        image = image.mirrored(false, true);
-        QPixmap pixmap = QPixmap::fromImage(image);
-        ui->imageLabel->setPixmap(pixmap);
-        //ui->imageLabel->setScaledContents(true); // 使图像适应 label 大小
+        ShowImage(largeImageData,myValue.bmpInfo.GetWidth()*returnValueWidth.value, myValue.bmpInfo.GetHeight()*returnValueHeight.value);
     }
 }
 
@@ -317,28 +283,80 @@ void MainWindow::on_btn_blend_clicked()
 
 void MainWindow::on_btn_brightness_clicked()
 {
-    QString inputText = ui->lineEdit_brightness->text(); // 获取输入的文本
-    bool isNumeric;
-    double_t value = inputText.toInt(&isNumeric); // 将文本转换为int32_t
-
-    if(ui->lineEdit_brightness->text()==nullptr)
+    ReturnValue returnValue=CheckOK(ui->lineEdit_brightness);
+    if(returnValue.isNull==true)
     {
         if(!function.CreateMessagebox("提示","请输入"))
             return;
-    }else if(!isNumeric){
+    }else if(returnValue.isNumeric==false){
         if(!function.CreateMessagebox("提示","输入数字"))
             return;
     }else{
         std::vector<uint8_t> brightnessImageData=imageData;
-        function.Brightness(brightnessImageData,value);
-        // 创建 QImage
-        QImage image(brightnessImageData.data(), myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(), QImage::Format_BGR888);
+        qDebug()<<returnValue.value;
+        function.Brightness(brightnessImageData,returnValue.value);
+        ShowImage(brightnessImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+    }
+}
 
-        // 进行垂直翻转
-        image = image.mirrored(false, true);
-        QPixmap pixmap = QPixmap::fromImage(image);
-        ui->imageLabel->setPixmap(pixmap);
-        //ui->imageLabel->setScaledContents(true); // 使图像适应 label 大小
+
+void MainWindow::on_btn_contrast_clicked()
+{
+
+    ReturnValue returnValue=CheckOK(ui->lineEdit_contrast);
+
+    if(returnValue.isNull==true)
+    {
+        if(!function.CreateMessagebox("提示","请输入"))
+            return;
+    }else if(returnValue.isNumeric==false){
+        if(!function.CreateMessagebox("提示","输入数字"))
+            return;
+    }else{
+        std::vector<uint8_t> contrastImageData=imageData;
+        function.Contrast(contrastImageData,returnValue.value);
+        ShowImage(contrastImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+    }
+}
+
+
+void MainWindow::on_btn_saturation_clicked()
+{
+    //判断高和宽是否正确输入数字
+       ReturnValue returnValue=CheckOK(ui->lineEdit_saturation);
+
+    if(returnValue.isNull==true)
+    {
+        if(!function.CreateMessagebox("提示","请输入"))
+            return;
+    }else if(returnValue.isNumeric==false){
+        if(!function.CreateMessagebox("提示","输入数字"))
+            return;
+    }else{
+        std::vector<uint8_t> saturationImageData=imageData;
+        function.Saturation(saturationImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),returnValue.value);
+        ShowImage(saturationImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+    }
+}
+
+
+void MainWindow::on_btn_color_balance_clicked()
+{
+    std::vector<uint8_t> balanceImageData=imageData;
+
+    if (ui->btn_color_balance->text() == "色彩平衡") {
+        // 转换为灰度图
+        function.ColorBalance(balanceImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+
+        ShowImage(balanceImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+
+        // 更新按钮文本
+        ui->btn_color_balance->setText("取消");
+    } else {
+        // 恢复原始图像
+        ResetImage(myValue);
+        // 更新按钮文本
+        ui->btn_color_balance->setText("色彩平衡");
     }
 }
 

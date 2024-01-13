@@ -35,13 +35,26 @@ public:
     //双线性插值
     std::vector<uint8_t>
     SmallImage_Bilinear(const std::vector<uint8_t> &imageData, int32_t width, int32_t height, int32_t newWidth,
-               int32_t newHeight);
+                        int32_t newHeight);
     std::vector<uint8_t>
     LargeImage_Bilinear(const std::vector<uint8_t> &imageData, int32_t width, int32_t height, int32_t newWidth,
-               int32_t newHeight);
+                        int32_t newHeight);
 
     //色彩通道
+    //亮度
     void Brightness(std::vector<uint8_t> &brightnessImageData, double_t brightnessValue);
+    //对比度
+    void Contrast(std::vector<uint8_t> &contrastImageData, double_t contrastValue);
+    //饱和度  饱和度函数是在RGB颜色空间下工作的，但这种颜色空间不太适合修改饱和度。通常，会将图像转换为HSV（色相、饱和度、明度）颜色空间，然后在饱和度通道上进行修改，最后再将图像转换回RGB。
+    void Saturation(std::vector<uint8_t> &saturationImageData, int32_t width, int32_t height, double_t saturationValue);
+    // 函数用于将HSV颜色转换回RGB颜色
+    void HSVtoRGB(double h, double s, double v, uint8_t &r, uint8_t &g, uint8_t &b);
+    // 函数用于将RGB颜色转换为HSV颜色
+    void RGBtoHSV(uint8_t r, uint8_t g, uint8_t b, double &h, double &s, double &v);
+
+
+    //色彩平衡
+    void ColorBalance(std::vector<uint8_t> &imageData, int32_t width, int32_t height);
     //重置图像
     void RestImage(MyValue &myValue);
 

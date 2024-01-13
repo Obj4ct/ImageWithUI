@@ -304,23 +304,184 @@ std::vector<uint8_t> Function::LargeImage_Bilinear(const std::vector<uint8_t> &i
 void Function::Brightness(std::vector<uint8_t> &brightnessImageData, double_t brightnessValue)
 {
     if (brightnessValue >= -150 && brightnessValue <= 150) {
-            for (unsigned char &i: brightnessImageData) {
-                double_t newValue = static_cast<double_t>(i) + brightnessValue;
-                if (newValue < 0) {
-                    newValue = 0;
-                } else if (newValue > 255) {
-                    newValue = 255;
-                }
-                i = static_cast<uint8_t>(newValue);
+        for (unsigned char &i: brightnessImageData) {
+            double_t newValue = static_cast<double_t>(i) + brightnessValue;
+            if (newValue < 0) {
+                newValue = 0;
+            } else if (newValue > 255) {
+                newValue = 255;
             }
-        } else {
-            std::cout << "out of range,brightnessValue is between -150 to 150, please try again!" << std::endl;
-            if(!CreateMessagebox("提示","超出范围,范围是[-150,150]"))
-            {
-                return;
-            }
-
+            i = static_cast<uint8_t>(newValue);
         }
+    } else {
+        std::cout << "out of range,brightnessValue is between -150 to 150, please try again!" << std::endl;
+        if(!CreateMessagebox("提示","超出范围,范围是[-150,150]"))
+        {
+            return;
+        }
+
+    }
+}
+
+void Function::Contrast(std::vector<uint8_t> &contrastImageData, double_t contrastValue)
+{
+    if (contrastValue >= -50 && contrastValue <= 100) {
+        double_t factor = (100.0 + contrastValue) / 100.0;
+        for (size_t i = 0; i < contrastImageData.size(); i += 3) {
+
+            contrastImageData[i] = std::max(0, std::min(255,
+                                                        static_cast<int>(factor * (contrastImageData[i] - 128) + 128)));
+            contrastImageData[i + 1] = std::max(0, std::min(255,
+                                                            static_cast<int>(factor * (contrastImageData[i + 1] - 128) +
+                                                            128)));
+            contrastImageData[i + 2] = std::max(0, std::min(255,
+                                                            static_cast<int>(factor * (contrastImageData[i + 2] - 128) +
+                                                            128)));
+        }
+
+    } else {
+        std::cout << "out of range,brightnessValue is between -150 to 150, please try again!" << std::endl;
+        if(!CreateMessagebox("提示","超出范围,范围是[-50,100]"))
+        {
+            return;
+        }
+    }
+}
+
+void Function::Saturation(std::vector<uint8_t> &saturationImageData, int32_t width, int32_t height, double_t saturationValue)
+{
+    for (int i = 0; i < height; ++i) {
+        for (int j = 0; j < width; ++j) {
+            int index = (i * width + j) * 3;
+            uint8_t r = saturationImageData[index];
+            uint8_t g = saturationImageData[index + 1];
+            uint8_t b = saturationImageData[index + 2];
+
+            double h, s, v;
+            RGBtoHSV(r, g, b, h, s, v);
+
+            // 调整饱和度
+            s *= saturationValue;
+
+            // 确保饱和度在0到1之间
+            s = std::max(0.0, std::min(1.0, s));
+
+            HSVtoRGB(h, s, v, r, g, b);
+
+            saturationImageData[index] = r;
+            saturationImageData[index + 1] = g;
+            saturationImageData[index + 2] = b;
+        }
+    }
+}
+
+void Function::HSVtoRGB(double h, double s, double v, uint8_t &r, uint8_t &g, uint8_t &b)
+{
+    if (s == 0.0) {
+        r = g = b = static_cast<uint8_t>(v);
+    } else {
+        h /= 60;
+        int i = static_cast<int>(h);
+        double f = h - i;
+        double p = v * (1 - s);
+        double q = v * (1 - s * f);
+        double t = v * (1 - s * (1 - f));
+
+        switch (i) {
+        case 0: r = static_cast<uint8_t>(v); g = static_cast<uint8_t>(t); b = static_cast<uint8_t>(p); break;
+        case 1: r = static_cast<uint8_t>(q); g = static_cast<uint8_t>(v); b = static_cast<uint8_t>(p); break;
+        case 2: r = static_cast<uint8_t>(p); g = static_cast<uint8_t>(v); b = static_cast<uint8_t>(t); break;
+        case 3: r = static_cast<uint8_t>(p); g = static_cast<uint8_t>(q); b = static_cast<uint8_t>(v); break;
+        case 4: r = static_cast<uint8_t>(t); g = static_cast<uint8_t>(p); b = static_cast<uint8_t>(v); break;
+        default: r = static_cast<uint8_t>(v); g = static_cast<uint8_t>(p); b = static_cast<uint8_t>(q); break;
+        }
+    }
+}
+
+void Function::RGBtoHSV(uint8_t r, uint8_t g, uint8_t b, double &h, double &s, double &v)
+{
+    double minVal = std::min({r, g, b});
+    double maxVal = std::max({r, g, b});
+    double delta = maxVal - minVal;
+
+    v = maxVal;
+
+    if (maxVal == 0.0) {
+        s = 0;
+    } else {
+        s = (delta / maxVal);
+    }
+
+    if (delta == 0.0) {
+        h = 0;
+    } else {
+        if (r == maxVal) {
+            h = (g - b) / delta;
+        } else if (g == maxVal) {
+            h = 2 + (b - r) / delta;
+        } else {
+            h = 4 + (r - g) / delta;
+        }
+        h *= 60;
+        if (h < 0) {
+            h += 360;
+        }
+    }
+}
+
+void Function::ColorBalance(std::vector<uint8_t> &imageData, int32_t width, int32_t height)
+{
+    // count
+    double_t totalRed = 0.0;
+    double_t totalGreen = 0.0;
+    double_t totalBlue = 0.0;
+
+    // for_each pix
+    for (int i = 0; i < height; ++i)
+    {
+        for (int j = 0; j < width; ++j)
+        {
+            int index = (i * width + j) * 3;
+            uint8_t r = imageData[index];
+            uint8_t g = imageData[index + 1];
+            uint8_t b = imageData[index + 2];
+            totalRed += static_cast<double_t>(r);
+            totalGreen += static_cast<double_t>(g);
+            totalBlue += static_cast<double_t>(b);
+        }
+    }
+
+    // avg
+    double_t avgRed = totalRed / (width * height);
+    double_t avgGreen = totalGreen / (width * height);
+    double_t avgBlue = totalBlue / (width * height);
+
+    // factor
+    double_t redFactor = avgRed > 0.0 ? avgRed / 255.0 : 1.0;
+    double_t greenFactor = avgGreen > 0.0 ? avgGreen / 255.0 : 1.0;
+    double_t blueFactor = avgBlue > 0.0 ? avgBlue / 255.0 : 1.0;
+
+    // adjust
+    for (int i = 0; i < height; ++i)
+    {
+        for (int j = 0; j < width; ++j)
+        {
+            int index = (i * width + j) * 3;
+            uint8_t r = imageData[index];
+            uint8_t g = imageData[index + 1];
+            uint8_t b = imageData[index + 2];
+
+            // adjust new pix by factor
+            r = static_cast<uint8_t>(r * redFactor);
+            g = static_cast<uint8_t>(g * greenFactor);
+            b = static_cast<uint8_t>(b * blueFactor);
+
+            //update pix
+            imageData[index] = r;
+            imageData[index + 1] = g;
+            imageData[index + 2] = b;
+        }
+    }
 }
 
 

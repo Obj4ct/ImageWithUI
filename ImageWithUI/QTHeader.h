@@ -11,5 +11,6 @@
 #include <QPushButton>
 #include <QWidget>
 #include <QPainter>
+#include <QLineEdit>
 #include <QPixmap>
 #endif // QTHEADER_H
