@@ -4,6 +4,7 @@
 #include "BMPFile.h"
 #include "Function.h"
 #include "blendwindow.h"
+#include "colorlevel.h"
 //QString test_path="D:\\Documents\\1Projects\\QT\\ImageWithUI\\ImageWithUI\\image\\Lenna.bmp";
 struct ReturnValue{
     bool isNull;
@@ -66,8 +67,12 @@ private slots:
 
     void on_btn_color_balance_clicked();
 
+    void on_btn_color_level_clicked();
+
 private:
     Ui::MainWindow *ui;
     BlendWindow * blendWindow;
+    ColorLevel * colorLevel;
+
 };
 #endif // MAINWINDOW_H

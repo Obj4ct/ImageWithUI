@@ -29,6 +29,9 @@ set(PROJECT_SOURCES
         blendwindow.h
         blendwindow.cpp
         blendwindow.ui
+        colorlevel.h
+        colorlevel.cpp
+        colorlevel.ui
 
 )
 

@@ -274,7 +274,7 @@ void MainWindow::on_btn_large_bilinear_clicked()
 
 void MainWindow::on_btn_blend_clicked()
 {
-    qDebug()<<"i am in a new window!";
+    qDebug()<<"i am in a blend window!";
     blendWindow = new BlendWindow();
     blendWindow->show();
 
@@ -358,5 +358,13 @@ void MainWindow::on_btn_color_balance_clicked()
         // 更新按钮文本
         ui->btn_color_balance->setText("色彩平衡");
     }
+}
+
+
+void MainWindow::on_btn_color_level_clicked()
+{
+    qDebug() << "I am in a ColorLevel window!";
+    colorLevel = new ColorLevel(this, myValue);
+    colorLevel->show();
 }
 

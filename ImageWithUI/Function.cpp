@@ -484,4 +484,18 @@ void Function::ColorBalance(std::vector<uint8_t> &imageData, int32_t width, int3
     }
 }
 
+void Function::ColorLevelChanel_R(std::vector<uint8_t> &rImageData, int32_t width, int32_t height, double_t brightness, double_t contrast)
+{
+    for (int i = 0; i < rImageData.size(); i += 3) {
+        uint8_t r = rImageData[i];
+
+        // brightness
+        r = std::min(255, std::max(0, static_cast<int>(r + brightness)));
+        // contrast
+        //128：midGray
+        r = std::min(255, std::max(0, static_cast<int>((r - 128) * contrast + 128)));
+        rImageData[i] = r;
+    }
+}
+
 
