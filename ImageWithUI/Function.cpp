@@ -1,5 +1,14 @@
 #include "Function.h"
-
+// 映射表 随便写几个
+std::vector<uint8_t> colorMap = {
+        100, 10, 200,
+        255, 100, 190,
+        100, 200, 190,
+        105, 0, 255,
+        100, 200, 0,
+        255, 0, 255,
+        0, 150, 5
+};
 Function::Function()
 {
 
@@ -482,6 +491,24 @@ void Function::ColorBalance(std::vector<uint8_t> &imageData, int32_t width, int3
             imageData[index + 2] = b;
         }
     }
+}
+
+void Function::ColorMap(std::vector<uint8_t> &imageData, std::vector<uint8_t> &colorMap)
+{
+    //计算颜色映射表中颜色的数量,3表示channel
+    int numColors = colorMap.size()/3;
+    //转灰度图先
+    ConvertToGray(imageData);
+    for (size_t i = 0; i < imageData.size(); i += 3) {
+        uint8_t gray = imageData[i];
+        //先归一化然后执行 乘法
+        int index = static_cast<int>(static_cast<float>(gray) / 255.0f * (numColors - 1));
+
+        imageData[i] = colorMap[index * 3];
+        imageData[i + 1] = colorMap[index * 3 + 1];
+        imageData[i + 2] = colorMap[index * 3 + 2];
+    }
+
 }
 
 

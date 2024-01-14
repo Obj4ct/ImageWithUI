@@ -323,7 +323,7 @@ void MainWindow::on_btn_contrast_clicked()
 void MainWindow::on_btn_saturation_clicked()
 {
     //判断高和宽是否正确输入数字
-       ReturnValue returnValue=CheckOK(ui->lineEdit_saturation);
+    ReturnValue returnValue=CheckOK(ui->lineEdit_saturation);
 
     if(returnValue.isNull==true)
     {
@@ -366,5 +366,26 @@ void MainWindow::on_btn_color_level_clicked()
     qDebug() << "I am in a ColorLevel window!";
     colorLevel = new ColorLevel();
     colorLevel->show();
+}
+
+
+void MainWindow::on_btn_colorMap_clicked()
+{
+    // 切换按钮状态
+    std::vector<uint8_t> colorMapImageData=imageData;
+    if (ui->btn_colorMap->text() == "色彩映射") {
+        // 转换为灰度图
+        function.ColorMap(colorMapImageData,colorMap);
+
+        ShowImage(colorMapImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+
+        // 更新按钮文本
+        ui->btn_colorMap->setText("取消");
+    } else {
+        // 恢复原始图像
+        ResetImage(myValue);
+        // 更新按钮文本
+        ui->btn_colorMap->setText("色彩映射");
+    }
 }
 

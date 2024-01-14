@@ -69,6 +69,8 @@ private slots:
 
     void on_btn_color_level_clicked();
 
+    void on_btn_colorMap_clicked();
+
 private:
     Ui::MainWindow *ui;
     BlendWindow * blendWindow;

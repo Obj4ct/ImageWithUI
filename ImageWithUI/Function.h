@@ -4,6 +4,9 @@
 #include "stdcpp.h"
 #include "QTHeader.h"
 
+extern std::vector<unsigned char> colorMap;
+
+
 class Function
 {
 public:
@@ -55,6 +58,9 @@ public:
 
     //色彩平衡
     void ColorBalance(std::vector<uint8_t> &imageData, int32_t width, int32_t height);
+
+    //色彩映射 (需要用到之前写的转为灰度图函数)
+    void ColorMap(std::vector<uint8_t>& imageData, std::vector<uint8_t>& colorMap);
 
 
     //重置图像

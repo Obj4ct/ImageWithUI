@@ -373,6 +373,19 @@
       <string>色阶调整</string>
      </property>
     </widget>
+    <widget class="QPushButton" name="btn_colorMap">
+     <property name="geometry">
+      <rect>
+       <x>190</x>
+       <y>100</y>
+       <width>92</width>
+       <height>29</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>色彩映射</string>
+     </property>
+    </widget>
    </widget>
   </widget>
   <widget class="QMenuBar" name="menubar">
