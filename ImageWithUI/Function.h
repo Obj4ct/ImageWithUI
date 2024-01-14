@@ -56,9 +56,7 @@ public:
     //色彩平衡
     void ColorBalance(std::vector<uint8_t> &imageData, int32_t width, int32_t height);
 
-    //色阶调整 R通道
-    void ColorLevelChanel_R(std::vector<uint8_t> &rImageData, int32_t width, int32_t height, double_t brightness,
-                            double_t contrast);
+
     //重置图像
     void RestImage(MyValue &myValue);
 

@@ -15,7 +15,7 @@ BlendWindow::BlendWindow(QWidget *parent) :
     ui->horizontalSlider_alpha->setMinimum(0);  // 设置最小值
     ui->horizontalSlider_alpha->setMaximum(10);  // 设置最大值
 
-    currentAlpha = 0; // 或者设置为你期望的初始值
+    currentAlpha = 0;
     // 设置下拉框的初始状态
     ui->comboBox_blendMode->addItem("<请选择>");
     ui->comboBox_blendMode->addItem("正常");
