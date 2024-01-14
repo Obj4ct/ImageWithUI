@@ -1,204 +1,189 @@
-#include "colorlevel.h"
+// ColorLevel.cpp
+#include "ColorLevel.h"
 #include "ui_colorlevel.h"
+ColorLevel::ColorLevel(QWidget *parent)
+    : QWidget(parent), ui(new Ui::ColorLevel) {
 
-ColorLevel::ColorLevel(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
-    : QWidget(parent), ui(new Ui::ColorLevel), mainWindow(mainWindow), myValue(myValue)
-{
     ui->setupUi(this);
-    newValue=myValue;
-    m_bmpImage = QImage(newValue.imageData.data(), myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),QImage::Format_BGR888);
-    imageData=newValue.imageData;
-    // 进行垂直翻转
-    m_bmpImage = m_bmpImage.mirrored(false, true);
-    // 显示图像在imageLabel上
-    QPixmap pixmap = QPixmap::fromImage(m_bmpImage);
-    ui->imageLabel->setPixmap(pixmap);
-    ui->imageLabel->setScaledContents(true);
-    // 设置滑块的最小值和最大值
-    ui->horizontalSlider_R->setMinimum(0);  // 设置最小值
-    ui->horizontalSlider_R->setMaximum(10);
+    GetImageInfo();
+    m_initialRedValue =0;
+    m_initialGreenValue = 0;
+    m_initialBlueValue =0;
+    m_initialRGBValue = 0;
+}
+void ColorLevel::GetImageInfo()
+{
+    //加载图片
+    m_image.load("D:\\Desktop\\image\\in\\Lenna.bmp");
+    //设置label
+    ui->imageLabel->setPixmap(QPixmap::fromImage(m_image));
+    m_width=m_image.width();
+    m_height=m_image.height();
+}
 
-    // 设置滑块的最小值和最大值
-    ui->horizontalSlider_G->setMinimum(0);  // 设置最小值
-    ui->horizontalSlider_G->setMaximum(10);
+void ColorLevel::UpdateImage()
+{
+    // 遍历图片像素
+    for (int x = 0; x < m_image.width(); x++)
+    {
+        for (int y = 0; y < m_image.height(); y++)
+        {
+            QRgb pixel = m_image.pixel(x, y);
+            int red = qRed(pixel);
+            int green = qGreen(pixel);
+            int blue = qBlue(pixel);
 
-    // 设置滑块的最小值和最大值
-    ui->horizontalSlider_B->setMinimum(0);  // 设置最小值
-    ui->horizontalSlider_B->setMaximum(10);
+            // 根据初始状态的通道值来更新像素
+            red = qBound(0, red + m_initialRedValue, 255);
+            green = qBound(0, green + m_initialGreenValue, 255);
+            blue = qBound(0, blue + m_initialBlueValue, 255);
 
-    // 设置滑块的最小值和最大值
-    ui->horizontalSlider_RGB->setMinimum(0);  // 设置最小值
-    ui->horizontalSlider_RGB->setMaximum(10);
-    currentR=0;
+            m_image.setPixel(x, y, qRgb(red, green, blue));
+        }
+    }
+
+    // 显示更新后的图像
+    ui->imageLabel->setPixmap(QPixmap::fromImage(m_image));
+}
+
+void ColorLevel::UpdateImageByRedChannel(int redIncrement)
+{
+    // 遍历图片像素
+    for (int x = 0; x < m_image.width(); x++)
+    {
+        for (int y = 0; y < m_image.height(); y++)
+        {
+            QRgb pixel = m_image.pixel(x, y);
+            int red = qRed(pixel);
+            int green = qGreen(pixel);
+            int blue = qBlue(pixel);
+
+            // 根据传入的增量值来更新红色通道
+            red = qBound(0, red + redIncrement, 255);
+
+            m_image.setPixel(x, y, qRgb(red, green, blue));
+        }
+    }
+
+    // 显示更新后的图像
+    ui->imageLabel->setPixmap(QPixmap::fromImage(m_image));
+}
+
+void ColorLevel::UpdateImageByGreenChannel()
+{
+    int curValue = ui->horizontalSlider_g->value();
+
+    // 遍历图片像素
+    for (int x = 0; x < m_image.width(); x++) {
+        for (int y = 0; y < m_image.height(); y++) {
+            QRgb pixel = m_image.pixel(x, y);
+            int red = qRed(pixel);
+            int green = qGreen(pixel);
+            int blue = qBlue(pixel);
+            green = qBound(0, red + curValue, 255);
+
+            m_image.setPixel(x, y, qRgb(red, green, blue));
+        }
+    }
+
+    // 显示
+    ui->imageLabel->setPixmap(QPixmap::fromImage(m_image));
+}
+
+void ColorLevel::UpdateImageByBlueChannel()
+{
+    int curValue = ui->horizontalSlider_b->value();
+
+    // 遍历图片像素
+    for (int x = 0; x < m_image.width(); x++) {
+        for (int y = 0; y < m_image.height(); y++) {
+            QRgb pixel = m_image.pixel(x, y);
+            int red = qRed(pixel);
+            int green = qGreen(pixel);
+            int blue = qBlue(pixel);
+            blue = qBound(0, red + curValue, 255);
+            m_image.setPixel(x, y, qRgb(red, green, blue));
+        }
+    }
+
+    // 显示
+    ui->imageLabel->setPixmap(QPixmap::fromImage(m_image));
 
 }
+
+void ColorLevel::UpdateImageByRGBChannel()
+{
+
+    int curValue = ui->horizontalSlider_rgb->value();
+    // 遍历图片像素
+    for (int x = 0; x < m_image.width(); x++)
+    {
+        for (int y = 0; y < m_image.height(); y++)
+        {
+            QRgb pixel = m_image.pixel(x, y);
+            int red = qRed(pixel);
+            int green = qGreen(pixel);
+            int blue = qBlue(pixel);
+            red=qBound(0,red+curValue,255);
+            green = qBound(0, green + curValue, 255);
+            blue=qBound(0,blue+curValue,255);
+            m_image.setPixel(x, y, qRgb(red, green, blue));
+        }
+    }
+    // 显示
+    ui->imageLabel->setPixmap(QPixmap::fromImage(m_image));
+
+}
+
 
 ColorLevel::~ColorLevel()
 {
     delete ui;
 }
 
-void ColorLevel::ShowImage(std::vector<uint8_t> &imageData)
+
+
+
+void ColorLevel::on_horizontalSlider_r_valueChanged(int value)
 {
-    QImage image(imageData.data(), myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(), QImage::Format_BGR888);
+    ui->horizontalSlider_r->setRange(0, 255);
+    int diff = value - m_initialRedValue;
 
-    // 进行垂直翻转
-    image = image.mirrored(false, true);
-
-    // 显示灰度图像在imageLabel上
-    QPixmap pixmap = QPixmap::fromImage(image);
-    ui->imageLabel->setPixmap(pixmap);
-    ui->imageLabel->setScaledContents(true); // 使图像适应 label 大小
-}
-void ColorLevel::ShowImage()
-{
-    QImage image(imageData.data(), myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(), QImage::Format_BGR888);
-
-    // 进行垂直翻转
-    image = image.mirrored(false, true);
-
-    // 显示灰度图像在 imageLabel 上
-    QPixmap pixmap = QPixmap::fromImage(image);
-    ui->imageLabel->setPixmap(pixmap);
-    ui->imageLabel->setScaledContents(true); // 使图像适应 label 大小
-}
-
-
-void ColorLevel::ColorLevelChanel_R(std::vector<uint8_t> &rImageData, int32_t width, int32_t height, double_t brightness, double_t contrast)
-{
-
-    for (int i = 0; i < rImageData.size(); i += 3) {
-        uint8_t r = rImageData[i];
-
-        // brightness
-        r = std::min(255, std::max(0, static_cast<int>(r + brightness)));
-        // contrast
-        //128：midGray
-        r = std::min(255, std::max(0, static_cast<int>((r - 128) * contrast + 128)));
-        rImageData[i] = r;
+    if (diff > 0)
+    {
+        // 向右移动，改变红色通道像素值
+        UpdateImageByRedChannel(diff);
     }
-}
-
-
-void ColorLevel::ColorLevelChanel_G(std::vector<uint8_t> &gImageData, int32_t width, int32_t height, double_t brightness,
-                        double_t contrast) {
-
-    for (int i = 0; i < gImageData.size(); i += 3) {
-        uint8_t G = gImageData[i + 1];
-
-        // brightness
-        G = std::min(255, std::max(0, static_cast<int>(G + brightness)));
-        // contrast
-        //128：midGray
-        G = std::min(255, std::max(0, static_cast<int>((G - 128) * contrast + 128)));
-        gImageData[i + 1] = G;
+    else if (diff < 0)
+    {
+        // 向左移动，恢复初始状态
+        m_initialRedValue = value;
+        // 恢复图像
+        UpdateImage();
     }
-
-
+    // 如果 diff 等于 0，什么都不做，因为滑块没有移动
 }
 
-void ColorLevel::ColorLevelChanel_B(std::vector<uint8_t> &bImageData, int32_t width, int32_t height, double_t brightness,
-                        double_t contrast) {
-
-    for (int i = 0; i < bImageData.size(); i += 3) {
-        uint8_t B = bImageData[i + 2];
-
-        // brightness
-        B = std::min(255, std::max(0, static_cast<int>(B + brightness)));
-        // contrast
-        //128：midGray
-        B = std::min(255, std::max(0, static_cast<int>((B - 128) * contrast + 128)));
-        bImageData[i + 2] = B;
-    }
-
-
-}
-
-void ColorLevel::ColorLevelChanel_RGB(std::vector<uint8_t> &rgbImageData, int32_t width, int32_t height, double_t brightness,
-                          double_t contrast) {
-    for (int i = 0; i < height; ++i) {
-        for (int j = 0; j < width; ++j) {
-            int index = (i * width + j) * 3;
-            uint8_t r = rgbImageData[index];
-            uint8_t g = rgbImageData[index + 1];
-            uint8_t b = rgbImageData[index + 2];
-            //brightness
-            r = std::min(255, std::max(0, static_cast<int>(r + brightness)));
-            g = std::min(255, std::max(0, static_cast<int>(g + brightness)));
-            b = std::min(255, std::max(0, static_cast<int>(b + brightness)));
-            //contrast
-            r = std::min(255, std::max(0, static_cast<int>((r - 128) * contrast + 128)));
-            g = std::min(255, std::max(0, static_cast<int>((g - 128) * contrast + 128)));
-            b = std::min(255, std::max(0, static_cast<int>((b - 128) * contrast + 128)));
-
-            // update
-            rgbImageData[index] = r;
-            rgbImageData[index + 1] = g;
-            rgbImageData[index + 2] = b;
-        }
-    }
-}
-
-
-void ColorLevel::on_horizontalSlider_R_valueChanged(int value)
+void ColorLevel::on_horizontalSlider_g_valueChanged(int value)
 {
-    rImageData=imageData;
-    currentR=static_cast<double>(value)/ui->horizontalSlider_R->maximum();
-
-    brightness=currentR;
-    contrast=currentR;
-    qDebug()<<"current R is "<<currentR;
-    qDebug()<<"current brightness is "<<currentR;
-    qDebug()<<"current contrast is "<<currentR;
-    ColorLevelChanel_R(rImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),brightness,contrast);
-
-    ShowImage(rImageData);
+    ui->horizontalSlider_g->setRange(0,255);
+    UpdateImageByGreenChannel();
 }
 
-void ColorLevel::on_horizontalSlider_G_valueChanged(int value)
+
+void ColorLevel::on_horizontalSlider_b_valueChanged(int value)
 {
-    gImageData=imageData;
-    currentG=static_cast<double>(value)/ui->horizontalSlider_G->maximum();
-    brightness=currentG;
-    contrast=currentG;
-    qDebug()<<"current G is "<<currentG;
-    qDebug()<<"current brightness is "<<currentG;
-    qDebug()<<"current contrast is "<<currentG;
-
-    ColorLevelChanel_G(gImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),brightness,contrast);
-
-    ShowImage(gImageData);
+    ui->horizontalSlider_b->setRange(0,255);
+    UpdateImageByBlueChannel();
 }
 
 
-void ColorLevel::on_horizontalSlider_B_valueChanged(int value)
+void ColorLevel::on_horizontalSlider_rgb_valueChanged(int value)
 {
-    bImageData=imageData;
-    currentB=static_cast<double>(value)/ui->horizontalSlider_B->maximum();
-    brightness=currentB;
-    contrast=currentB;
-    qDebug()<<"current B is "<<currentB;
-    qDebug()<<"current brightness is "<<currentB;
-    qDebug()<<"current contrast is "<<currentB;
-
-    ColorLevelChanel_G(bImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),brightness,contrast);
-
-    ShowImage(bImageData);
+    ui->horizontalSlider_rgb->setRange(0,255);
+    UpdateImageByRGBChannel();
 }
 
 
-void ColorLevel::on_horizontalSlider_RGB_valueChanged(int value)
-{
-    rgbImageData=imageData;
-    currentRGB=static_cast<double>(value)/ui->horizontalSlider_RGB->maximum();
-    brightness=currentRGB;
-    contrast=currentRGB;
-    qDebug()<<"current RGB is "<<currentRGB;
-    qDebug()<<"current brightness is "<<currentRGB;
-    qDebug()<<"current contrast is "<<currentRGB;
 
-    ColorLevelChanel_G(rgbImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),brightness,contrast);
 
-    ShowImage(rgbImageData);
-}
-\

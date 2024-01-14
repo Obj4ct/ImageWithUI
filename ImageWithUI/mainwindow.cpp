@@ -364,7 +364,7 @@ void MainWindow::on_btn_color_balance_clicked()
 void MainWindow::on_btn_color_level_clicked()
 {
     qDebug() << "I am in a ColorLevel window!";
-    colorLevel = new ColorLevel(this, myValue);
+    colorLevel = new ColorLevel();
     colorLevel->show();
 }
 

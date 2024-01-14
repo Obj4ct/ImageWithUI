@@ -47,7 +47,7 @@
         </widget>
        </item>
        <item>
-        <widget class="QSlider" name="horizontalSlider_R">
+        <widget class="QSlider" name="horizontalSlider_r">
          <property name="orientation">
           <enum>Qt::Horizontal</enum>
          </property>
@@ -67,7 +67,7 @@
         </widget>
        </item>
        <item>
-        <widget class="QSlider" name="horizontalSlider_G">
+        <widget class="QSlider" name="horizontalSlider_g">
          <property name="orientation">
           <enum>Qt::Horizontal</enum>
          </property>
@@ -87,7 +87,7 @@
         </widget>
        </item>
        <item>
-        <widget class="QSlider" name="horizontalSlider_B">
+        <widget class="QSlider" name="horizontalSlider_b">
          <property name="orientation">
           <enum>Qt::Horizontal</enum>
          </property>
@@ -107,7 +107,7 @@
         </widget>
        </item>
        <item>
-        <widget class="QSlider" name="horizontalSlider_RGB">
+        <widget class="QSlider" name="horizontalSlider_rgb">
          <property name="orientation">
           <enum>Qt::Horizontal</enum>
          </property>
