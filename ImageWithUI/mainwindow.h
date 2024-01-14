@@ -71,6 +71,8 @@ private slots:
 
     void on_btn_colorMap_clicked();
 
+    void on_btn_reverse_color_clicked();
+
 private:
     Ui::MainWindow *ui;
     BlendWindow * blendWindow;

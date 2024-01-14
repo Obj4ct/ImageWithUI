@@ -510,7 +510,13 @@ void Function::ColorMap(std::vector<uint8_t> &imageData, std::vector<uint8_t> &c
     }
 
 }
-
+void Function::InvertColors(std::vector<uint8_t>& imageData) {
+    for (size_t i = 0; i < imageData.size(); i +=3) {
+        imageData[i] = 255 - imageData[i];
+        imageData[i + 1] = 255 - imageData[i+1];
+        imageData[i + 2] = 255 - imageData[i+2];
+    }
+}
 
 
 

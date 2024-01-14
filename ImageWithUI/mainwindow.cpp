@@ -389,3 +389,24 @@ void MainWindow::on_btn_colorMap_clicked()
     }
 }
 
+
+void MainWindow::on_btn_reverse_color_clicked()
+{
+    // 切换按钮状态
+    std::vector<uint8_t> reverseImageData=imageData;
+    if (ui->btn_reverse_color->text() == "色彩反转") {
+        // 转换为灰度图
+        function.InvertColors(reverseImageData);
+
+        ShowImage(reverseImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+
+        // 更新按钮文本
+        ui->btn_reverse_color->setText("取消");
+    } else {
+        // 恢复原始图像
+        ResetImage(myValue);
+        // 更新按钮文本
+        ui->btn_reverse_color->setText("色彩反转");
+    }
+}
+

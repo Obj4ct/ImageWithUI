@@ -61,7 +61,8 @@ public:
 
     //色彩映射 (需要用到之前写的转为灰度图函数)
     void ColorMap(std::vector<uint8_t>& imageData, std::vector<uint8_t>& colorMap);
-
+    //颜色反转
+    void InvertColors(std::vector<uint8_t>& imageData);
 
     //重置图像
     void RestImage(MyValue &myValue);
