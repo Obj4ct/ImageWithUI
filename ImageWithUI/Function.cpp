@@ -518,5 +518,19 @@ void Function::InvertColors(std::vector<uint8_t>& imageData) {
     }
 }
 
+void Function::Complementary(std::vector<uint8_t> &imageData)
+{
+    for (size_t i = 0; i < imageData.size(); i += 3) {
+        size_t r=imageData[i];
+        size_t g=imageData[i+1];
+        size_t b=imageData[i+2];
+        size_t maxRgb=std::max(std::max(r,g),b);
+        size_t minRgb=std::min(std::min(r,g),b);
+        imageData[i]=maxRgb+minRgb-r;
+        imageData[i+1]=maxRgb+minRgb-g;
+        imageData[i+2]=maxRgb+minRgb-b;
+    }
+}
+
 
 

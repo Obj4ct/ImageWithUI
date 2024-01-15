@@ -63,6 +63,8 @@ public:
     void ColorMap(std::vector<uint8_t>& imageData, std::vector<uint8_t>& colorMap);
     //颜色反转
     void InvertColors(std::vector<uint8_t>& imageData);
+    //补色
+    void Complementary(std::vector<uint8_t>& imageData);
 
     //重置图像
     void RestImage(MyValue &myValue);

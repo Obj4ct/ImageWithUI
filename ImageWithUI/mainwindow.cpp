@@ -12,13 +12,11 @@ MainWindow::MainWindow(QWidget *parent)
 
 void MainWindow::ResetImage(MyValue &myValue)
 {
-    qDebug()<<"in";
     // 恢复原始图像
     QImage originalImage(myValue.imageData.data(), myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(), QImage::Format_BGR888);
     originalImage = originalImage.mirrored(false, true);
     QPixmap originalPixmap = QPixmap::fromImage(originalImage);
     ui->imageLabel->setPixmap(originalPixmap);
-
 }
 
 void MainWindow::ShowImage(std::vector<uint8_t> &inImageData,int32_t width,int32_t height)
@@ -33,6 +31,43 @@ void MainWindow::ShowImage(std::vector<uint8_t> &inImageData,int32_t width,int32
     QPixmap pixmap = QPixmap::fromImage(image);
     ui->imageLabel->setPixmap(pixmap);
     ui->imageLabel->setScaledContents(true); // 使图像适应 label 大小
+}
+
+void MainWindow::ResetAll(MyValue &myValue)
+{
+    // 恢复原始图像
+    QImage originalImage(myValue.imageData.data(), myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(), QImage::Format_BGR888);
+    originalImage = originalImage.mirrored(false, true);
+    QPixmap originalPixmap = QPixmap::fromImage(originalImage);
+    ui->imageLabel->setPixmap(originalPixmap);
+    if(isGray)
+    {
+        ui->btn_gray->setText("转为灰度图");
+    }
+    if(isAutoContrast)
+    {
+        ui->btn_autoContrast->setText("自动调整对比度");
+    }
+    if(isAverBlur)
+    {
+        ui->btn_averBlur->setText("均值模糊");
+    }
+    if(isColorBalance)
+    {
+        ui->btn_color_balance->setText("色彩平衡");
+    }
+    if(isColorMap)
+    {
+        ui->btn_colorMap->setText("色彩映射");
+    }
+    if(isReverse)
+    {
+        ui->btn_reverse_color->setText("色彩反转");
+    }
+    if(isComplementary)
+    {
+        ui->btn_complementary->setText("补色");
+    }
 }
 
 ReturnValue MainWindow::CheckOK(QLineEdit * lineEdit)
@@ -109,7 +144,7 @@ void MainWindow::on_btn_gray_clicked()
         function.ConvertToGray(grayImageData);
 
         ShowImage(grayImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
-
+        isGray=true;
         // 更新按钮文本
         ui->btn_gray->setText("取消");
     } else {
@@ -132,7 +167,7 @@ void MainWindow::on_btn_autoContrast_clicked()
         function.AutoContrast(contrastImageData);
 
         ShowImage(contrastImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
-
+        isAutoContrast=true;
         // 更新按钮文本
         ui->btn_autoContrast->setText("取消");
     } else {
@@ -154,7 +189,7 @@ void MainWindow::on_btn_averBlur_clicked()
         // 转换为灰度图
         function.AverageBlur(averBLurImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
         ShowImage(averBLurImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
-
+        isAverBlur=true;
         // 更新按钮文本
         ui->btn_averBlur->setText("取消");
     } else {
@@ -219,7 +254,7 @@ void MainWindow::on_btn_large_biCubic_clicked()
 
 void MainWindow::on_btn_resetAll_clicked()
 {
-    ResetImage(myValue);
+    ResetAll(myValue);
 }
 
 
@@ -347,7 +382,7 @@ void MainWindow::on_btn_color_balance_clicked()
     if (ui->btn_color_balance->text() == "色彩平衡") {
         // 转换为灰度图
         function.ColorBalance(balanceImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
-
+        isColorBalance=true;
         ShowImage(balanceImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
 
         // 更新按钮文本
@@ -378,7 +413,7 @@ void MainWindow::on_btn_colorMap_clicked()
         function.ColorMap(colorMapImageData,colorMap);
 
         ShowImage(colorMapImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
-
+        isColorMap=true;
         // 更新按钮文本
         ui->btn_colorMap->setText("取消");
     } else {
@@ -399,7 +434,7 @@ void MainWindow::on_btn_reverse_color_clicked()
         function.InvertColors(reverseImageData);
 
         ShowImage(reverseImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
-
+        isReverse=true;
         // 更新按钮文本
         ui->btn_reverse_color->setText("取消");
     } else {
@@ -408,5 +443,28 @@ void MainWindow::on_btn_reverse_color_clicked()
         // 更新按钮文本
         ui->btn_reverse_color->setText("色彩反转");
     }
+}
+
+
+void MainWindow::on_btn_complementary_clicked()
+{
+
+    // 切换按钮状态
+    std::vector<uint8_t> complementaryImageData=imageData;
+    if (ui->btn_complementary->text() == "补色") {
+        // 转换为灰度图
+        function.Complementary(complementaryImageData);
+        ShowImage(complementaryImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+        isComplementary=true;
+
+        // 更新按钮文本
+        ui->btn_complementary->setText("取消");
+    } else {
+        // 恢复原始图像
+        ResetImage(myValue);
+        // 更新按钮文本
+        ui->btn_complementary->setText("补色");
+    }
+
 }
 

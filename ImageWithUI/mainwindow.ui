@@ -399,6 +399,19 @@
       <string>色彩反转</string>
      </property>
     </widget>
+    <widget class="QPushButton" name="btn_complementary">
+     <property name="geometry">
+      <rect>
+       <x>190</x>
+       <y>220</y>
+       <width>92</width>
+       <height>29</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>补色</string>
+     </property>
+    </widget>
    </widget>
   </widget>
   <widget class="QMenuBar" name="menubar">

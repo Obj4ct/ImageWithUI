@@ -24,6 +24,7 @@ public:
     //reset image
     void ResetImage(MyValue &myValue);
     void ShowImage(std::vector<uint8_t> &inImageData,int32_t width,int32_t height);
+    void ResetAll(MyValue &myValue);
     ReturnValue CheckOK(QLineEdit* lineEdit);
     ~MainWindow();
 public:
@@ -34,6 +35,7 @@ public:
     std::vector<uint8_t>imageData;
     //store original image data
     std::vector<uint8_t> originalImageData;
+    bool isGray,isAutoContrast,isAverBlur,isColorBalance,isColorMap,isReverse,isComplementary;
 
     //create a object of object
     Function function;
@@ -72,6 +74,8 @@ private slots:
     void on_btn_colorMap_clicked();
 
     void on_btn_reverse_color_clicked();
+
+    void on_btn_complementary_clicked();
 
 private:
     Ui::MainWindow *ui;
