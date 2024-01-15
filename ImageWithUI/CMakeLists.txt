@@ -32,6 +32,9 @@ set(PROJECT_SOURCES
         colorlevel.h
         colorlevel.cpp
         colorlevel.ui
+        eye.h
+        eye.cpp
+        eye.ui
 
 )
 

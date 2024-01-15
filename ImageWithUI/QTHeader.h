@@ -13,4 +13,7 @@
 #include <QPainter>
 #include <QLineEdit>
 #include <QPixmap>
+#include <QLabel>
+#include <QMouseEvent>
+#include <QWidget>
 #endif // QTHEADER_H

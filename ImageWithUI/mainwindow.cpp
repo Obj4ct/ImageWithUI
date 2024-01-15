@@ -468,3 +468,11 @@ void MainWindow::on_btn_complementary_clicked()
 
 }
 
+
+void MainWindow::on_btn_eye_clicked()
+{
+    qDebug() << "I am in a eye window!";
+    eye *myEye= new eye(this,myValue);
+    myEye->show();
+}
+

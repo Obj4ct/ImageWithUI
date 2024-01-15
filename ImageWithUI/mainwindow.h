@@ -5,6 +5,7 @@
 #include "Function.h"
 #include "blendwindow.h"
 #include "colorlevel.h"
+#include "eye.h"
 //QString test_path="D:\\Documents\\1Projects\\QT\\ImageWithUI\\ImageWithUI\\image\\Lenna.bmp";
 struct ReturnValue{
     bool isNull;
@@ -76,6 +77,8 @@ private slots:
     void on_btn_reverse_color_clicked();
 
     void on_btn_complementary_clicked();
+
+    void on_btn_eye_clicked();
 
 private:
     Ui::MainWindow *ui;
