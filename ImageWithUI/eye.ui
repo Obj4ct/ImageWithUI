@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>420</width>
-    <height>590</height>
+    <width>520</width>
+    <height>680</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -18,9 +18,21 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>421</width>
-     <height>421</height>
+     <width>512</width>
+     <height>512</height>
     </rect>
+   </property>
+   <property name="minimumSize">
+    <size>
+     <width>512</width>
+     <height>512</height>
+    </size>
+   </property>
+   <property name="maximumSize">
+    <size>
+     <width>512</width>
+     <height>512</height>
+    </size>
    </property>
    <property name="text">
     <string/>
@@ -29,8 +41,8 @@
   <widget class="QLabel" name="label_2">
    <property name="geometry">
     <rect>
-     <x>100</x>
-     <y>440</y>
+     <x>160</x>
+     <y>520</y>
      <width>211</width>
      <height>41</height>
     </rect>
@@ -42,8 +54,8 @@
   <widget class="QPushButton" name="btn_save">
    <property name="geometry">
     <rect>
-     <x>270</x>
-     <y>550</y>
+     <x>330</x>
+     <y>630</y>
      <width>92</width>
      <height>29</height>
     </rect>
@@ -55,8 +67,8 @@
   <widget class="QWidget" name="widget" native="true">
    <property name="geometry">
     <rect>
-     <x>9</x>
-     <y>470</y>
+     <x>69</x>
+     <y>550</y>
      <width>401</width>
      <height>71</height>
     </rect>
@@ -95,8 +107,8 @@
   <widget class="QPushButton" name="btn_ok">
    <property name="geometry">
     <rect>
-     <x>30</x>
-     <y>550</y>
+     <x>90</x>
+     <y>630</y>
      <width>92</width>
      <height>29</height>
     </rect>
@@ -108,8 +120,8 @@
   <widget class="QPushButton" name="btn_ok_2">
    <property name="geometry">
     <rect>
-     <x>150</x>
-     <y>550</y>
+     <x>210</x>
+     <y>630</y>
      <width>92</width>
      <height>29</height>
     </rect>

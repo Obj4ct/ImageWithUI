@@ -105,7 +105,7 @@ void MainWindow::on_openImage_triggered()
     // 文件默认路径
     QString defaultPath = QDir::currentPath();
     // 设置过滤
-    QString filter = "BMP文件(*.BMP)";
+    QString filter = "BMP文件(*.bmp)";
     QString path = QFileDialog::getOpenFileName(this, "选择BMP文件", defaultPath, filter);
 
     if (path.isEmpty()) {

@@ -2,7 +2,7 @@
 #define BMPFILE_H
 
 #include "stdcpp.h"
-#define SAVE_PATH "D:\\Desktop\\"
+extern std::string savePath;
 #pragma pack(push, 1)
 class BMP
 {

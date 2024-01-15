@@ -1,5 +1,6 @@
 #include "eye.h"
 #include "ui_eye.h"
+std::string savePath = "D:\\Desktop\\";
 eye::eye(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     : QWidget(parent), ui(new Ui::eye), mainWindow(mainWindow), myValue(myValue)
 {
@@ -56,7 +57,7 @@ void eye::Eye(std::vector<uint8_t> &imageData, int32_t width, int32_t height, in
 
             // 计算像素到中心点的距离
             double distance = std::sqrt(
-                    static_cast<double>((x - centerX) * (x - centerX) + (y - centerY) * (y - centerY)));
+                        static_cast<double>((x - centerX) * (x - centerX) + (y - centerY) * (y - centerY)));
 
             if (distance < radius) {
 
@@ -115,6 +116,15 @@ void eye::ResetImage()
     originalImage = originalImage.mirrored(false, true);
     QPixmap originalPixmap = QPixmap::fromImage(originalImage);
     ui->imageLabel->setPixmap(originalPixmap);
+    firstX=0;
+    firstY=0;
+    secondX=0;
+    secondY=0;
+    QString str1 = QString("%1, %2").arg(firstX).arg(firstY);
+    ui->label_first->setText(str1);
+
+    QString str2 = QString("%1, %2").arg(secondX).arg(secondY);
+    ui->label_second->setText(str2);
 
 }
 eye::~eye()
@@ -124,6 +134,19 @@ eye::~eye()
 
 void eye::on_btn_save_clicked()
 {
+    QString filePath = QFileDialog::getSaveFileName(nullptr, "保存文件", "", "BMP文件(*.bmp)");
+    if (filePath.isEmpty()) {
+        qDebug() << "Save operation canceled.";
+        return;
+    }
+    savePath=filePath.toStdString();
+
+    QFileInfo fileInfo(filePath);
+    QString fileName = fileInfo.fileName();
+    std::string str=fileName.toStdString();
+    std::cout<<"filename is "<<str<<std::endl;
+    MYFunction::WriteBMPFile(str,newValue.imageData,newValue.bmp,newValue.bmpInfo);
+    qDebug()<<"succeed!";
 
 }
 
@@ -134,7 +157,7 @@ void eye::on_btn_ok_clicked()
 {
     if(ui->label_first->text()==nullptr||ui->label_second->text()==nullptr)
     {
-        if(!function.CreateMessagebox("提示","还没成功获取两个坐标值"));
+        if(!function.CreateMessagebox("提示","还没成功获取两个坐标值"))
         {
             return;
         }
