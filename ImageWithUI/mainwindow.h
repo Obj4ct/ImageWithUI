@@ -7,6 +7,7 @@
 #include "colorlevel.h"
 #include "eye.h"
 #include "mask.h"
+#include "mosaic.h"
 //QString test_path="D:\\Documents\\1Projects\\QT\\ImageWithUI\\ImageWithUI\\image\\Lenna.bmp";
 struct ReturnValue{
     bool isNull;
@@ -103,6 +104,8 @@ private slots:
     void on_btn_mask_clicked();
 
     void on_btn_medianBlur_clicked();
+
+    void on_btn_mosaic_clicked();
 
 private:
     Ui::MainWindow *ui;

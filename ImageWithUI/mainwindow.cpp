@@ -645,3 +645,12 @@ void MainWindow::on_btn_medianBlur_clicked()
     }
 }
 
+
+void MainWindow::on_btn_mosaic_clicked()
+{
+
+    qDebug() << "I am in a mosaic window!";
+    Mosaic *mosaic = new Mosaic(this,myValue);
+    mosaic->show();
+}
+

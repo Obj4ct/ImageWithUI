@@ -529,6 +529,19 @@
       <string>中值模糊</string>
      </property>
     </widget>
+    <widget class="QPushButton" name="btn_mosaic">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>620</y>
+       <width>92</width>
+       <height>29</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>马赛克</string>
+     </property>
+    </widget>
    </widget>
    <widget class="QWidget" name="widget_add" native="true">
     <property name="geometry">
