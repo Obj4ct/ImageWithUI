@@ -71,3 +71,16 @@ void MYFunction::SetBMPHeaderValues(BMP &bmp, BMPInfo &bmpInfo, int width, int h
     bmpInfo.SetColorsUsed(0);                             // 使用的颜色数，通常不使用调色板
     bmpInfo.SetColorsImportant(0);                        // 重要颜色数，通常不指定
 }
+
+
+
+void BMPInfo::WriteToBMPInfo(std::vector<uint8_t> &imageData, int32_t cropHeight, int32_t cropWidth, BMPInfo &newBmpInfo, BMP &bmp)
+{
+
+    newBmpInfo.height = cropHeight;
+    newBmpInfo.width = cropWidth;
+    newBmpInfo.imageSize = newBmpInfo.width * newBmpInfo.height * 3;//120000
+    bmp.fileSize = bmp.dataOffset + newBmpInfo.imageSize;
+    imageData.resize(newBmpInfo.imageSize);
+
+}

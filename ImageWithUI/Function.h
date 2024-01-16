@@ -5,7 +5,9 @@
 #include "QTHeader.h"
 
 extern std::vector<unsigned char> colorMap;
-
+struct Pixel;
+extern int sobelX[3][3];
+extern int sobelY[3][3];
 
 class Function
 {
@@ -42,6 +44,12 @@ public:
     std::vector<uint8_t>
     LargeImage_Bilinear(const std::vector<uint8_t> &imageData, int32_t width, int32_t height, int32_t newWidth,
                         int32_t newHeight);
+
+    //最临近插值
+    std::vector<uint8_t>
+    SmallImage_Nearest(const std::vector<uint8_t> &imageData, int32_t width, int32_t height, int32_t newWidth, int32_t newHeight);
+    std::vector<uint8_t>
+    LargeImage_Nearest(const std::vector<uint8_t> &imageData, int32_t width, int32_t height, int32_t newWidth, int32_t newHeight);
 
     //色彩通道
     //亮度
@@ -84,6 +92,19 @@ public:
     //中值模糊
     uint8_t CalculateMedian(std::vector<uint8_t>& window);
     void MedianBlur(std::vector<uint8_t>& imageData, uint32_t width, uint32_t height);
+
+    //阴影和高光
+    void MakeShadow(std::vector<uint8_t>& imageData,std::vector<uint8_t> &shadowImageData,uint32_t shadowValue);
+    void HighLight(std::vector<uint8_t> &imageData,std::vector<uint8_t> &highLightImageData,uint32_t pixel);
+
+    //图像锐化
+
+    std::vector<uint8_t> Sharpen(const std::vector<uint8_t> &imageData, const std::vector<uint8_t> &highContrastImageData);
+
+    //边缘检测
+    std::vector<uint8_t> SobelEdge(const std::vector<uint8_t>& imageData, int width, int height);
+    //阈值处理
+    void ApplyThreshold(std::vector<uint8_t>& imageData, uint32_t threshold);
     //重置图像
     void RestImage(MyValue &myValue);
 

@@ -8,6 +8,7 @@
 #include "eye.h"
 #include "mask.h"
 #include "mosaic.h"
+#include "tailor.h"
 //QString test_path="D:\\Documents\\1Projects\\QT\\ImageWithUI\\ImageWithUI\\image\\Lenna.bmp";
 struct ReturnValue{
     bool isNull;
@@ -38,7 +39,7 @@ public:
     std::vector<uint8_t>imageData;
     //store original image data
     std::vector<uint8_t> originalImageData;
-    bool isGray,isAutoContrast,isAverBlur,isColorBalance,isColorMap,isReverse,isComplementary,isFace,isFishEye,isMedianBlur;
+    bool isGray,isAutoContrast,isAverBlur,isColorBalance,isColorMap,isReverse,isComplementary,isFace,isFishEye,isMedianBlur,isSharpen,isTensor;
 
     //create a object of object
     Function function;
@@ -106,6 +107,22 @@ private slots:
     void on_btn_medianBlur_clicked();
 
     void on_btn_mosaic_clicked();
+
+    void on_btn_small_nearest_clicked();
+
+    void on_btn_large_nearest_clicked();
+
+    void on_btn_shadow_ok_clicked();
+
+    void on_btn_highlight_ok_clicked();
+
+    void on_btn_sharpen_clicked();
+
+    void on_btn_tailor_clicked();
+
+    void on_btn_tensor_clicked();
+
+    void on_btn_threshold_ok_clicked();
 
 private:
     Ui::MainWindow *ui;

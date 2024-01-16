@@ -6,7 +6,7 @@ extern std::string savePath;
 #pragma pack(push, 1)
 class BMP
 {
-private:
+public:
     uint16_t fileType;  // 用来标识文件类型，通常被设置为固定值 0x4D42，它表示这是一个 BMP 图像文件
     uint32_t fileSize;  // 表示整个 BMP 文件的大小，以字节为单位
     // 下面两个参数都是保留字，没有特定的用途
@@ -83,6 +83,9 @@ private:
     // 图像中用于指定调色板中的颜色数量和重要颜色数量。
     uint32_t colorsUsed;
     uint32_t colorsImportant;
+
+
+
 
 public:
     inline uint32_t GetHeaderSize()
@@ -174,6 +177,7 @@ public:
     {
         this->colorsImportant = colorsImportant;
     };
+    void WriteToBMPInfo(std::vector<uint8_t> &imageData, int32_t cropHeight, int32_t cropWidth, BMPInfo &newBmpInfo, BMP &bmp);
 };
 #pragma pack(pop)
 
@@ -192,6 +196,7 @@ public:
     //save image for debug
     static void WriteBMPFile(const std::string &fileName, const std::vector<uint8_t> &imageData, BMP &bmp, BMPInfo &bmpInfo);
     static void SetBMPHeaderValues(BMP &bmp, BMPInfo &bmpInfo, int width, int height, uint16_t bitsPerPixel);
+    static void WriteToBMPInfo(std::vector<uint8_t> &imageData, int32_t cropHeight, int32_t cropWidth, BMPInfo &newBmpInfo, BMP &bmp);
 };
 
 

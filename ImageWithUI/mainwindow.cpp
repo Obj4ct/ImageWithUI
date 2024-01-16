@@ -83,6 +83,14 @@ void MainWindow::ResetAll(MyValue &myValue)
     {
         ui->btn_medianBlur->setText("中值模糊");
     }
+    if(isSharpen)
+    {
+        ui->btn_sharpen->setText("一键锐化");
+    }
+    if(isTensor)
+    {
+        ui->btn_tensor->setText("边缘检测");
+    }
 }
 
 ReturnValue MainWindow::CheckOK(QLineEdit * lineEdit)
@@ -652,5 +660,177 @@ void MainWindow::on_btn_mosaic_clicked()
     qDebug() << "I am in a mosaic window!";
     Mosaic *mosaic = new Mosaic(this,myValue);
     mosaic->show();
+}
+
+
+void MainWindow::on_btn_small_nearest_clicked()
+{
+    std::vector<uint8_t> nearestImageData=imageData;
+    //判断高和宽是否正确输入数字
+    ReturnValue returnValueHeight=CheckOK(ui->lineEdit_small_nearest_height);
+    ReturnValue returnValueWidth=CheckOK(ui->lineEdit_small_nearest_width);
+    //no text in it
+    if(returnValueHeight.isNull==true||returnValueWidth.isNull==true)
+    {
+        if(!function.CreateMessagebox("提示","请输入宽和高"))
+            return;
+    }
+    //not a number
+    else if(returnValueHeight.isNumeric==false||returnValueWidth.isNumeric==false){
+        if(!function.CreateMessagebox("提示","请输入倍数"))
+            return;
+    }
+    else{
+        std::vector<uint8_t> smallImageData=function.SmallImage_Nearest(nearestImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),myValue.bmpInfo.GetWidth()/returnValueWidth.value,myValue.bmpInfo.GetHeight()/returnValueHeight.value);
+        ShowImage(smallImageData,myValue.bmpInfo.GetWidth()/returnValueWidth.value, myValue.bmpInfo.GetHeight()/returnValueHeight.value);
+
+    }
+}
+
+
+void MainWindow::on_btn_large_nearest_clicked()
+{
+    std::vector<uint8_t> nearestImageData=imageData;
+    //判断高和宽是否正确输入数字
+
+    //判断高和宽是否正确输入数字
+    ReturnValue returnValueHeight=CheckOK(ui->lineEdit_large_nearest_heightt);
+    ReturnValue returnValueWidth=CheckOK(ui->lineEdit_large_nearest_width);
+    //no text in it
+    if(returnValueHeight.isNull==true||returnValueWidth.isNull==true)
+    {
+        if(!function.CreateMessagebox("提示","请输入宽和高"))
+            return;
+    }
+    //not a number
+    else if(returnValueHeight.isNumeric==false||returnValueWidth.isNumeric==false){
+        if(!function.CreateMessagebox("提示","请输入倍数"))
+            return;
+    }
+    else{
+        std::vector<uint8_t> largeImageData=function.LargeImage_Nearest(nearestImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),myValue.bmpInfo.GetWidth()*returnValueWidth.value,myValue.bmpInfo.GetHeight()*returnValueHeight.value);
+        ShowImage(largeImageData,myValue.bmpInfo.GetWidth()*returnValueWidth.value, myValue.bmpInfo.GetHeight()*returnValueHeight.value);
+
+    }
+}
+
+
+void MainWindow::on_btn_shadow_ok_clicked()
+{
+    std::vector<uint8_t>tempImageData=imageData;
+    std::vector<uint8_t> shadowImageData(imageData.size());
+    shadowImageData=imageData;
+    //正确输入数字
+    ReturnValue returnValue=CheckOK(ui->lineEdit_shadow);
+
+    if(returnValue.isNull==true)
+    {
+        if(!function.CreateMessagebox("提示","请输入"))
+            return;
+    }else if(returnValue.isNumeric==false){
+        if(!function.CreateMessagebox("提示","输入数字"))
+            return;
+    }else{
+        function.MakeShadow(tempImageData,shadowImageData,returnValue.value);
+        ShowImage(shadowImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+    }
+}
+
+
+void MainWindow::on_btn_highlight_ok_clicked()
+{
+    std::vector<uint8_t>tempImageData=imageData;
+    std::vector<uint8_t> highLightImageData(imageData.size());
+    highLightImageData=imageData;
+    //正确输入数字
+    ReturnValue returnValue=CheckOK(ui->lineEdit_highlight);
+
+    if(returnValue.isNull==true)
+    {
+        if(!function.CreateMessagebox("提示","请输入"))
+            return;
+    }else if(returnValue.isNumeric==false){
+        if(!function.CreateMessagebox("提示","输入数字"))
+            return;
+    }else{
+        function.HighLight(tempImageData,highLightImageData,returnValue.value);
+        ShowImage(highLightImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+    }
+}
+
+
+void MainWindow::on_btn_sharpen_clicked()
+{
+    std::vector<uint8_t>tempImageData=imageData;
+    if (ui->btn_sharpen->text() == "一键锐化") {
+        qDebug()<<"in sharpen";
+        std::vector<uint8_t> blurImageData = function.Gauss(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),10);
+        std::vector<uint8_t> highContrast = function.HighContrast(tempImageData, blurImageData);
+        std::vector<uint8_t> sharpenImageData = function.Sharpen(tempImageData, highContrast);
+        ShowImage(sharpenImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+        isSharpen=true;
+
+        // 更新按钮文本
+        ui->btn_sharpen->setText("取消");
+    } else {
+        // 恢复原始图像
+        ResetImage(myValue);
+        // 更新按钮文本
+        ui->btn_sharpen->setText("一键锐化");
+    }
+
+
+}
+
+
+void MainWindow::on_btn_tailor_clicked()
+{
+
+    qDebug() << "I am in a tailor window!";
+    Tailor *tailor = new Tailor(this,myValue);
+    tailor->show();
+}
+
+
+void MainWindow::on_btn_tensor_clicked()
+{
+    std::vector<uint8_t>tempImageData=imageData;
+    if (ui->btn_tensor->text() == "边缘检测") {
+        qDebug()<<"in edge";
+        std::vector<uint8_t> edgeImageData = function.SobelEdge(imageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+
+        ShowImage(edgeImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+        isTensor=true;
+
+        // 更新按钮文本
+        ui->btn_tensor->setText("取消");
+    } else {
+        // 恢复原始图像
+        ResetImage(myValue);
+        // 更新按钮文本
+        ui->btn_tensor->setText("边缘检测");
+    }
+}
+
+
+void MainWindow::on_btn_threshold_ok_clicked()
+{
+    std::vector<uint8_t>tempImageData=imageData;
+    std::vector<uint8_t> highLightImageData(imageData.size());
+    highLightImageData=imageData;
+    //正确输入数字
+    ReturnValue returnValue=CheckOK(ui->lineEdit_threshold);
+
+    if(returnValue.isNull==true)
+    {
+        if(!function.CreateMessagebox("提示","请输入"))
+            return;
+    }else if(returnValue.isNumeric==false){
+        if(!function.CreateMessagebox("提示","输入数字"))
+            return;
+    }else{
+        function.ApplyThreshold(tempImageData,returnValue.value);
+        ShowImage(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+    }
 }
 

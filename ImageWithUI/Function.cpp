@@ -9,6 +9,27 @@ std::vector<uint8_t> colorMap = {
     255, 0, 255,
     0, 150, 5
 };
+
+
+// 定义结构体表示像素
+//先定义一个结构体来表示图像中的像素，包括红、绿和蓝三个通道的值
+struct Pixel {
+    uint8_t red;
+    uint8_t green;
+    uint8_t blue;
+};
+//边缘检测算子 copy
+int sobelX[3][3] = {
+    {-1, 0, 1},
+    {-2, 0, 2},
+    {-1, 0, 1}
+};
+
+int sobelY[3][3] = {
+    {-1, -2, -1},
+    {0,  0,  0},
+    {1,  2,  1}
+};
 std::string savePath = "";
 Function::Function()
 {
@@ -308,6 +329,57 @@ std::vector<uint8_t> Function::LargeImage_Bilinear(const std::vector<uint8_t> &i
             }
         }
     }
+    return resizedImage;
+}
+
+std::vector<uint8_t> Function::SmallImage_Nearest(const std::vector<uint8_t> &imageData, int32_t width, int32_t height, int32_t newWidth, int32_t newHeight)
+{
+    std::vector<uint8_t> resizedImage(newWidth*newHeight*3);
+
+    // 计算缩放因子
+    double scaleX = static_cast<double>(width) / newWidth;
+    double scaleY = static_cast<double>(height) / newHeight;
+
+    for (int32_t y = 0; y < newHeight; y++) {
+        for (int32_t x = 0; x < newWidth; x++) {
+            // 原图坐标
+            auto srcX = static_cast<int32_t>(x * scaleX);
+            auto srcY = static_cast<int32_t>(y * scaleY);
+            // 复制到目标
+            int32_t srcIndex = (srcY * width + srcX) * 3;
+            int32_t destIndex = (y * newWidth + x) * 3;
+            resizedImage[destIndex] = imageData[srcIndex];
+            resizedImage[destIndex + 1] = imageData[srcIndex + 1];
+            resizedImage[destIndex + 2] = imageData[srcIndex + 2];
+        }
+    }
+
+    return resizedImage;
+
+}
+
+std::vector<uint8_t> Function::LargeImage_Nearest(const std::vector<uint8_t> &imageData, int32_t width, int32_t height, int32_t newWidth, int32_t newHeight)
+{
+    std::vector<uint8_t> resizedImage(newHeight * newWidth * 3);
+
+    // 放大因子
+    double scaleX = static_cast<double>(newWidth) / width;
+    double scaleY = static_cast<double>(newHeight) / height;
+
+    for (int32_t y = 0; y < newHeight; y++) {
+        for (int32_t x = 0; x < newWidth; x++) {
+            // 原图坐标
+            auto srcX = static_cast<int32_t>(x / scaleX);
+            auto srcY = static_cast<int32_t>(y / scaleY);
+            int32_t srcIndex = (srcY * width + srcX) * 3;
+            int32_t destIndex = (y * newWidth + x) * 3;
+            // 复制到目标
+            resizedImage[destIndex] = imageData[srcIndex];
+            resizedImage[destIndex + 1] = imageData[srcIndex + 1];
+            resizedImage[destIndex + 2] = imageData[srcIndex + 2];
+        }
+    }
+
     return resizedImage;
 }
 
@@ -719,6 +791,102 @@ void Function::MedianBlur(std::vector<uint8_t> &imageData, uint32_t width, uint3
             }
             uint32_t index = (y * width + x) * 3;
             imageData[index] = CalculateMedian(window);
+        }
+    }
+}
+
+void Function::MakeShadow(std::vector<uint8_t> &imageData, std::vector<uint8_t> &shadowImageData, uint32_t shadowValue)
+{
+    for (size_t i=0; i < imageData.size(); i += 3) {
+        uint8_t r = imageData[i];
+        uint8_t g = imageData[i + 1];
+        uint8_t b = imageData[i + 2];
+        shadowImageData[i] = (r >= shadowValue) ? r - shadowValue : 0;
+        shadowImageData[i + 1] = (g >= shadowValue) ? g - shadowValue : 0;
+        shadowImageData[i + 2] = (b >= shadowValue) ? b - shadowValue : 0;
+    }
+}
+
+void Function::HighLight(std::vector<uint8_t> &imageData, std::vector<uint8_t> &highLightImageData, uint32_t pixel)
+{
+    for (size_t i = 0; i < imageData.size(); ++i)
+    {
+        if(imageData[i]>pixel){
+            // 在指定像素值之上的像素降低值，确保颜色值不会小于0
+            int newValue = imageData[i] - 100;
+            highLightImageData[i] = (newValue >= 0) ? static_cast<uint8_t>(newValue) : 0;
+        }
+    }
+}
+
+std::vector<uint8_t> Function::Sharpen(const std::vector<uint8_t> &imageData, const std::vector<uint8_t> &highContrastImageData)
+{
+    std::vector<uint8_t> sharpenImageData(imageData.size());
+
+    for (size_t i = 0; i < imageData.size(); i++) {
+        int addValue = static_cast<int>(imageData[i]) + static_cast<int>(highContrastImageData[i]);
+        sharpenImageData[i] = static_cast<uint8_t>(std::max(std::min(addValue-175, 255), 0));
+
+    }
+
+    return sharpenImageData;
+}
+
+std::vector<uint8_t> Function::SobelEdge(const std::vector<uint8_t> &imageData, int width, int height)
+{
+    std::vector<uint8_t> edgeImageData(imageData.size());
+
+    for (int y = 1; y < height - 1; y++) {
+        for (int x = 1; x < width - 1; x++) {
+            int sumX = 0;
+            int sumY = 0;
+
+            for (int j = 0; j < 3; j++) {
+                for (int i = 0; i < 3; i++) {
+                    int pixelX = x + i - 1;
+                    int pixelY = y + j - 1;
+                    int pixelIndex = (pixelY * width + pixelX) * 3;
+                    int grayValue = static_cast<int>(imageData[pixelIndex]);
+                    sumX += grayValue * sobelX[j][i];
+                    sumY += grayValue * sobelY[j][i];
+                }
+            }
+            //edge
+            //梯度的强度，通常是水平和垂直梯度的绝对值之和。这个值用来表示像素的边缘强度。
+            int edgeValue = std::min(std::max(std::abs(sumX) + std::abs(sumY), 0), 255);
+            int index = (y * width + x) * 3;
+            edgeImageData[index] = static_cast<uint8_t>(edgeValue);
+            edgeImageData[index + 1] = static_cast<uint8_t>(edgeValue);
+            edgeImageData[index + 2] = static_cast<uint8_t>(edgeValue);
+        }
+    }
+
+    return edgeImageData;
+}
+
+void Function::ApplyThreshold(std::vector<uint8_t> &imageData, uint32_t threshold)
+{
+    for (size_t i = 0; i < imageData.size(); i += 3) {
+        uint8_t r = imageData[i];
+        uint8_t g = imageData[i + 1];
+        uint8_t b = imageData[i + 2];
+
+        // 计算灰度值并使用double类型保存
+        double gray = 0.299 * r + 0.587 * g + 0.114 * b;
+
+        if (gray > threshold) {
+            //阈值处理后，你将颜色通道的值分别增加或减少100。这种硬编码的方式可能会导致颜色通道的值超出合理范围（0-255）。你可以考虑使用一个比例因子，而不是固定的100，以确保颜色通道的值在合理范围内。
+            // 使用比例因子来调整颜色通道值
+            double factor = (gray - threshold) / (255.0 - threshold);
+            imageData[i] = std::min(255, static_cast<int>(r + 100 * factor));
+            imageData[i + 1] = std::min(255, static_cast<int>(g + 100 * factor));
+            imageData[i + 2] = std::min(255, static_cast<int>(b + 100 * factor));
+        } else {
+            // 使用比例因子来调整颜色通道值
+            double factor = gray / threshold;
+            imageData[i] = std::max(0, static_cast<int>(r * factor));
+            imageData[i + 1] = std::max(0, static_cast<int>(g * factor));
+            imageData[i + 2] = std::max(0, static_cast<int>(b * factor));
         }
     }
 }
