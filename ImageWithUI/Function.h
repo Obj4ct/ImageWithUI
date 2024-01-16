@@ -81,8 +81,9 @@ public:
     void RotateImage(std::vector<uint8_t> &imageData, int32_t width, int32_t height, double_t angle);
     //逆时针旋转
     void RotateReverse(std::vector<uint8_t> &imageData, int32_t width, int32_t height, double_t angle);
-
-
+    //中值模糊
+    uint8_t CalculateMedian(std::vector<uint8_t>& window);
+    void MedianBlur(std::vector<uint8_t>& imageData, uint32_t width, uint32_t height);
     //重置图像
     void RestImage(MyValue &myValue);
 

@@ -9,6 +9,7 @@ std::vector<uint8_t> colorMap = {
     255, 0, 255,
     0, 150, 5
 };
+std::string savePath = "";
 Function::Function()
 {
 
@@ -675,7 +676,7 @@ void Function::RotateImage(std::vector<uint8_t> &imageData, int32_t width, int32
 
             if (rotatedX >= 0 && rotatedX < width && rotatedY >= 0 && rotatedY < height) {
                 int originalIndex =
-                    static_cast<int>(std::round(rotatedY)) * width * 3 + static_cast<int>(std::round(rotatedX)) * 3;
+                        static_cast<int>(std::round(rotatedY)) * width * 3 + static_cast<int>(std::round(rotatedX)) * 3;
                 int newIndex = y * width * 3 + x * 3;
 
                 if (originalIndex >= 0 && originalIndex < width * height * 3 && newIndex >= 0 && newIndex < width * height * 3) {
@@ -696,6 +697,32 @@ void Function::RotateReverse(std::vector<uint8_t> &imageData, int32_t width, int
     double_t clockwiseAngle = 360.0 - angle;
     RotateImage(imageData, width, height, clockwiseAngle);
 }
+
+uint8_t Function::CalculateMedian(std::vector<uint8_t> &window)
+{
+    std::sort(window.begin(), window.end());
+    return window[window.size() / 2];
+
+}
+
+void Function::MedianBlur(std::vector<uint8_t> &imageData, uint32_t width, uint32_t height)
+{
+    std::vector<uint8_t> blurImage(imageData);
+    for (uint32_t y = 1; y < height - 1; y++) {
+        for (uint32_t x = 1; x < width - 1; x++) {
+            std::vector<uint8_t> window;
+            for (int dy = -1; dy <= 1; dy++) {
+                for (int dx = -1; dx <= 1; dx++) {
+                    uint32_t index = ((y + dy) * width + (x + dx)) * 3;
+                    window.push_back(imageData[index]);
+                }
+            }
+            uint32_t index = (y * width + x) * 3;
+            imageData[index] = CalculateMedian(window);
+        }
+    }
+}
+
 
 
 

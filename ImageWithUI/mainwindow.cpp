@@ -79,6 +79,10 @@ void MainWindow::ResetAll(MyValue &myValue)
     {
         ui->btn_fish_eye->setText("鱼眼镜头");
     }
+    if(isMedianBlur)
+    {
+        ui->btn_medianBlur->setText("中值模糊");
+    }
 }
 
 ReturnValue MainWindow::CheckOK(QLineEdit * lineEdit)
@@ -611,5 +615,33 @@ void MainWindow::on_btn_rotate_r_clicked()
         ShowImage(imageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
     }
 
+}
+
+
+void MainWindow::on_btn_mask_clicked()
+{
+    qDebug() << "I am in a mask window!";
+    Mask *mask = new Mask(this,myValue);
+    mask->show();
+}
+
+
+void MainWindow::on_btn_medianBlur_clicked()
+{
+    std::vector<uint8_t> medianBlurImageData=imageData;
+    if (ui->btn_medianBlur->text() == "中值模糊") {
+        qDebug()<<"in median";
+        function.MedianBlur(medianBlurImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+        ShowImage(medianBlurImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+        isMedianBlur=true;
+
+        // 更新按钮文本
+        ui->btn_medianBlur->setText("取消");
+    } else {
+        // 恢复原始图像
+        ResetImage(myValue);
+        // 更新按钮文本
+        ui->btn_medianBlur->setText("中值模糊");
+    }
 }
 

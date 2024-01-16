@@ -6,6 +6,7 @@
 #include "blendwindow.h"
 #include "colorlevel.h"
 #include "eye.h"
+#include "mask.h"
 //QString test_path="D:\\Documents\\1Projects\\QT\\ImageWithUI\\ImageWithUI\\image\\Lenna.bmp";
 struct ReturnValue{
     bool isNull;
@@ -36,7 +37,7 @@ public:
     std::vector<uint8_t>imageData;
     //store original image data
     std::vector<uint8_t> originalImageData;
-    bool isGray,isAutoContrast,isAverBlur,isColorBalance,isColorMap,isReverse,isComplementary,isFace,isFishEye;
+    bool isGray,isAutoContrast,isAverBlur,isColorBalance,isColorMap,isReverse,isComplementary,isFace,isFishEye,isMedianBlur;
 
     //create a object of object
     Function function;
@@ -98,6 +99,10 @@ private slots:
     void on_btn_rotate_ok_clicked();
 
     void on_btn_rotate_r_clicked();
+
+    void on_btn_mask_clicked();
+
+    void on_btn_medianBlur_clicked();
 
 private:
     Ui::MainWindow *ui;

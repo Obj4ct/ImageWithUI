@@ -503,6 +503,32 @@
       </item>
      </layout>
     </widget>
+    <widget class="QPushButton" name="btn_mask">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>570</y>
+       <width>92</width>
+       <height>29</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>局部磨皮</string>
+     </property>
+    </widget>
+    <widget class="QPushButton" name="btn_medianBlur">
+     <property name="geometry">
+      <rect>
+       <x>130</x>
+       <y>570</y>
+       <width>92</width>
+       <height>29</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>中值模糊</string>
+     </property>
+    </widget>
    </widget>
    <widget class="QWidget" name="widget_add" native="true">
     <property name="geometry">

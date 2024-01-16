@@ -1,6 +1,6 @@
 #include "eye.h"
 #include "ui_eye.h"
-std::string savePath = "D:\\Desktop\\";
+
 eye::eye(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     : QWidget(parent), ui(new Ui::eye), mainWindow(mainWindow), myValue(myValue)
 {
