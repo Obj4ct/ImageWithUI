@@ -1,13 +1,13 @@
 #include "Function.h"
 // 映射表 随便写几个
 std::vector<uint8_t> colorMap = {
-        100, 10, 200,
-        255, 100, 190,
-        100, 200, 190,
-        105, 0, 255,
-        100, 200, 0,
-        255, 0, 255,
-        0, 150, 5
+    100, 10, 200,
+    255, 100, 190,
+    100, 200, 190,
+    105, 0, 255,
+    100, 200, 0,
+    255, 0, 255,
+    0, 150, 5
 };
 Function::Function()
 {
@@ -530,6 +530,171 @@ void Function::Complementary(std::vector<uint8_t> &imageData)
         imageData[i+1]=maxRgb+minRgb-g;
         imageData[i+2]=maxRgb+minRgb-b;
     }
+}
+
+void Function::Face(std::vector<uint8_t> &imageData, int32_t width, int32_t height, int32_t centerX, int32_t centerY, int32_t radius, double intensity)
+{
+    // 遍历图像像素
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            int pixelIndex = (y * width + x) * 3;
+
+            // 计算像素到中心点的距离
+            double distance = std::sqrt(static_cast<double>((x - centerX) * (x - centerX) + (y - centerY) * (y - centerY)));
+
+            if (distance < radius) {
+
+                double warpAmount = intensity * std::sin(distance / radius * 3.14159265);
+
+
+                int newX = static_cast<int>(x + warpAmount);
+                int newY = static_cast<int>(y + warpAmount);
+
+                newX = std::max(0, std::min(width - 1, newX));
+                newY = std::max(0, std::min(height - 1, newY));
+
+                int targetPixelIndex = (newY * width + newX) * 3;
+
+                imageData[pixelIndex] = imageData[targetPixelIndex];
+                imageData[pixelIndex + 1] = imageData[targetPixelIndex + 1];
+                imageData[pixelIndex + 2] = imageData[targetPixelIndex + 2];
+            }
+        }
+    }
+
+}
+
+std::vector<uint8_t> Function::Fisheye(const std::vector<uint8_t> &imageData, int32_t width, int32_t height)
+{
+    // 首先确定图像的中心点坐标，以及最大半径
+    int32_t centerX = width / 2;
+    int32_t centerY = height / 2;
+    int32_t maxRadius = std::min(centerX, centerY);
+
+    std::vector<uint8_t> fisheyeImage(width * height * 3);
+    //遍历每个像素，计算像素到图像中心的距离，并检查是否小于最大半径，以确保像素位于鱼眼效果的范围内。
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            int32_t offsetX = x - centerX;
+            int32_t offsetY = y - centerY;
+            float distance = std::sqrt(static_cast<float>(offsetX * offsetX + offsetY * offsetY));
+            //小于=应用鱼眼
+            if (distance < maxRadius) {
+
+                //当前像素相对于图像中心点的极坐标角度
+                float angle = std::atan2(static_cast<float>(offsetY), static_cast<float>(offsetX));
+                //用于计算每个像素的新半径
+                float normalizedRadius = distance / maxRadius;
+                //进行非线性变换
+                float mappedRadius = normalizedRadius * normalizedRadius;
+
+                //极坐标变换
+                int32_t newX = static_cast<int32_t>(centerX + maxRadius * mappedRadius * std::cos(angle));
+                int32_t newY = static_cast<int32_t>(centerY + maxRadius * mappedRadius * std::sin(angle));
+
+                for (int channel = 0; channel < 3; ++channel) {
+                    fisheyeImage[(y * width + x) * 3 + channel] = imageData[(newY * width + newX) * 3 + channel];
+                }
+            } else {
+                // 超出范围保持原始颜色
+                for (int channel = 0; channel < 3; ++channel) {
+                    fisheyeImage[(y * width + x) * 3 + channel] = 0;
+                }
+            }
+        }
+    }
+
+    return fisheyeImage;
+}
+
+double Function::Gaussian(double sigma, int x, int y)
+{
+    double exponent = -(x * x + y * y) / (2.0 * sigma * sigma);
+    return exp(exponent) / (2.0 * M_PI * sigma * sigma);
+}
+
+std::vector<uint8_t> Function::Gauss(const std::vector<uint8_t> &imageData, int width, int height, double sigma)
+{
+    std::vector<uint8_t> blurImageData(imageData.size());
+
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            double r = 0.0;
+            double g = 0.0;
+            double b = 0.0;
+            double weightSum = 0.0;
+
+            for (int j = -2; j <= 2; j++) {
+                for (int i = -2; i <= 2; i++) {
+                    int pixelX = x + i;
+                    int pixelY = y + j;
+                    if (pixelX >= 0 && pixelX < width && pixelY >= 0 && pixelY < height) {
+                        int pixelIndex = (pixelY * width + pixelX) * 3;
+                        double weight = Gaussian(sigma, i, j);
+                        r += static_cast<double>(imageData[pixelIndex]) * weight;
+                        g += static_cast<double>(imageData[pixelIndex + 1]) * weight;
+                        b += static_cast<double>(imageData[pixelIndex + 2]) * weight;
+                        weightSum += weight;
+                    }
+                }
+            }
+
+            int index = (y * width + x) * 3;
+            blurImageData[index] = static_cast<uint8_t>(r / weightSum);
+            blurImageData[index + 1] = static_cast<uint8_t>(g / weightSum);
+            blurImageData[index + 2] = static_cast<uint8_t>(b / weightSum);
+        }
+    }
+
+    return blurImageData;
+}
+
+std::vector<uint8_t> Function::HighContrast(const std::vector<uint8_t> &imageData, const std::vector<uint8_t> &blurImageData)
+{
+    std::vector<uint8_t> highContrastImageData(imageData.size());
+    for (size_t i = 0; i < imageData.size(); i++) {
+        int between = static_cast<int>(imageData[i]) - static_cast<int>(blurImageData[i]);
+        highContrastImageData[i] = static_cast<uint8_t>(between + 128); // 调整到 0-255 范围
+    }
+
+    return highContrastImageData;
+}
+
+void Function::RotateImage(std::vector<uint8_t> &imageData, int32_t width, int32_t height, double_t angle)
+{
+    double_t radians = angle * M_PI / 180.0;
+    std::vector<uint8_t> rotatedImageData(width * height * 3);
+
+    int32_t centerX = width / 2;
+    int32_t centerY = height / 2;
+
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            double_t rotatedX = std::cos(radians) * (x - centerX) - std::sin(radians) * (y - centerY) + centerX;
+            double_t rotatedY = std::sin(radians) * (x - centerX) + std::cos(radians) * (y - centerY) + centerY;
+
+            if (rotatedX >= 0 && rotatedX < width && rotatedY >= 0 && rotatedY < height) {
+                int originalIndex =
+                    static_cast<int>(std::round(rotatedY)) * width * 3 + static_cast<int>(std::round(rotatedX)) * 3;
+                int newIndex = y * width * 3 + x * 3;
+
+                if (originalIndex >= 0 && originalIndex < width * height * 3 && newIndex >= 0 && newIndex < width * height * 3) {
+                    rotatedImageData[newIndex] = imageData[originalIndex];
+                    rotatedImageData[newIndex + 1] = imageData[originalIndex + 1];
+                    rotatedImageData[newIndex + 2] = imageData[originalIndex + 2];
+                }
+            }
+        }
+    }
+
+    imageData = rotatedImageData;
+}
+
+
+void Function::RotateReverse(std::vector<uint8_t> &imageData, int32_t width, int32_t height, double_t angle)
+{
+    double_t clockwiseAngle = 360.0 - angle;
+    RotateImage(imageData, width, height, clockwiseAngle);
 }
 
 

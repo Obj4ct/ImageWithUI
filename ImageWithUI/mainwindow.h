@@ -10,7 +10,7 @@
 struct ReturnValue{
     bool isNull;
     bool isNumeric;
-    int32_t value;
+    double_t value;
 };
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -36,10 +36,17 @@ public:
     std::vector<uint8_t>imageData;
     //store original image data
     std::vector<uint8_t> originalImageData;
-    bool isGray,isAutoContrast,isAverBlur,isColorBalance,isColorMap,isReverse,isComplementary;
+    bool isGray,isAutoContrast,isAverBlur,isColorBalance,isColorMap,isReverse,isComplementary,isFace,isFishEye;
 
     //create a object of object
     Function function;
+    //需要计算face center
+    int32_t faceCenterX =300;
+    int32_t faceCenterY = 206;
+    int32_t faceRadius = 100;
+    double warpIntensity=10;
+    double sigma;
+    double angle;
 private slots:
     //click menubar to open image
     void on_openImage_triggered();
@@ -79,6 +86,18 @@ private slots:
     void on_btn_complementary_clicked();
 
     void on_btn_eye_clicked();
+
+    void on_btn_face_clicked();
+
+    void on_btn_fish_eye_clicked();
+
+    void on_btn_gauss_ok_clicked();
+
+    void on_btn_highContrast_ok_clicked();
+
+    void on_btn_rotate_ok_clicked();
+
+    void on_btn_rotate_r_clicked();
 
 private:
     Ui::MainWindow *ui;

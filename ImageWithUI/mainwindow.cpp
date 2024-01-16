@@ -8,10 +8,12 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
     ui->widget->setVisible(false);
+    ui->widget_add->setVisible(false);
 }
 
 void MainWindow::ResetImage(MyValue &myValue)
 {
+    imageData=myValue.imageData;
     // 恢复原始图像
     QImage originalImage(myValue.imageData.data(), myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(), QImage::Format_BGR888);
     originalImage = originalImage.mirrored(false, true);
@@ -35,6 +37,7 @@ void MainWindow::ShowImage(std::vector<uint8_t> &inImageData,int32_t width,int32
 
 void MainWindow::ResetAll(MyValue &myValue)
 {
+    imageData=myValue.imageData;
     // 恢复原始图像
     QImage originalImage(myValue.imageData.data(), myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(), QImage::Format_BGR888);
     originalImage = originalImage.mirrored(false, true);
@@ -68,6 +71,14 @@ void MainWindow::ResetAll(MyValue &myValue)
     {
         ui->btn_complementary->setText("补色");
     }
+    if(isFace)
+    {
+        ui->btn_face->setText("一键瘦脸");
+    }
+    if(isFishEye)
+    {
+        ui->btn_fish_eye->setText("鱼眼镜头");
+    }
 }
 
 ReturnValue MainWindow::CheckOK(QLineEdit * lineEdit)
@@ -81,7 +92,7 @@ ReturnValue MainWindow::CheckOK(QLineEdit * lineEdit)
     //判断高和宽是否正确输入数字
     QString inputText= lineEdit->text(); // 获取输入的文本
     bool isNumeric;
-    int32_t value = inputText.toInt(&isNumeric);
+    double_t value = inputText.toDouble(&isNumeric);
     qDebug()<<"read value is "<<value;
     if(!isNumeric)
     {
@@ -114,6 +125,7 @@ void MainWindow::on_openImage_triggered()
     }
     else{
         ui->widget->setVisible(true);
+        ui->widget_add->setVisible(true);
         // 读取BMP文件并且存入变量中
         std::string BMPPath = path.toStdString();
         myValue = MYFunction::ReadBMPFile(BMPPath);
@@ -474,5 +486,130 @@ void MainWindow::on_btn_eye_clicked()
     qDebug() << "I am in a eye window!";
     eye *myEye= new eye(this,myValue);
     myEye->show();
+}
+
+
+void MainWindow::on_btn_face_clicked()
+{
+    // 切换按钮状态
+    std::vector<uint8_t> faceImageData=imageData;
+    if (ui->btn_face->text() == "一键瘦脸") {
+        qDebug()<<"in face";
+        function.Face(faceImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),faceCenterX,faceCenterY,faceRadius,warpIntensity);
+        ShowImage(faceImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+        isFace=true;
+
+        // 更新按钮文本
+        ui->btn_face->setText("取消");
+    } else {
+        // 恢复原始图像
+        ResetImage(myValue);
+        // 更新按钮文本
+        ui->btn_face->setText("一键瘦脸");
+    }
+
+}
+
+
+void MainWindow::on_btn_fish_eye_clicked()
+{
+    std::vector<uint8_t> fishEyeImageData;;
+    if (ui->btn_fish_eye->text() == "鱼眼镜头") {
+        std::vector<uint8_t> fishEyeImageData=function.Fisheye(imageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+
+        ShowImage(fishEyeImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+        isFishEye=true;
+
+        // 更新按钮文本
+        ui->btn_fish_eye->setText("取消");
+    } else {
+        // 恢复原始图像
+        ResetImage(myValue);
+        // 更新按钮文本
+        ui->btn_fish_eye->setText("鱼眼镜头");
+    }
+}
+
+
+void MainWindow::on_btn_gauss_ok_clicked()
+{
+    //正确输入数字
+    ReturnValue returnValue=CheckOK(ui->lineEdit_gauss);
+
+    if(returnValue.isNull==true)
+    {
+        if(!function.CreateMessagebox("提示","请输入"))
+            return;
+    }else if(returnValue.isNumeric==false){
+        if(!function.CreateMessagebox("提示","输入数字"))
+            return;
+    }else{
+        std::vector<uint8_t> gaussImageData=function.Gauss(imageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),returnValue.value);
+        ShowImage(gaussImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+    }
+
+}
+
+
+void MainWindow::on_btn_highContrast_ok_clicked()
+{
+    //正确输入数字
+    ReturnValue returnValue=CheckOK(ui->lineEdit_highContrast);
+
+    if(returnValue.isNull==true)
+    {
+        if(!function.CreateMessagebox("提示","请输入"))
+            return;
+    }else if(returnValue.isNumeric==false){
+        if(!function.CreateMessagebox("提示","输入数字"))
+            return;
+    }else{
+        std::vector<uint8_t> ImageData=function.Gauss(imageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),returnValue.value);
+
+        std::vector<uint8_t> blurImageData = function.Gauss(imageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),returnValue.value);
+        std::vector<uint8_t> highContrastImageData = function.HighContrast(imageData, blurImageData);
+        ShowImage(highContrastImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+    }
+
+}
+
+
+void MainWindow::on_btn_rotate_ok_clicked()
+{
+    //正确输入数字
+    ReturnValue returnValue=CheckOK(ui->lineEdit_rotate);
+
+    if(returnValue.isNull==true)
+    {
+        if(!function.CreateMessagebox("提示","请输入"))
+            return;
+    }else if(returnValue.isNumeric==false){
+        if(!function.CreateMessagebox("提示","输入数字"))
+            return;
+    }else{
+        function.RotateImage(imageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(), returnValue.value);
+        ShowImage(imageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+    }
+
+}
+
+
+void MainWindow::on_btn_rotate_r_clicked()
+{
+    //正确输入数字
+    ReturnValue returnValue=CheckOK(ui->lineEdit_rotate_r);
+
+    if(returnValue.isNull==true)
+    {
+        if(!function.CreateMessagebox("提示","请输入"))
+            return;
+    }else if(returnValue.isNumeric==false){
+        if(!function.CreateMessagebox("提示","输入数字"))
+            return;
+    }else{
+        function.RotateReverse(imageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(), returnValue.value);
+        ShowImage(imageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+    }
+
 }
 

@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1384</width>
-    <height>738</height>
+    <width>1399</width>
+    <height>801</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -19,9 +19,21 @@
      <rect>
       <x>20</x>
       <y>40</y>
-      <width>541</width>
-      <height>511</height>
+      <width>512</width>
+      <height>512</height>
      </rect>
+    </property>
+    <property name="minimumSize">
+     <size>
+      <width>512</width>
+      <height>512</height>
+     </size>
+    </property>
+    <property name="maximumSize">
+     <size>
+      <width>512</width>
+      <height>512</height>
+     </size>
     </property>
     <property name="text">
      <string/>
@@ -32,53 +44,14 @@
      <rect>
       <x>580</x>
       <y>0</y>
-      <width>741</width>
-      <height>651</height>
+      <width>801</width>
+      <height>731</height>
      </rect>
     </property>
-    <widget class="QPushButton" name="btn_gray">
-     <property name="geometry">
-      <rect>
-       <x>40</x>
-       <y>30</y>
-       <width>92</width>
-       <height>29</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>转为灰度图</string>
-     </property>
-    </widget>
-    <widget class="QPushButton" name="btn_autoContrast">
-     <property name="geometry">
-      <rect>
-       <x>20</x>
-       <y>100</y>
-       <width>131</width>
-       <height>31</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>自动调整对比度</string>
-     </property>
-    </widget>
-    <widget class="QPushButton" name="btn_averBlur">
-     <property name="geometry">
-      <rect>
-       <x>50</x>
-       <y>170</y>
-       <width>92</width>
-       <height>29</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>均值模糊</string>
-     </property>
-    </widget>
     <widget class="QWidget" name="widget_2" native="true">
      <property name="geometry">
       <rect>
-       <x>370</x>
+       <x>290</x>
        <y>10</y>
        <width>141</width>
        <height>401</height>
@@ -165,8 +138,8 @@
     <widget class="QPushButton" name="btn_resetAll">
      <property name="geometry">
       <rect>
-       <x>40</x>
-       <y>560</y>
+       <x>660</x>
+       <y>670</y>
        <width>141</width>
        <height>61</height>
       </rect>
@@ -178,7 +151,7 @@
     <widget class="QWidget" name="widget_3" native="true">
      <property name="geometry">
       <rect>
-       <x>520</x>
+       <x>440</x>
        <y>10</y>
        <width>141</width>
        <height>401</height>
@@ -262,168 +235,354 @@
       </item>
      </layout>
     </widget>
-    <widget class="QPushButton" name="btn_blend">
+    <widget class="QPushButton" name="btn_face">
      <property name="geometry">
       <rect>
-       <x>50</x>
-       <y>220</y>
+       <x>680</x>
+       <y>10</y>
        <width>92</width>
        <height>29</height>
       </rect>
      </property>
      <property name="text">
-      <string>图层混合</string>
+      <string>一键瘦脸</string>
      </property>
     </widget>
-    <widget class="QPushButton" name="btn_brightness">
+    <widget class="QPushButton" name="btn_fish_eye">
      <property name="geometry">
       <rect>
-       <x>160</x>
-       <y>330</y>
+       <x>680</x>
+       <y>50</y>
        <width>92</width>
        <height>29</height>
       </rect>
      </property>
      <property name="text">
-      <string>改变亮度</string>
+      <string>鱼眼镜头</string>
      </property>
     </widget>
-    <widget class="QLineEdit" name="lineEdit_brightness">
+    <widget class="QWidget" name="widget_7" native="true">
      <property name="geometry">
       <rect>
-       <x>30</x>
-       <y>330</y>
-       <width>119</width>
-       <height>26</height>
+       <x>10</x>
+       <y>230</y>
+       <width>277</width>
+       <height>189</height>
       </rect>
      </property>
+     <layout class="QVBoxLayout" name="verticalLayout_3">
+      <item>
+       <widget class="QWidget" name="widget_4" native="true">
+        <layout class="QHBoxLayout" name="horizontalLayout_2">
+         <item>
+          <widget class="QLineEdit" name="lineEdit_brightness"/>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btn_brightness">
+           <property name="text">
+            <string>改变亮度</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QWidget" name="widget_5" native="true">
+        <layout class="QHBoxLayout" name="horizontalLayout">
+         <item>
+          <widget class="QLineEdit" name="lineEdit_contrast"/>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btn_contrast">
+           <property name="text">
+            <string>改变对比度</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QWidget" name="widget_6" native="true">
+        <layout class="QHBoxLayout" name="horizontalLayout_3">
+         <item>
+          <widget class="QLineEdit" name="lineEdit_saturation">
+           <property name="text">
+            <string/>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btn_saturation">
+           <property name="text">
+            <string>改变饱和度</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+     </layout>
     </widget>
-    <widget class="QPushButton" name="btn_contrast">
+    <widget class="QWidget" name="widget_8" native="true">
      <property name="geometry">
       <rect>
-       <x>160</x>
-       <y>380</y>
-       <width>92</width>
-       <height>29</height>
+       <x>10</x>
+       <y>420</y>
+       <width>253</width>
+       <height>134</height>
       </rect>
      </property>
-     <property name="text">
-      <string>改变对比度</string>
-     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_7">
+      <item>
+       <widget class="QLabel" name="label_15">
+        <property name="text">
+         <string>高斯模糊</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QWidget" name="widget_9" native="true">
+        <layout class="QHBoxLayout" name="horizontalLayout_4">
+         <item>
+          <widget class="QLabel" name="label_16">
+           <property name="text">
+            <string>模糊程度</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLineEdit" name="lineEdit_gauss"/>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_gauss_ok">
+        <property name="text">
+         <string>确定</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
     </widget>
-    <widget class="QLineEdit" name="lineEdit_contrast">
+    <widget class="QWidget" name="widget_10" native="true">
      <property name="geometry">
       <rect>
-       <x>30</x>
-       <y>380</y>
-       <width>119</width>
-       <height>26</height>
+       <x>10</x>
+       <y>10</y>
+       <width>271</width>
+       <height>217</height>
       </rect>
      </property>
+     <layout class="QHBoxLayout" name="horizontalLayout_5">
+      <item>
+       <widget class="QWidget" name="widget_11" native="true">
+        <layout class="QVBoxLayout" name="verticalLayout_4">
+         <item>
+          <widget class="QPushButton" name="btn_gray">
+           <property name="text">
+            <string>转为灰度图</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btn_blend">
+           <property name="text">
+            <string>图层混合</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btn_colorMap">
+           <property name="text">
+            <string>色彩映射</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btn_averBlur">
+           <property name="text">
+            <string>均值模糊</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btn_eye">
+           <property name="text">
+            <string>眼部液化</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QWidget" name="widget_12" native="true">
+        <layout class="QVBoxLayout" name="verticalLayout_5">
+         <item>
+          <widget class="QPushButton" name="btn_autoContrast">
+           <property name="text">
+            <string>自动调整对比度</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btn_color_level">
+           <property name="text">
+            <string>色阶调整</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btn_reverse_color">
+           <property name="text">
+            <string>色彩反转</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btn_complementary">
+           <property name="text">
+            <string>补色</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btn_color_balance">
+           <property name="text">
+            <string>色彩平衡</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+     </layout>
     </widget>
-    <widget class="QLineEdit" name="lineEdit_saturation">
+    <widget class="QWidget" name="widget_13" native="true">
      <property name="geometry">
       <rect>
-       <x>30</x>
-       <y>430</y>
-       <width>119</width>
-       <height>26</height>
+       <x>290</x>
+       <y>420</y>
+       <width>223</width>
+       <height>134</height>
       </rect>
      </property>
-     <property name="text">
-      <string/>
-     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_6">
+      <item>
+       <widget class="QLabel" name="label_17">
+        <property name="text">
+         <string>高反差保留</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QWidget" name="widget_14" native="true">
+        <layout class="QHBoxLayout" name="horizontalLayout_6">
+         <item>
+          <widget class="QLabel" name="label_18">
+           <property name="text">
+            <string>程度</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLineEdit" name="lineEdit_highContrast"/>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_highContrast_ok">
+        <property name="text">
+         <string>确定</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
     </widget>
-    <widget class="QPushButton" name="btn_saturation">
+   </widget>
+   <widget class="QWidget" name="widget_add" native="true">
+    <property name="geometry">
+     <rect>
+      <x>10</x>
+      <y>560</y>
+      <width>551</width>
+      <height>171</height>
+     </rect>
+    </property>
+    <widget class="QWidget" name="widget_15" native="true">
      <property name="geometry">
       <rect>
-       <x>160</x>
-       <y>430</y>
-       <width>92</width>
-       <height>29</height>
+       <x>0</x>
+       <y>0</y>
+       <width>377</width>
+       <height>180</height>
       </rect>
      </property>
-     <property name="text">
-      <string>改变饱和度</string>
-     </property>
-    </widget>
-    <widget class="QPushButton" name="btn_color_balance">
-     <property name="geometry">
-      <rect>
-       <x>50</x>
-       <y>270</y>
-       <width>92</width>
-       <height>29</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>色彩平衡</string>
-     </property>
-    </widget>
-    <widget class="QPushButton" name="btn_color_level">
-     <property name="geometry">
-      <rect>
-       <x>190</x>
-       <y>30</y>
-       <width>92</width>
-       <height>29</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>色阶调整</string>
-     </property>
-    </widget>
-    <widget class="QPushButton" name="btn_colorMap">
-     <property name="geometry">
-      <rect>
-       <x>190</x>
-       <y>100</y>
-       <width>92</width>
-       <height>29</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>色彩映射</string>
-     </property>
-    </widget>
-    <widget class="QPushButton" name="btn_reverse_color">
-     <property name="geometry">
-      <rect>
-       <x>190</x>
-       <y>170</y>
-       <width>92</width>
-       <height>29</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>色彩反转</string>
-     </property>
-    </widget>
-    <widget class="QPushButton" name="btn_complementary">
-     <property name="geometry">
-      <rect>
-       <x>190</x>
-       <y>220</y>
-       <width>92</width>
-       <height>29</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>补色</string>
-     </property>
-    </widget>
-    <widget class="QPushButton" name="btn_eye">
-     <property name="geometry">
-      <rect>
-       <x>190</x>
-       <y>270</y>
-       <width>92</width>
-       <height>29</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>眼部液化</string>
-     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_9">
+      <item>
+       <widget class="QLabel" name="label_19">
+        <property name="text">
+         <string>图像旋转</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QWidget" name="widget_16" native="true">
+        <layout class="QVBoxLayout" name="verticalLayout_8">
+         <item>
+          <widget class="QWidget" name="widget_17" native="true">
+           <layout class="QHBoxLayout" name="horizontalLayout_7">
+            <item>
+             <widget class="QLabel" name="label_20">
+              <property name="text">
+               <string>顺时针旋转</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLineEdit" name="lineEdit_rotate"/>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btn_rotate_ok">
+              <property name="text">
+               <string>确定</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+         <item>
+          <widget class="QWidget" name="widget_18" native="true">
+           <layout class="QHBoxLayout" name="horizontalLayout_8">
+            <item>
+             <widget class="QLabel" name="label_21">
+              <property name="text">
+               <string>逆时针旋转</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLineEdit" name="lineEdit_rotate_r"/>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btn_rotate_r">
+              <property name="text">
+               <string>确定</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+     </layout>
     </widget>
    </widget>
   </widget>
@@ -432,7 +591,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1384</width>
+     <width>1399</width>
      <height>25</height>
     </rect>
    </property>

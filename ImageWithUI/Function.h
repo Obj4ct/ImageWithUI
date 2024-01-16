@@ -65,6 +65,23 @@ public:
     void InvertColors(std::vector<uint8_t>& imageData);
     //补色
     void Complementary(std::vector<uint8_t>& imageData);
+    //瘦脸
+    void Face(std::vector<uint8_t> &imageData, int32_t width, int32_t height,
+                  int32_t centerX, int32_t centerY, int32_t radius, double intensity);
+    //鱼眼镜头
+    std::vector<uint8_t> Fisheye(const std::vector<uint8_t>& imageData, int32_t width, int32_t height);
+    //高斯模糊
+    double Gaussian(double sigma, int x, int y);
+    std::vector<uint8_t> Gauss(const std::vector<uint8_t> &imageData, int width, int height, double sigma);
+    //高反差保留 原图-高斯图
+    std::vector<uint8_t> HighContrast(const std::vector<uint8_t> &imageData, const std::vector<uint8_t> &blurImageData);
+
+    //图像旋转
+    //顺时针旋转
+    void RotateImage(std::vector<uint8_t> &imageData, int32_t width, int32_t height, double_t angle);
+    //逆时针旋转
+    void RotateReverse(std::vector<uint8_t> &imageData, int32_t width, int32_t height, double_t angle);
+
 
     //重置图像
     void RestImage(MyValue &myValue);
