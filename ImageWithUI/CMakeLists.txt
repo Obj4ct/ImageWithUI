@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.5)
 
 project(ImageWithUI VERSION 0.1 LANGUAGES CXX)
+#开启asan
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fno-omit-frame-pointer")
 
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
