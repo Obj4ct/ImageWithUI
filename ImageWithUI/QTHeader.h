@@ -16,4 +16,8 @@
 #include <QLabel>
 #include <QMouseEvent>
 #include <QWidget>
+#include <QApplication>
+#include <QGraphicsView>
+#include <QGraphicsScene>
+#include <QImageReader>
 #endif // QTHEADER_H

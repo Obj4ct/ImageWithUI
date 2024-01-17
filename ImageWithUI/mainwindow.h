@@ -9,6 +9,7 @@
 #include "mask.h"
 #include "mosaic.h"
 #include "tailor.h"
+#include "interpolation.h"
 //QString test_path="D:\\Documents\\1Projects\\QT\\ImageWithUI\\ImageWithUI\\image\\Lenna.bmp";
 struct ReturnValue{
     bool isNull;
@@ -60,15 +61,7 @@ private slots:
 
     void on_btn_averBlur_clicked();
 
-    void on_btn_small_biCubic_clicked();
-
-    void on_btn_large_biCubic_clicked();
-
     void on_btn_resetAll_clicked();
-
-    void on_btn_small_bilinear_clicked();
-
-    void on_btn_large_bilinear_clicked();
 
     void on_btn_blend_clicked();
 
@@ -108,10 +101,6 @@ private slots:
 
     void on_btn_mosaic_clicked();
 
-    void on_btn_small_nearest_clicked();
-
-    void on_btn_large_nearest_clicked();
-
     void on_btn_shadow_ok_clicked();
 
     void on_btn_highlight_ok_clicked();
@@ -123,6 +112,8 @@ private slots:
     void on_btn_tensor_clicked();
 
     void on_btn_threshold_ok_clicked();
+
+    void on_btn_inter_clicked();
 
 private:
     Ui::MainWindow *ui;

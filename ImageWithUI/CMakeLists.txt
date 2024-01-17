@@ -44,6 +44,9 @@ set(PROJECT_SOURCES
         tailor.h
         tailor.cpp
         tailor.ui
+        interpolation.h
+        interpolation.cpp
+        interpolation.ui
 
 )
 

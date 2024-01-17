@@ -29,27 +29,7 @@ public:
     //均值模糊
     void AverageBlur(std::vector<uint8_t>& imageData, uint32_t width, uint32_t height);
 
-    //双立方插值相关
-    //权重函数
-    float cubicWeight(float t);
-    std::vector<uint8_t>
-    LargeImage_BiCubic(const std::vector<uint8_t> &imageData, int32_t width, int32_t height, int32_t newWidth, int32_t newHeight);
-    std::vector<uint8_t>
-    SmallImage_BiCubic(const std::vector<uint8_t> &imageData, int32_t width, int32_t height, int32_t newWidth, int32_t newHeight);
 
-    //双线性插值
-    std::vector<uint8_t>
-    SmallImage_Bilinear(const std::vector<uint8_t> &imageData, int32_t width, int32_t height, int32_t newWidth,
-                        int32_t newHeight);
-    std::vector<uint8_t>
-    LargeImage_Bilinear(const std::vector<uint8_t> &imageData, int32_t width, int32_t height, int32_t newWidth,
-                        int32_t newHeight);
-
-    //最临近插值
-    std::vector<uint8_t>
-    SmallImage_Nearest(const std::vector<uint8_t> &imageData, int32_t width, int32_t height, int32_t newWidth, int32_t newHeight);
-    std::vector<uint8_t>
-    LargeImage_Nearest(const std::vector<uint8_t> &imageData, int32_t width, int32_t height, int32_t newWidth, int32_t newHeight);
 
     //色彩通道
     //亮度

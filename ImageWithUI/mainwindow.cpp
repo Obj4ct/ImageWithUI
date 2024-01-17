@@ -223,111 +223,9 @@ void MainWindow::on_btn_averBlur_clicked()
     }
 }
 
-
-void MainWindow::on_btn_small_biCubic_clicked()
-{
-    std::vector<uint8_t> biCubicImageData=imageData;
-    //判断高和宽是否正确输入数字
-    ReturnValue returnValueHeight=CheckOK(ui->lineEdit_small_biCubic_height);
-    ReturnValue returnValueWidth=CheckOK(ui->lineEdit_small_biCubic_width);
-    //no text in it
-    if(returnValueHeight.isNull==true||returnValueWidth.isNull==true)
-    {
-        if(!function.CreateMessagebox("提示","请输入宽和高"))
-            return;
-    }
-    //not a number
-    else if(returnValueHeight.isNumeric==false||returnValueWidth.isNumeric==false){
-        if(!function.CreateMessagebox("提示","请输入倍数"))
-            return;
-    }
-    else{
-        std::vector<uint8_t> smallImageData=function.SmallImage_BiCubic(biCubicImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),myValue.bmpInfo.GetWidth()/returnValueWidth.value,myValue.bmpInfo.GetHeight()/returnValueHeight.value);
-        ShowImage(smallImageData,myValue.bmpInfo.GetWidth()/returnValueWidth.value, myValue.bmpInfo.GetHeight()/returnValueHeight.value);
-
-    }
-}
-
-//有bug 有时候会卡住...
-void MainWindow::on_btn_large_biCubic_clicked()
-{
-    std::vector<uint8_t> biCubicImageData=imageData;
-    //判断高和宽是否正确输入数字
-
-    //判断高和宽是否正确输入数字
-    ReturnValue returnValueHeight=CheckOK(ui->lineEdit_large_biCubic_height);
-    ReturnValue returnValueWidth=CheckOK(ui->lineEdit_large_biCubic_width);
-    //no text in it
-    if(returnValueHeight.isNull==true||returnValueWidth.isNull==true)
-    {
-        if(!function.CreateMessagebox("提示","请输入宽和高"))
-            return;
-    }
-    //not a number
-    else if(returnValueHeight.isNumeric==false||returnValueWidth.isNumeric==false){
-        if(!function.CreateMessagebox("提示","请输入倍数"))
-            return;
-    }
-    else{
-        std::vector<uint8_t> largeImageData=function.LargeImage_BiCubic(biCubicImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),myValue.bmpInfo.GetWidth()*returnValueWidth.value,myValue.bmpInfo.GetHeight()*returnValueHeight.value);
-        ShowImage(largeImageData,myValue.bmpInfo.GetWidth()*returnValueWidth.value, myValue.bmpInfo.GetHeight()*returnValueHeight.value);
-
-    }
-
-}
-
 void MainWindow::on_btn_resetAll_clicked()
 {
     ResetAll(myValue);
-}
-
-
-void MainWindow::on_btn_small_bilinear_clicked()
-{
-    std::vector<uint8_t> bilinearImageData=imageData;
-    //判断高和宽是否正确输入数字
-    ReturnValue returnValueHeight=CheckOK(ui->lineEdit_small_bilinear_height);
-    ReturnValue returnValueWidth=CheckOK(ui->lineEdit_small_bilinear_width);
-    //no text in it
-    if(returnValueHeight.isNull==true||returnValueWidth.isNull==true)
-    {
-        if(!function.CreateMessagebox("提示","请输入宽和高"))
-            return;
-    }
-    //not a number
-    else if(returnValueHeight.isNumeric==false||returnValueWidth.isNumeric==false){
-        if(!function.CreateMessagebox("提示","请输入倍数"))
-            return;
-    }
-    else{
-        std::vector<uint8_t> smallImageData=function.LargeImage_Bilinear(bilinearImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),myValue.bmpInfo.GetWidth()/returnValueWidth.value,myValue.bmpInfo.GetHeight()/returnValueHeight.value);
-        ShowImage(smallImageData,myValue.bmpInfo.GetWidth()/returnValueWidth.value, myValue.bmpInfo.GetHeight()/returnValueHeight.value);
-
-    }
-}
-
-//bug here
-void MainWindow::on_btn_large_bilinear_clicked()
-{
-    std::vector<uint8_t> bilinearImageData=imageData;
-    ReturnValue returnValueHeight=CheckOK(ui->lineEdit_large_bilinear_height);
-    ReturnValue returnValueWidth=CheckOK(ui->lineEdit_large_bilinear_width);
-    //no text in it
-    if(returnValueHeight.isNull==true||returnValueWidth.isNull==true)
-    {
-        if(!function.CreateMessagebox("提示","请输入宽和高"))
-            return;
-    }
-    //not a number
-    else if(returnValueHeight.isNumeric==false||returnValueWidth.isNumeric==false){
-        if(!function.CreateMessagebox("提示","请输入倍数"))
-            return;
-    }
-    else{
-        std::vector<uint8_t> largeImageData=function.LargeImage_Bilinear(bilinearImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),myValue.bmpInfo.GetWidth()*returnValueWidth.value,myValue.bmpInfo.GetHeight()*returnValueHeight.value);
-
-        ShowImage(largeImageData,myValue.bmpInfo.GetWidth()*returnValueWidth.value, myValue.bmpInfo.GetHeight()*returnValueHeight.value);
-    }
 }
 
 
@@ -663,56 +561,6 @@ void MainWindow::on_btn_mosaic_clicked()
 }
 
 
-void MainWindow::on_btn_small_nearest_clicked()
-{
-    std::vector<uint8_t> nearestImageData=imageData;
-    //判断高和宽是否正确输入数字
-    ReturnValue returnValueHeight=CheckOK(ui->lineEdit_small_nearest_height);
-    ReturnValue returnValueWidth=CheckOK(ui->lineEdit_small_nearest_width);
-    //no text in it
-    if(returnValueHeight.isNull==true||returnValueWidth.isNull==true)
-    {
-        if(!function.CreateMessagebox("提示","请输入宽和高"))
-            return;
-    }
-    //not a number
-    else if(returnValueHeight.isNumeric==false||returnValueWidth.isNumeric==false){
-        if(!function.CreateMessagebox("提示","请输入倍数"))
-            return;
-    }
-    else{
-        std::vector<uint8_t> smallImageData=function.SmallImage_Nearest(nearestImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),myValue.bmpInfo.GetWidth()/returnValueWidth.value,myValue.bmpInfo.GetHeight()/returnValueHeight.value);
-        ShowImage(smallImageData,myValue.bmpInfo.GetWidth()/returnValueWidth.value, myValue.bmpInfo.GetHeight()/returnValueHeight.value);
-
-    }
-}
-
-
-void MainWindow::on_btn_large_nearest_clicked()
-{
-    std::vector<uint8_t> nearestImageData=imageData;
-    //判断高和宽是否正确输入数字
-
-    //判断高和宽是否正确输入数字
-    ReturnValue returnValueHeight=CheckOK(ui->lineEdit_large_nearest_heightt);
-    ReturnValue returnValueWidth=CheckOK(ui->lineEdit_large_nearest_width);
-    //no text in it
-    if(returnValueHeight.isNull==true||returnValueWidth.isNull==true)
-    {
-        if(!function.CreateMessagebox("提示","请输入宽和高"))
-            return;
-    }
-    //not a number
-    else if(returnValueHeight.isNumeric==false||returnValueWidth.isNumeric==false){
-        if(!function.CreateMessagebox("提示","请输入倍数"))
-            return;
-    }
-    else{
-        std::vector<uint8_t> largeImageData=function.LargeImage_Nearest(nearestImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),myValue.bmpInfo.GetWidth()*returnValueWidth.value,myValue.bmpInfo.GetHeight()*returnValueHeight.value);
-        ShowImage(largeImageData,myValue.bmpInfo.GetWidth()*returnValueWidth.value, myValue.bmpInfo.GetHeight()*returnValueHeight.value);
-
-    }
-}
 
 
 void MainWindow::on_btn_shadow_ok_clicked()
@@ -832,5 +680,13 @@ void MainWindow::on_btn_threshold_ok_clicked()
         function.ApplyThreshold(tempImageData,returnValue.value);
         ShowImage(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
     }
+}
+
+
+void MainWindow::on_btn_inter_clicked()
+{
+    qDebug() << "I am in a inter window!";
+    Interpolation *inter = new Interpolation(this,myValue);
+    inter->show();
 }
 
