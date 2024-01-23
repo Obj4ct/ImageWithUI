@@ -71,10 +71,6 @@ void MainWindow::ResetAll(MyValue &myValue)
     {
         ui->btn_complementary->setText("补色");
     }
-    if(isFace)
-    {
-        ui->btn_face->setText("一键瘦脸");
-    }
     if(isFishEye)
     {
         ui->btn_fish_eye->setText("鱼眼镜头");
@@ -401,22 +397,9 @@ void MainWindow::on_btn_eye_clicked()
 
 void MainWindow::on_btn_face_clicked()
 {
-    // 切换按钮状态
-    std::vector<uint8_t> faceImageData=imageData;
-    if (ui->btn_face->text() == "一键瘦脸") {
-        qDebug()<<"in face";
-        function.Face(faceImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),faceCenterX,faceCenterY,faceRadius,warpIntensity);
-        ShowImage(faceImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
-        isFace=true;
-
-        // 更新按钮文本
-        ui->btn_face->setText("取消");
-    } else {
-        // 恢复原始图像
-        ResetImage(myValue);
-        // 更新按钮文本
-        ui->btn_face->setText("一键瘦脸");
-    }
+    qDebug() << "I am in a face window!";
+    Face *face = new Face(this,myValue);
+    face->show();
 
 }
 

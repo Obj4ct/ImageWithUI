@@ -53,9 +53,7 @@ public:
     void InvertColors(std::vector<uint8_t>& imageData);
     //补色
     void Complementary(std::vector<uint8_t>& imageData);
-    //瘦脸
-    void Face(std::vector<uint8_t> &imageData, int32_t width, int32_t height,
-                  int32_t centerX, int32_t centerY, int32_t radius, double intensity);
+
     //鱼眼镜头
     std::vector<uint8_t> Fisheye(const std::vector<uint8_t>& imageData, int32_t width, int32_t height);
     //高斯模糊

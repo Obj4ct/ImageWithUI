@@ -110,7 +110,7 @@ void eye::ShowImage(std::vector<uint8_t>&inImageData)
 
 void eye::ResetImage()
 {
-
+    newValue.imageData=myValue.imageData;
     // 恢复原始图像
     QImage originalImage(myValue.imageData.data(), myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(), QImage::Format_BGR888);
     originalImage = originalImage.mirrored(false, true);

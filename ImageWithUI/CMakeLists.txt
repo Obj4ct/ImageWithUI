@@ -49,6 +49,9 @@ set(PROJECT_SOURCES
         interpolation.h
         interpolation.cpp
         interpolation.ui
+        face.h
+        face.cpp
+        face.ui
 
 )
 

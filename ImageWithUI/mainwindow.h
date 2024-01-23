@@ -10,6 +10,7 @@
 #include "mosaic.h"
 #include "tailor.h"
 #include "interpolation.h"
+#include "face.h"
 //QString test_path="D:\\Documents\\1Projects\\QT\\ImageWithUI\\ImageWithUI\\image\\Lenna.bmp";
 struct ReturnValue{
     bool isNull;
@@ -40,15 +41,11 @@ public:
     std::vector<uint8_t>imageData;
     //store original image data
     std::vector<uint8_t> originalImageData;
-    bool isGray,isAutoContrast,isAverBlur,isColorBalance,isColorMap,isReverse,isComplementary,isFace,isFishEye,isMedianBlur,isSharpen,isTensor;
+    bool isGray,isAutoContrast,isAverBlur,isColorBalance,isColorMap,isReverse,isComplementary,isFishEye,isMedianBlur,isSharpen,isTensor;
 
     //create a object of object
     Function function;
-    //需要计算face center
-    int32_t faceCenterX =298;
-    int32_t faceCenterY = 300;
-    int32_t faceRadius = 100;
-    double warpIntensity=10;
+
     double sigma;
     double angle;
 private slots:
