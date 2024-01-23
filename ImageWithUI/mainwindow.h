@@ -45,8 +45,8 @@ public:
     //create a object of object
     Function function;
     //需要计算face center
-    int32_t faceCenterX =300;
-    int32_t faceCenterY = 206;
+    int32_t faceCenterX =298;
+    int32_t faceCenterY = 300;
     int32_t faceRadius = 100;
     double warpIntensity=10;
     double sigma;

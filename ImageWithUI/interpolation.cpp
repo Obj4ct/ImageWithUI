@@ -169,6 +169,7 @@ SmallImage_BiCubic(const std::vector<uint8_t> &imageData, int32_t width, int32_t
                 }
             }
 
+
             // 插值
             for (int channel = 0; channel < 3; ++channel) {
                 float interpolatedValue = 0.0f;
@@ -202,7 +203,7 @@ std::vector<uint8_t> Interpolation::SmallImage_Bilinear(const std::vector<uint8_
             // 原图坐标
             auto srcX = x * scaleX;
             auto srcY = y * scaleY;
-            // 计算最近的像素点坐标?
+            // 计算最近的像素点坐标
 //            auto x1 = static_cast<int32_t>(srcX);
 //            auto x2 = static_cast<int32_t>(x1 + 1);
 //            auto y1 = static_cast<int32_t>(srcY);
