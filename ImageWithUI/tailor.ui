@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>514</width>
+    <width>510</width>
     <height>798</height>
    </rect>
   </property>
@@ -16,7 +16,7 @@
   <widget class="QPushButton" name="btn_ok">
    <property name="geometry">
     <rect>
-     <x>90</x>
+     <x>200</x>
      <y>740</y>
      <width>92</width>
      <height>29</height>
@@ -94,19 +94,6 @@
    </property>
    <property name="text">
     <string>请输入</string>
-   </property>
-  </widget>
-  <widget class="QPushButton" name="btn_save">
-   <property name="geometry">
-    <rect>
-     <x>330</x>
-     <y>740</y>
-     <width>92</width>
-     <height>29</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>保存图片</string>
    </property>
   </widget>
   <widget class="QWidget" name="widget_2" native="true">

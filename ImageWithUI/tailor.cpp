@@ -42,7 +42,7 @@ Tailor::Tailor(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
 
 
 //}
-void Tailor::TailorImg(int32_t cropX, int32_t cropY, int32_t cropHeight, int32_t cropWidth, std::vector<uint8_t> &imageData,
+bool Tailor::TailorImg(int32_t cropX, int32_t cropY, int32_t cropHeight, int32_t cropWidth, std::vector<uint8_t> &imageData,
                        BMPInfo &newBmpInfo, BMP &bmp, uint32_t originWidth,uint32_t originHeight) {
     bmpInfo.WriteToBMPInfo(imageData, cropHeight, cropWidth, newBmpInfo, bmp);
 
@@ -57,7 +57,7 @@ void Tailor::TailorImg(int32_t cropX, int32_t cropY, int32_t cropHeight, int32_t
     if (cropX < 0 || cropY < 0 || cropWidth <= 0 || cropHeight <= 0 ||
         cropX + cropWidth > originWidth || cropY + cropHeight > originHeight) {
         qDebug() << "Invalid crop dimensions. Check the specified coordinates and size.";
-        return;
+        return false;
     }
 
     for (int y = cropY; y < cropY + cropHeight; y++) {
@@ -71,6 +71,7 @@ void Tailor::TailorImg(int32_t cropX, int32_t cropY, int32_t cropHeight, int32_t
             imageData[index + 2] = myValue.imageData[originIndex + 2]; // Red
         }
     }
+    return true;
 }
 
 void Tailor::ShowImage(std::vector<uint8_t>& imageData, int32_t width, int32_t height)
@@ -121,13 +122,13 @@ void Tailor::on_btn_ok_clicked()
         if(!function.CreateMessagebox("提示","输入数字"))
             return;
     }else{
-        TailorImg(returnValueX.value, returnValueY.value, returnValueHeight.value, returnValueWidth.value, imageData,myValue.bmpInfo,myValue.bmp,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight());
-        ShowImage(imageData,returnValueWidth.value,returnValueHeight.value);
+        if(TailorImg(returnValueX.value, returnValueY.value, returnValueHeight.value, returnValueWidth.value, imageData,myValue.bmpInfo,myValue.bmp,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight()))
+        {
+            ShowImage(imageData,returnValueWidth.value,returnValueHeight.value);
+        }
+        else{
+            function.CreateMessagebox("提示","超出原始图像范围");
+        }
     }
 }
-
-
-
-
-
 
