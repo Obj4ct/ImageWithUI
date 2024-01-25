@@ -7,30 +7,17 @@
     <x>0</x>
     <y>0</y>
     <width>514</width>
-    <height>679</height>
+    <height>798</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>Form</string>
   </property>
-  <widget class="QPushButton" name="btn_reset">
-   <property name="geometry">
-    <rect>
-     <x>210</x>
-     <y>630</y>
-     <width>92</width>
-     <height>29</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>重置图像</string>
-   </property>
-  </widget>
   <widget class="QPushButton" name="btn_ok">
    <property name="geometry">
     <rect>
      <x>90</x>
-     <y>630</y>
+     <y>740</y>
      <width>92</width>
      <height>29</height>
     </rect>
@@ -52,30 +39,22 @@
     <item>
      <widget class="QLabel" name="label">
       <property name="text">
-       <string>第一个坐标:</string>
+       <string>起始x坐标:</string>
       </property>
      </widget>
     </item>
     <item>
-     <widget class="QLabel" name="label_first">
-      <property name="text">
-       <string/>
-      </property>
-     </widget>
+     <widget class="QLineEdit" name="lineEdit_posX"/>
     </item>
     <item>
      <widget class="QLabel" name="label_3">
       <property name="text">
-       <string>第二个坐标:</string>
+       <string>起始y坐标</string>
       </property>
      </widget>
     </item>
     <item>
-     <widget class="QLabel" name="label_second">
-      <property name="text">
-       <string/>
-      </property>
-     </widget>
+     <widget class="QLineEdit" name="lineEdit_posY"/>
     </item>
    </layout>
   </widget>
@@ -114,14 +93,14 @@
     </rect>
    </property>
    <property name="text">
-    <string>请用鼠标单击选择两眼位置</string>
+    <string>请输入</string>
    </property>
   </widget>
   <widget class="QPushButton" name="btn_save">
    <property name="geometry">
     <rect>
      <x>330</x>
-     <y>630</y>
+     <y>740</y>
      <width>92</width>
      <height>29</height>
     </rect>
@@ -129,6 +108,38 @@
    <property name="text">
     <string>保存图片</string>
    </property>
+  </widget>
+  <widget class="QWidget" name="widget_2" native="true">
+   <property name="geometry">
+    <rect>
+     <x>70</x>
+     <y>630</y>
+     <width>401</width>
+     <height>71</height>
+    </rect>
+   </property>
+   <layout class="QHBoxLayout" name="horizontalLayout_2">
+    <item>
+     <widget class="QLabel" name="label_4">
+      <property name="text">
+       <string>裁剪高度:</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QLineEdit" name="lineEdit_height"/>
+    </item>
+    <item>
+     <widget class="QLabel" name="label_5">
+      <property name="text">
+       <string>裁剪宽度</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QLineEdit" name="lineEdit_width"/>
+    </item>
+   </layout>
   </widget>
  </widget>
  <resources/>

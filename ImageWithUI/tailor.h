@@ -17,19 +17,15 @@ public:
     explicit Tailor(MainWindow* mainWindow, MyValue myValue, QWidget *parent = nullptr);
     ~Tailor();
 
-protected:
-    void mousePressEvent(QMouseEvent* event) override;
 private slots:
     void on_btn_ok_clicked();
 
 
-    void on_btn_save_clicked();
-
-    void on_btn_reset_clicked();
 
 private:
     Ui::Tailor *ui;
     MainWindow* mainWindow;
+    QMainWindow* newWindow;
     BMPInfo bmpInfo;
     Function function;
     MyValue myValue;
@@ -46,9 +42,9 @@ private:
 private:
     //内容处理
     void TailorImg(int32_t startX, int32_t startY, int32_t endX, int32_t endY,
-                   std::vector<uint8_t> &imageData, BMPInfo &newBmpInfo, BMP &bmp, uint32_t originWidth);
-    void ShowImage(std::vector<uint8_t>&inImageData);
-    void ResetImage();
+                   std::vector<uint8_t> &imageData, BMPInfo &newBmpInfo, BMP &bmp, uint32_t originWidth,uint32_t originHeight);
+    void ShowImage(std::vector<uint8_t>&imageData,int32_t width, int32_t height);
+
 };
 
 #endif // TAILOR_H

@@ -127,7 +127,7 @@
          <item>
           <widget class="QPushButton" name="btn_eye">
            <property name="text">
-            <string>眼部液化</string>
+            <string>区域液化</string>
            </property>
           </widget>
          </item>
@@ -189,7 +189,7 @@
          <item>
           <widget class="QPushButton" name="btn_face">
            <property name="text">
-            <string>一键瘦脸</string>
+            <string>图像微调</string>
            </property>
           </widget>
          </item>

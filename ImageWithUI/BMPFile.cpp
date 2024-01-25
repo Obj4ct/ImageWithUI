@@ -82,5 +82,8 @@ void BMPInfo::WriteToBMPInfo(std::vector<uint8_t> &imageData, int32_t cropHeight
     newBmpInfo.imageSize = newBmpInfo.width * newBmpInfo.height * 3;//120000
     bmp.fileSize = bmp.dataOffset + newBmpInfo.imageSize;
     imageData.resize(newBmpInfo.imageSize);
-
+    qDebug()<<newBmpInfo.height;
+    qDebug()<<newBmpInfo.width;
+    qDebug()<<newBmpInfo.imageSize;
+    qDebug()<<imageData.size();
 }

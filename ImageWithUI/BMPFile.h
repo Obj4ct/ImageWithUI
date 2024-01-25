@@ -1,6 +1,6 @@
 #ifndef BMPFILE_H
 #define BMPFILE_H
-
+#include <QDebug>
 #include "stdcpp.h"
 extern std::string savePath;
 #pragma pack(push, 1)

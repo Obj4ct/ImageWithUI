@@ -52,7 +52,7 @@
     <item>
      <widget class="QLabel" name="label">
       <property name="text">
-       <string>脸部中心坐标:</string>
+       <string>坐标:</string>
       </property>
      </widget>
     </item>
@@ -81,14 +81,14 @@
   <widget class="QLabel" name="label_2">
    <property name="geometry">
     <rect>
-     <x>160</x>
+     <x>130</x>
      <y>520</y>
-     <width>211</width>
+     <width>281</width>
      <height>41</height>
     </rect>
    </property>
    <property name="text">
-    <string>请用鼠标单击选择脸部中间位置</string>
+    <string>请用鼠标单击选择需要调整的中间位置</string>
    </property>
   </widget>
   <widget class="QLabel" name="imageLabel">
@@ -129,7 +129,7 @@
     <item>
      <widget class="QLabel" name="label_6">
       <property name="text">
-       <string>脸部范围</string>
+       <string>调整范围</string>
       </property>
      </widget>
     </item>
