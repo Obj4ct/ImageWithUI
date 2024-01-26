@@ -312,16 +312,6 @@ void MainWindow::on_btn_color_balance_clicked()
         ui->btn_color_balance->setText("色彩平衡");
     }
 }
-
-
-void MainWindow::on_btn_color_level_clicked()
-{
-    qDebug() << "I am in a ColorLevel window!";
-    colorLevel = new ColorLevel();
-    colorLevel->show();
-}
-
-
 void MainWindow::on_btn_colorMap_clicked()
 {
     // 切换按钮状态

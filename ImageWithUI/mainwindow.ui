@@ -145,13 +145,6 @@
           </widget>
          </item>
          <item>
-          <widget class="QPushButton" name="btn_color_level">
-           <property name="text">
-            <string>色阶调整</string>
-           </property>
-          </widget>
-         </item>
-         <item>
           <widget class="QPushButton" name="btn_fish_eye">
            <property name="text">
             <string>鱼眼镜头</string>

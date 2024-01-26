@@ -462,26 +462,43 @@ std::vector<uint8_t> Function::HighContrast(const std::vector<uint8_t> &imageDat
 void Function::RotateImage(std::vector<uint8_t> &imageData, int32_t width, int32_t height, double_t angle)
 {
     double_t radians = angle * M_PI / 180.0;
-    std::vector<uint8_t> rotatedImageData(width * height * 3);
+    std::vector<uint8_t> rotatedImageData(imageData.size());
 
     int32_t centerX = width / 2;
     int32_t centerY = height / 2;
 
-    for (int y = 0; y < height; ++y) {
-        for (int x = 0; x < width; ++x) {
+    int32_t rotatedWidth = width;
+    int32_t rotatedHeight = height;
+
+    for (int y = 0; y < rotatedHeight; ++y)
+    {
+        for (int x = 0; x < rotatedWidth; ++x)
+        {
+            // 计算旋转后的坐标
             double_t rotatedX = std::cos(radians) * (x - centerX) - std::sin(radians) * (y - centerY) + centerX;
             double_t rotatedY = std::sin(radians) * (x - centerX) + std::cos(radians) * (y - centerY) + centerY;
 
-            if (rotatedX >= 0 && rotatedX < width && rotatedY >= 0 && rotatedY < height) {
-                int originalIndex =
-                        static_cast<int>(std::round(rotatedY)) * width * 3 + static_cast<int>(std::round(rotatedX)) * 3;
-                int newIndex = y * width * 3 + x * 3;
+            // 防止插值过程中超出边界
+            rotatedX = std::max(0.0, std::min(rotatedX, static_cast<double>(width - 1)));
+            rotatedY = std::max(0.0, std::min(rotatedY, static_cast<double>(height - 1)));
 
-                if (originalIndex >= 0 && originalIndex < width * height * 3 && newIndex >= 0 && newIndex < width * height * 3) {
-                    rotatedImageData[newIndex] = imageData[originalIndex];
-                    rotatedImageData[newIndex + 1] = imageData[originalIndex + 1];
-                    rotatedImageData[newIndex + 2] = imageData[originalIndex + 2];
-                }
+            // 双线性插值
+            int x0 = std::floor(rotatedX);
+            int x1 = std::ceil(rotatedX);
+            int y0 = std::floor(rotatedY);
+            int y1 = std::ceil(rotatedY);
+
+            double tx = rotatedX - x0;
+            double ty = rotatedY - y0;
+
+            for (int c = 0; c < 3; ++c)
+            {
+                double interpolatedValue = (1 - tx) * (1 - ty) * imageData[y0 * width * 3 + x0 * 3 + c] +
+                        tx * (1 - ty) * imageData[y0 * width * 3 + x1 * 3 + c] +
+                        (1 - tx) * ty * imageData[y1 * width * 3 + x0 * 3 + c] +
+                        tx * ty * imageData[y1 * width * 3 + x1 * 3 + c];
+
+                rotatedImageData[y * rotatedWidth * 3 + x * 3 + c] = static_cast<uint8_t>(interpolatedValue);
             }
         }
     }

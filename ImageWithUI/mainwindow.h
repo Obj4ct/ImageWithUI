@@ -4,7 +4,6 @@
 #include "BMPFile.h"
 #include "Function.h"
 #include "blendwindow.h"
-#include "colorlevel.h"
 #include "eye.h"
 #include "mask.h"
 #include "mosaic.h"
@@ -70,8 +69,6 @@ private slots:
 
     void on_btn_color_balance_clicked();
 
-    void on_btn_color_level_clicked();
-
     void on_btn_colorMap_clicked();
 
     void on_btn_reverse_color_clicked();
@@ -115,7 +112,6 @@ private slots:
 private:
     Ui::MainWindow *ui;
     BlendWindow * blendWindow;
-    ColorLevel * colorLevel;
 
 };
 #endif // MAINWINDOW_H
