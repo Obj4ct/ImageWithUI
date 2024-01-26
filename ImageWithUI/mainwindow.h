@@ -33,6 +33,10 @@ public:
     ReturnValue CheckOK(QLineEdit* lineEdit);
     ~MainWindow();
 public:
+    std::list<std::vector<uint8_t>> imageDataHistory;
+    void SaveImageDataToHistory(std::vector<uint8_t>& imageData);
+    void UndoImageProcessing();
+
     //QImage
     QImage m_bmpImage;
     MyValue myValue;
@@ -40,7 +44,6 @@ public:
     std::vector<uint8_t>imageData;
     //store original image data
     std::vector<uint8_t> originalImageData;
-    bool isGray,isAutoContrast,isAverBlur,isColorBalance,isColorMap,isReverse,isComplementary,isFishEye,isMedianBlur,isSharpen,isTensor;
 
     //create a object of object
     Function function;
@@ -108,6 +111,8 @@ private slots:
     void on_btn_threshold_ok_clicked();
 
     void on_btn_inter_clicked();
+
+    void on_btn_undo_clicked();
 
 private:
     Ui::MainWindow *ui;

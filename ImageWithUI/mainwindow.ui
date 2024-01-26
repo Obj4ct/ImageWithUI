@@ -554,6 +554,32 @@
       <string>重置图像</string>
      </property>
     </widget>
+    <widget class="QPushButton" name="btn_undo">
+     <property name="geometry">
+      <rect>
+       <x>390</x>
+       <y>30</y>
+       <width>71</width>
+       <height>41</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>撤销</string>
+     </property>
+    </widget>
+    <widget class="QPushButton" name="btn_redo">
+     <property name="geometry">
+      <rect>
+       <x>480</x>
+       <y>30</y>
+       <width>61</width>
+       <height>41</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>重做</string>
+     </property>
+    </widget>
    </widget>
   </widget>
   <widget class="QMenuBar" name="menubar">

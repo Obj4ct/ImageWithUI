@@ -43,50 +43,7 @@ void MainWindow::ResetAll(MyValue &myValue)
     originalImage = originalImage.mirrored(false, true);
     QPixmap originalPixmap = QPixmap::fromImage(originalImage);
     ui->imageLabel->setPixmap(originalPixmap);
-    if(isGray)
-    {
-        ui->btn_gray->setText("转为灰度图");
-    }
-    if(isAutoContrast)
-    {
-        ui->btn_autoContrast->setText("自动调整对比度");
-    }
-    if(isAverBlur)
-    {
-        ui->btn_averBlur->setText("均值模糊");
-    }
-    if(isColorBalance)
-    {
-        ui->btn_color_balance->setText("色彩平衡");
-    }
-    if(isColorMap)
-    {
-        ui->btn_colorMap->setText("色彩映射");
-    }
-    if(isReverse)
-    {
-        ui->btn_reverse_color->setText("色彩反转");
-    }
-    if(isComplementary)
-    {
-        ui->btn_complementary->setText("补色");
-    }
-    if(isFishEye)
-    {
-        ui->btn_fish_eye->setText("鱼眼镜头");
-    }
-    if(isMedianBlur)
-    {
-        ui->btn_medianBlur->setText("中值模糊");
-    }
-    if(isSharpen)
-    {
-        ui->btn_sharpen->setText("一键锐化");
-    }
-    if(isTensor)
-    {
-        ui->btn_tensor->setText("边缘检测");
-    }
+
 }
 
 ReturnValue MainWindow::CheckOK(QLineEdit * lineEdit)
@@ -118,6 +75,35 @@ ReturnValue MainWindow::CheckOK(QLineEdit * lineEdit)
 MainWindow::~MainWindow()
 {
     delete ui;
+}
+// 撤销操作，从链表中获取上一步的图像数据进行恢复
+void MainWindow::UndoImageProcessing()
+{
+    if (!imageDataHistory.empty())
+    {
+        std::vector<uint8_t> previousImageData = imageDataHistory.back();
+        imageDataHistory.pop_back();
+
+        // 恢复图像数据
+        imageData = previousImageData;
+
+        // 更新图像显示
+        ShowImage(imageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+        qDebug()<<"undo ok";
+    }
+    else
+    {
+        imageData=myValue.imageData;
+        ShowImage(imageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+        qDebug()<<"list is empty and undo ok";
+    }
+}
+void MainWindow::SaveImageDataToHistory(std::vector<uint8_t> &imageData)
+{
+    // 在图像处理函数中保存当前图像数据到链表
+    imageDataHistory.push_back(imageData);
+
+
 }
 void MainWindow::on_openImage_triggered()
 {
@@ -157,66 +143,42 @@ void MainWindow::on_openImage_triggered()
 
 void MainWindow::on_btn_gray_clicked()
 {
-    // 切换按钮状态
-    std::vector<uint8_t> grayImageData=imageData;
-    if (ui->btn_gray->text() == "转为灰度图") {
-        // 转换为灰度图
-        function.ConvertToGray(grayImageData);
-
-        ShowImage(grayImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
-        isGray=true;
-        // 更新按钮文本
-        ui->btn_gray->setText("取消");
-    } else {
-        // 恢复原始图像
-        ResetImage(myValue);
-        // 更新按钮文本
-        ui->btn_gray->setText("转为灰度图");
+    std::vector<uint8_t> tempImageData=imageData;
+    if(!imageDataHistory.empty())
+    {
+        tempImageData = imageDataHistory.back(); // 复制当前图像数据
     }
+    function.ConvertToGray(tempImageData);
+    SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
+    ShowImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
 }
 
 
 
 void MainWindow::on_btn_autoContrast_clicked()
 {
-    std::vector<uint8_t> contrastImageData=imageData;
-    function.AutoContrast(contrastImageData);
-    // 切换按钮状态
-    if (ui->btn_autoContrast->text() == "自动调整对比度") {
-        // 转换为灰度图
-        function.AutoContrast(contrastImageData);
-
-        ShowImage(contrastImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
-        isAutoContrast=true;
-        // 更新按钮文本
-        ui->btn_autoContrast->setText("取消");
-    } else {
-        // 恢复原始图像
-        ResetImage(myValue);
-
-        // 更新按钮文本
-        ui->btn_autoContrast->setText("自动调整对比度");
+    std::vector<uint8_t> tempImageData=imageData;
+    if(!imageDataHistory.empty())
+    {
+        tempImageData = imageDataHistory.back(); // 复制当前图像数据
     }
+    function.AutoContrast(tempImageData);
+    SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
+    ShowImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+
 }
 
 
 void MainWindow::on_btn_averBlur_clicked()
 {
-    std::vector<uint8_t> averBLurImageData=imageData;
-    function.AverageBlur(averBLurImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
-    // 切换按钮状态
-    if (ui->btn_averBlur->text() == "均值模糊") {
-        // 转换为灰度图
-        function.AverageBlur(averBLurImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
-        ShowImage(averBLurImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
-        isAverBlur=true;
-        // 更新按钮文本
-        ui->btn_averBlur->setText("取消");
-    } else {
-        ResetImage(myValue);
-        // 更新按钮文本
-        ui->btn_averBlur->setText("均值模糊");
+    std::vector<uint8_t> tempImageData=imageData;
+    if(!imageDataHistory.empty())
+    {
+        tempImageData = imageDataHistory.back(); // 复制当前图像数据
     }
+    function.AverageBlur(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+    SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
+    ShowImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
 }
 
 void MainWindow::on_btn_resetAll_clicked()
@@ -245,10 +207,16 @@ void MainWindow::on_btn_brightness_clicked()
         if(!function.CreateMessagebox("提示","输入数字"))
             return;
     }else{
-        std::vector<uint8_t> brightnessImageData=imageData;
+
+        std::vector<uint8_t> tempImageData=imageData;
         qDebug()<<returnValue.value;
-        function.Brightness(brightnessImageData,returnValue.value);
-        ShowImage(brightnessImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+        if(!imageDataHistory.empty())
+        {
+            tempImageData = imageDataHistory.back(); // 复制当前图像数据
+        }
+        function.Brightness(tempImageData,returnValue.value);
+        SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
+        ShowImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
     }
 }
 
@@ -266,9 +234,16 @@ void MainWindow::on_btn_contrast_clicked()
         if(!function.CreateMessagebox("提示","输入数字"))
             return;
     }else{
-        std::vector<uint8_t> contrastImageData=imageData;
-        function.Contrast(contrastImageData,returnValue.value);
-        ShowImage(contrastImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+
+        std::vector<uint8_t> tempImageData=imageData;
+        if(!imageDataHistory.empty())
+        {
+            tempImageData = imageDataHistory.back(); // 复制当前图像数据
+        }
+
+        function.Contrast(tempImageData,returnValue.value);
+        SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
+        ShowImage(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
     }
 }
 
@@ -286,93 +261,73 @@ void MainWindow::on_btn_saturation_clicked()
         if(!function.CreateMessagebox("提示","输入数字"))
             return;
     }else{
-        std::vector<uint8_t> saturationImageData=imageData;
-        function.Saturation(saturationImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),returnValue.value);
-        ShowImage(saturationImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+        std::vector<uint8_t> tempImageData=imageData;
+        if(!imageDataHistory.empty())
+        {
+            tempImageData = imageDataHistory.back(); // 复制当前图像数据
+        }
+        function.Saturation(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),returnValue.value);
+        SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
+        ShowImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
     }
 }
 
 
 void MainWindow::on_btn_color_balance_clicked()
 {
-    std::vector<uint8_t> balanceImageData=imageData;
-
-    if (ui->btn_color_balance->text() == "色彩平衡") {
-        // 转换为灰度图
-        function.ColorBalance(balanceImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
-        isColorBalance=true;
-        ShowImage(balanceImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
-
-        // 更新按钮文本
-        ui->btn_color_balance->setText("取消");
-    } else {
-        // 恢复原始图像
-        ResetImage(myValue);
-        // 更新按钮文本
-        ui->btn_color_balance->setText("色彩平衡");
+    std::vector<uint8_t> tempImageData=imageData;
+    if(!imageDataHistory.empty())
+    {
+        tempImageData = imageDataHistory.back(); // 复制当前图像数据
     }
+    function.ColorBalance(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+
+    SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
+    ShowImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
 }
 void MainWindow::on_btn_colorMap_clicked()
 {
-    // 切换按钮状态
-    std::vector<uint8_t> colorMapImageData=imageData;
-    if (ui->btn_colorMap->text() == "色彩映射") {
-        // 转换为灰度图
-        function.ColorMap(colorMapImageData,colorMap);
-
-        ShowImage(colorMapImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
-        isColorMap=true;
-        // 更新按钮文本
-        ui->btn_colorMap->setText("取消");
-    } else {
-        // 恢复原始图像
-        ResetImage(myValue);
-        // 更新按钮文本
-        ui->btn_colorMap->setText("色彩映射");
+    std::vector<uint8_t> tempImageData=imageData;
+    if(!imageDataHistory.empty())
+    {
+        tempImageData = imageDataHistory.back(); // 复制当前图像数据
     }
+    function.ColorMap(tempImageData,colorMap);
+
+    SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
+    ShowImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
 }
 
 
 void MainWindow::on_btn_reverse_color_clicked()
 {
-    // 切换按钮状态
-    std::vector<uint8_t> reverseImageData=imageData;
-    if (ui->btn_reverse_color->text() == "色彩反转") {
-        // 转换为灰度图
-        function.InvertColors(reverseImageData);
-
-        ShowImage(reverseImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
-        isReverse=true;
-        // 更新按钮文本
-        ui->btn_reverse_color->setText("取消");
-    } else {
-        // 恢复原始图像
-        ResetImage(myValue);
-        // 更新按钮文本
-        ui->btn_reverse_color->setText("色彩反转");
+    std::vector<uint8_t> tempImageData=imageData;
+    if(!imageDataHistory.empty())
+    {
+        tempImageData = imageDataHistory.back(); // 复制当前图像数据
     }
+
+    function.InvertColors(tempImageData);
+    SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
+    ShowImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
 }
 
 
 void MainWindow::on_btn_complementary_clicked()
 {
 
-    // 切换按钮状态
-    std::vector<uint8_t> complementaryImageData=imageData;
-    if (ui->btn_complementary->text() == "补色") {
-        // 转换为灰度图
-        function.Complementary(complementaryImageData);
-        ShowImage(complementaryImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
-        isComplementary=true;
-
-        // 更新按钮文本
-        ui->btn_complementary->setText("取消");
-    } else {
-        // 恢复原始图像
-        ResetImage(myValue);
-        // 更新按钮文本
-        ui->btn_complementary->setText("补色");
+    std::vector<uint8_t> tempImageData=imageData;
+    if(!imageDataHistory.empty())
+    {
+        tempImageData = imageDataHistory.back(); // 复制当前图像数据
     }
+
+    function.Complementary(tempImageData);
+    SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
+    ShowImage(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+
+
+
 
 }
 
@@ -396,21 +351,16 @@ void MainWindow::on_btn_face_clicked()
 
 void MainWindow::on_btn_fish_eye_clicked()
 {
-    std::vector<uint8_t> fishEyeImageData;;
-    if (ui->btn_fish_eye->text() == "鱼眼镜头") {
-        std::vector<uint8_t> fishEyeImageData=function.Fisheye(imageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
-
-        ShowImage(fishEyeImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
-        isFishEye=true;
-
-        // 更新按钮文本
-        ui->btn_fish_eye->setText("取消");
-    } else {
-        // 恢复原始图像
-        ResetImage(myValue);
-        // 更新按钮文本
-        ui->btn_fish_eye->setText("鱼眼镜头");
+    std::vector<uint8_t> tempImageData=imageData;
+    if(!imageDataHistory.empty())
+    {
+        tempImageData = imageDataHistory.back(); // 复制当前图像数据
     }
+    std::vector<uint8_t> fishEyeImageData=function.Fisheye(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+
+    SaveImageDataToHistory(fishEyeImageData); // 保存当前图像数据到链表
+    ShowImage(fishEyeImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+
 }
 
 
@@ -427,7 +377,13 @@ void MainWindow::on_btn_gauss_ok_clicked()
         if(!function.CreateMessagebox("提示","输入数字"))
             return;
     }else{
-        std::vector<uint8_t> gaussImageData=function.Gauss(imageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),returnValue.value);
+        std::vector<uint8_t> tempImageData=imageData;
+        if(!imageDataHistory.empty())
+        {
+            tempImageData = imageDataHistory.back(); // 复制当前图像数据
+        }
+        std::vector<uint8_t> gaussImageData=function.Gauss(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),returnValue.value);
+        SaveImageDataToHistory(gaussImageData); // 保存当前图像数据到链表
         ShowImage(gaussImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
     }
 
@@ -447,11 +403,23 @@ void MainWindow::on_btn_highContrast_ok_clicked()
         if(!function.CreateMessagebox("提示","输入数字"))
             return;
     }else{
-        std::vector<uint8_t> ImageData=function.Gauss(imageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),returnValue.value);
+        //        std::vector<uint8_t> ImageData=function.Gauss(imageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),returnValue.value);
 
-        std::vector<uint8_t> blurImageData = function.Gauss(imageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),returnValue.value);
-        std::vector<uint8_t> highContrastImageData = function.HighContrast(imageData, blurImageData);
-        ShowImage(highContrastImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+        //        std::vector<uint8_t> blurImageData = function.Gauss(imageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),returnValue.value);
+        //        std::vector<uint8_t> highContrastImageData = function.HighContrast(imageData, blurImageData);
+        //        ShowImage(highContrastImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+
+        std::vector<uint8_t> tempImageData=imageData;
+        if(!imageDataHistory.empty())
+        {
+            tempImageData = imageDataHistory.back(); // 复制当前图像数据
+        }
+        std::vector<uint8_t> ImageData=function.Gauss(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),returnValue.value);
+
+        std::vector<uint8_t> blurImageData = function.Gauss(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),returnValue.value);
+        std::vector<uint8_t> highContrastImageData = function.HighContrast(tempImageData, blurImageData);
+        SaveImageDataToHistory(highContrastImageData); // 保存当前图像数据到链表
+        ShowImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
     }
 
 }
@@ -470,8 +438,15 @@ void MainWindow::on_btn_rotate_ok_clicked()
         if(!function.CreateMessagebox("提示","输入数字"))
             return;
     }else{
-        function.RotateImage(imageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(), returnValue.value);
-        ShowImage(imageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+        std::vector<uint8_t> tempImageData=imageData;
+        if(!imageDataHistory.empty())
+        {
+            tempImageData = imageDataHistory.back(); // 复制当前图像数据
+        }
+        function.RotateImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(), returnValue.value);
+        SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
+        ShowImage(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+
     }
 
 }
@@ -490,8 +465,15 @@ void MainWindow::on_btn_rotate_r_clicked()
         if(!function.CreateMessagebox("提示","输入数字"))
             return;
     }else{
-        function.RotateReverse(imageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(), returnValue.value);
-        ShowImage(imageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+        std::vector<uint8_t> tempImageData=imageData;
+        if(!imageDataHistory.empty())
+        {
+            tempImageData = imageDataHistory.back(); // 复制当前图像数据
+        }
+        function.RotateReverse(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(), returnValue.value);
+        SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
+        ShowImage(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+
     }
 
 }
@@ -507,21 +489,17 @@ void MainWindow::on_btn_mask_clicked()
 
 void MainWindow::on_btn_medianBlur_clicked()
 {
-    std::vector<uint8_t> medianBlurImageData=imageData;
-    if (ui->btn_medianBlur->text() == "中值模糊") {
-        qDebug()<<"in median";
-        function.MedianBlur(medianBlurImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
-        ShowImage(medianBlurImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
-        isMedianBlur=true;
-
-        // 更新按钮文本
-        ui->btn_medianBlur->setText("取消");
-    } else {
-        // 恢复原始图像
-        ResetImage(myValue);
-        // 更新按钮文本
-        ui->btn_medianBlur->setText("中值模糊");
+    std::vector<uint8_t> tempImageData=imageData;
+    if(!imageDataHistory.empty())
+    {
+        tempImageData = imageDataHistory.back(); // 复制当前图像数据
     }
+    function.MedianBlur(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+
+    SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
+    ShowImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+
+
 }
 
 
@@ -538,7 +516,6 @@ void MainWindow::on_btn_mosaic_clicked()
 
 void MainWindow::on_btn_shadow_ok_clicked()
 {
-    std::vector<uint8_t>tempImageData=imageData;
     std::vector<uint8_t> shadowImageData(imageData.size());
     shadowImageData=imageData;
     //正确输入数字
@@ -552,15 +529,27 @@ void MainWindow::on_btn_shadow_ok_clicked()
         if(!function.CreateMessagebox("提示","输入数字"))
             return;
     }else{
+        std::vector<uint8_t> tempImageData=imageData;
+        if(!imageDataHistory.empty())
+        {
+            tempImageData = imageDataHistory.back(); // 复制当前图像数据
+        }
+
         function.MakeShadow(tempImageData,shadowImageData,returnValue.value);
+
+        SaveImageDataToHistory(shadowImageData); // 保存当前图像数据到链表
         ShowImage(shadowImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+
+
+
+
     }
 }
 
 
 void MainWindow::on_btn_highlight_ok_clicked()
 {
-    std::vector<uint8_t>tempImageData=imageData;
+
     std::vector<uint8_t> highLightImageData(imageData.size());
     highLightImageData=imageData;
     //正确输入数字
@@ -574,7 +563,14 @@ void MainWindow::on_btn_highlight_ok_clicked()
         if(!function.CreateMessagebox("提示","输入数字"))
             return;
     }else{
+
+        std::vector<uint8_t> tempImageData=imageData;
+        if(!imageDataHistory.empty())
+        {
+            tempImageData = imageDataHistory.back(); // 复制当前图像数据
+        }
         function.HighLight(tempImageData,highLightImageData,returnValue.value);
+        SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
         ShowImage(highLightImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
     }
 }
@@ -582,23 +578,19 @@ void MainWindow::on_btn_highlight_ok_clicked()
 
 void MainWindow::on_btn_sharpen_clicked()
 {
-    std::vector<uint8_t>tempImageData=imageData;
-    if (ui->btn_sharpen->text() == "一键锐化") {
-        qDebug()<<"in sharpen";
-        std::vector<uint8_t> blurImageData = function.Gauss(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),10);
-        std::vector<uint8_t> highContrast = function.HighContrast(tempImageData, blurImageData);
-        std::vector<uint8_t> sharpenImageData = function.Sharpen(tempImageData, highContrast);
-        ShowImage(sharpenImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
-        isSharpen=true;
-
-        // 更新按钮文本
-        ui->btn_sharpen->setText("取消");
-    } else {
-        // 恢复原始图像
-        ResetImage(myValue);
-        // 更新按钮文本
-        ui->btn_sharpen->setText("一键锐化");
+    std::vector<uint8_t> tempImageData=imageData;
+    if(!imageDataHistory.empty())
+    {
+        tempImageData = imageDataHistory.back(); // 复制当前图像数据
     }
+    std::vector<uint8_t> blurImageData = function.Gauss(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),10);
+    std::vector<uint8_t> highContrast = function.HighContrast(tempImageData, blurImageData);
+    std::vector<uint8_t> sharpenImageData = function.Sharpen(tempImageData, highContrast);
+
+    SaveImageDataToHistory(sharpenImageData); // 保存当前图像数据到链表
+
+    ShowImage(sharpenImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+
 
 
 }
@@ -615,28 +607,23 @@ void MainWindow::on_btn_tailor_clicked()
 
 void MainWindow::on_btn_tensor_clicked()
 {
-    std::vector<uint8_t>tempImageData=imageData;
-    if (ui->btn_tensor->text() == "边缘检测") {
-        qDebug()<<"in edge";
-        std::vector<uint8_t> edgeImageData = function.SobelEdge(imageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
-
-        ShowImage(edgeImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
-        isTensor=true;
-
-        // 更新按钮文本
-        ui->btn_tensor->setText("取消");
-    } else {
-        // 恢复原始图像
-        ResetImage(myValue);
-        // 更新按钮文本
-        ui->btn_tensor->setText("边缘检测");
+    std::vector<uint8_t> tempImageData=imageData;
+    if(!imageDataHistory.empty())
+    {
+        tempImageData = imageDataHistory.back(); // 复制当前图像数据
     }
+    std::vector<uint8_t> edgeImageData = function.SobelEdge(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+    SaveImageDataToHistory(edgeImageData); // 保存当前图像数据到链表
+    ShowImage(edgeImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+
+
+
 }
 
 
 void MainWindow::on_btn_threshold_ok_clicked()
 {
-    std::vector<uint8_t>tempImageData=imageData;
+
     std::vector<uint8_t> highLightImageData(imageData.size());
     highLightImageData=imageData;
     //正确输入数字
@@ -650,8 +637,15 @@ void MainWindow::on_btn_threshold_ok_clicked()
         if(!function.CreateMessagebox("提示","输入数字"))
             return;
     }else{
+        std::vector<uint8_t> tempImageData=imageData;
+        if(!imageDataHistory.empty())
+        {
+            tempImageData = imageDataHistory.back(); // 复制当前图像数据
+        }
+
         function.ApplyThreshold(tempImageData,returnValue.value);
-        ShowImage(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+        SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
+        ShowImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
     }
 }
 
@@ -661,5 +655,11 @@ void MainWindow::on_btn_inter_clicked()
     qDebug() << "I am in a inter window!";
     Interpolation *inter = new Interpolation(this,myValue);
     inter->show();
+}
+
+
+void MainWindow::on_btn_undo_clicked()
+{
+    UndoImageProcessing();
 }
 
