@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/">
+        <file>icon/reset.png</file>
+        <file>icon/undo.png</file>
+    </qresource>
+</RCC>

@@ -10,7 +10,6 @@
 #include "tailor.h"
 #include "interpolation.h"
 #include "face.h"
-//QString test_path="D:\\Documents\\1Projects\\QT\\ImageWithUI\\ImageWithUI\\image\\Lenna.bmp";
 struct ReturnValue{
     bool isNull;
     bool isNumeric;
@@ -53,6 +52,7 @@ public:
 private slots:
     //click menubar to open image
     void on_openImage_triggered();
+    void on_actionsave_triggered();
 
     void on_btn_gray_clicked();
 
@@ -117,6 +117,7 @@ private slots:
 private:
     Ui::MainWindow *ui;
     BlendWindow * blendWindow;
+    bool canSave=false;
 
 };
 #endif // MAINWINDOW_H

@@ -9,6 +9,7 @@ MainWindow::MainWindow(QWidget *parent)
     ui->setupUi(this);
     ui->widget->setVisible(false);
     ui->widget_add->setVisible(false);
+    ui->widget_operation->setVisible(false);
 }
 
 void MainWindow::ResetImage(MyValue &myValue)
@@ -38,6 +39,7 @@ void MainWindow::ShowImage(std::vector<uint8_t> &inImageData,int32_t width,int32
 void MainWindow::ResetAll(MyValue &myValue)
 {
     imageData=myValue.imageData;
+    //imageDataHistory.clear();
     // 恢复原始图像
     QImage originalImage(myValue.imageData.data(), myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(), QImage::Format_BGR888);
     originalImage = originalImage.mirrored(false, true);
@@ -120,6 +122,7 @@ void MainWindow::on_openImage_triggered()
     else{
         ui->widget->setVisible(true);
         ui->widget_add->setVisible(true);
+        ui->widget_operation->setVisible(true);
         // 读取BMP文件并且存入变量中
         std::string BMPPath = path.toStdString();
         myValue = MYFunction::ReadBMPFile(BMPPath);
@@ -135,6 +138,50 @@ void MainWindow::on_openImage_triggered()
         QPixmap pixmap = QPixmap::fromImage(m_bmpImage);
         ui->imageLabel->setPixmap(pixmap);
         ui->imageLabel->setScaledContents(true); // 使图像适应 label 大小
+        canSave=true;
+    }
+
+}
+
+void MainWindow::on_actionsave_triggered()
+{
+    std::vector<uint8_t> saveImageData;
+    if (canSave&&!imageDataHistory.empty())
+    {
+        saveImageData=imageDataHistory.back();
+        QString filePath = QFileDialog::getSaveFileName(nullptr, "保存文件", "", "BMP文件(*.bmp)");
+        if (filePath.isEmpty()) {
+            qDebug() << "Save operation canceled.";
+            return;
+        }
+        savePath=filePath.toStdString();
+
+        QFileInfo fileInfo(filePath);
+        QString fileName = fileInfo.fileName();
+        std::string str=fileName.toStdString();
+        std::cout<<"filename is "<<str<<std::endl;
+        MYFunction::WriteBMPFile(str,saveImageData,myValue.bmp,myValue.bmpInfo);
+        qDebug()<<"succeed!";
+    }
+    else if(canSave&&imageDataHistory.empty()){
+        saveImageData=myValue.imageData;
+        QString filePath = QFileDialog::getSaveFileName(nullptr, "保存文件", "", "BMP文件(*.bmp)");
+        if (filePath.isEmpty()) {
+            qDebug() << "Save operation canceled.";
+            return;
+        }
+        savePath=filePath.toStdString();
+
+        QFileInfo fileInfo(filePath);
+        QString fileName = fileInfo.fileName();
+        std::string str=fileName.toStdString();
+        std::cout<<"filename is "<<str<<std::endl;
+        MYFunction::WriteBMPFile(str,saveImageData,myValue.bmp,myValue.bmpInfo);
+        qDebug()<<"succeed!";
+    }else{
+        function.CreateMessagebox("提示","没有任何文件");
+        qDebug()<<"file empty!";
+        return;
     }
 
 }

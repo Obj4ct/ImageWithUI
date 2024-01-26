@@ -49,6 +49,7 @@ set(PROJECT_SOURCES
         face.h
         face.cpp
         face.ui
+        icon.qrc
 
 )
 
