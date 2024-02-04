@@ -54,20 +54,27 @@ bool Function::CreateMessagebox(QString title,QString message)
     }
 }
 //to gray
-void Function::ConvertToGray(std::vector<uint8_t>& imageData)
+void Function::ConvertToGray(std::vector<uint8_t>& imageData,int start,int end)
 {
-    for (size_t i = 0; i < imageData.size(); i += 3) {
-        uint8_t r = imageData[i];
-        uint8_t g = imageData[i + 1];
-        uint8_t b = imageData[i + 2];
-        // cal gray
-        auto gray = static_cast<uint8_t>(0.299 * r + 0.587 * g + 0.114 * b);
-        // gary to every chanel
-        imageData[i] = gray;
-        imageData[i + 1] = gray;
-        imageData[i + 2] = gray;
+//    for (size_t i = 0; i < imageData.size(); i += 3) {
+//        uint8_t r = imageData[i];
+//        uint8_t g = imageData[i + 1];
+//        uint8_t b = imageData[i + 2];
+//        // cal gray
+//        auto gray = static_cast<uint8_t>(0.299 * r + 0.587 * g + 0.114 * b);
+//        // gary to every chanel
+//        imageData[i] = gray;
+//        imageData[i + 1] = gray;
+//        imageData[i + 2] = gray;
+//    }
+    for (int i = start; i < end; i += 3) {
+         uint8_t gray = static_cast<uint8_t>(0.299 * imageData[i] + 0.587 * imageData[i + 1] + 0.114 * imageData[i + 2]);
+         imageData[i] = gray;
+         imageData[i + 1] = gray;
+         imageData[i + 2] = gray;
     }
 }
+
 
 double Function::CalAver(const std::vector<uint8_t> &imageData)
 {
@@ -328,7 +335,7 @@ void Function::ColorMap(std::vector<uint8_t> &imageData, std::vector<uint8_t> &c
     //计算颜色映射表中颜色的数量,3表示channel
     int numColors = colorMap.size()/3;
     //转灰度图先
-    ConvertToGray(imageData);
+    //ConvertToGray(imageData);
     for (size_t i = 0; i < imageData.size(); i += 3) {
         uint8_t gray = imageData[i];
         //先归一化然后执行 乘法

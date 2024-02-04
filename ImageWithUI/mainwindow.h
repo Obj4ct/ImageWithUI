@@ -30,12 +30,12 @@ public:
     void ShowImage(std::vector<uint8_t> &inImageData,int32_t width,int32_t height);
     void ResetAll(MyValue &myValue);
     ReturnValue CheckOK(QLineEdit* lineEdit);
+    void SaveImageDataToHistory(std::vector<uint8_t>& imageData);
+    void UndoImageProcessing();
     ~MainWindow();
 public:
     std::list<std::vector<uint8_t>> imageDataHistory;
-    void SaveImageDataToHistory(std::vector<uint8_t>& imageData);
-    void UndoImageProcessing();
-
+    size_t imageSize;
     //QImage
     QImage m_bmpImage;
     MyValue myValue;

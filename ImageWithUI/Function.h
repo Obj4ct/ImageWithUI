@@ -16,7 +16,7 @@ public:
     //create messagebox
     bool CreateMessagebox(QString title,QString message);
     //gray
-    void ConvertToGray(std::vector<uint8_t>& imageData);
+    void ConvertToGray(std::vector<uint8_t>& imageData,int start,int end);
 
     //自动对比度相关
     //平均值

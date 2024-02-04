@@ -126,6 +126,7 @@ void MainWindow::on_openImage_triggered()
         // 读取BMP文件并且存入变量中
         std::string BMPPath = path.toStdString();
         myValue = MYFunction::ReadBMPFile(BMPPath);
+        imageSize=myValue.imageData.size();
         //input debug info
         ImgInfo(myValue.bmp,myValue.bmpInfo);
         // 将图像数据转换为QImage
@@ -188,18 +189,52 @@ void MainWindow::on_actionsave_triggered()
 
 
 
+//void MainWindow::on_btn_gray_clicked()
+//{
+//    std::vector<uint8_t> tempImageData=imageData;
+//    if(!imageDataHistory.empty())
+//    {
+//        tempImageData = imageDataHistory.back(); // 复制当前图像数据
+//    }
+
+//    function.ConvertToGray(tempImageData);
+//    SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
+//    ShowImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+//}
 void MainWindow::on_btn_gray_clicked()
 {
-    std::vector<uint8_t> tempImageData=imageData;
-    if(!imageDataHistory.empty())
-    {
-        tempImageData = imageDataHistory.back(); // 复制当前图像数据
+    int num_threads = 4;
+
+    // 分段处理图像数据
+    std::vector<std::thread> threads;              // 存储线程对象，每个线程对象将处理图像数据的不同部分
+    std::vector<size_t> segmentStarts;             // 用来存储每个数据段的起始位置
+    size_t segmentSize = imageSize / num_threads;  // 均分处理
+
+    std::vector<uint8_t> tempImageData = imageData;
+    if (!imageDataHistory.empty()) {
+        tempImageData = imageDataHistory.back();  // 复制当前图像数据
     }
-    function.ConvertToGray(tempImageData);
-    SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
+
+    // 使用 std::bind 将成员函数包装成可调用对象
+    auto convertToGrayFunc = std::bind(&Function::ConvertToGray, &function, std::ref(tempImageData), std::placeholders::_1, std::placeholders::_2);
+
+    for (uint8_t i = 0; i < num_threads; i++)  // 创建多个线程
+    {
+        size_t start = i * segmentSize;  // 计算当前线程负责的数据段的起始位置
+        size_t end = (i == num_threads - 1) ? imageSize : start + segmentSize;  // 结尾,同上
+        segmentStarts.push_back(start);
+
+        // 使用可调用对象传递给线程
+        threads.emplace_back(convertToGrayFunc, start, end);
+    }
+    for (auto &thread : threads) {
+        thread.join();
+    }
+
+    // function.ConvertToGray(tempImageData);
+    SaveImageDataToHistory(tempImageData);  // 保存当前图像数据到链表
     ShowImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
 }
-
 
 
 void MainWindow::on_btn_autoContrast_clicked()
