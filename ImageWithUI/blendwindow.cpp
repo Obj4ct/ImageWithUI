@@ -1,11 +1,11 @@
+#include "mainwindow.h"
 #include "blendwindow.h"
 #include "ui_blendwindow.h"
 
 
 
-BlendWindow::BlendWindow(QWidget *parent) :
-    QWidget(parent),
-    ui(new Ui::BlendWindow) {
+BlendWindow::BlendWindow(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
+    : QWidget(parent), ui(new Ui::BlendWindow), mainWindow(mainWindow), myValue(myValue) {
     ui->setupUi(this);
     ui->widget_select_blendMode->setVisible(false);
 
@@ -22,6 +22,8 @@ BlendWindow::BlendWindow(QWidget *parent) :
     ui->comboBox_blendMode->addItem("正片叠底");
     ui->comboBox_blendMode->addItem("滤色");
     ui->comboBox_blendMode->addItem("叠加");
+
+
 
 }
 int BlendWindow::selectCount=0;
@@ -97,7 +99,23 @@ void BlendWindow::BlendImages()
     BlendMode blendMode = currentBlendMode;
     originalImageData_1=myValue_1.imageData;
     originalImageData_2=myValue_2.imageData;
-    Effect(originalImageData_1, originalImageData_2, width, height, blendMode);
+    std::vector<std::thread> threads(mainWindow->num_threads);
+int segmentSize = static_cast<int>(myValue.imageData.size() / 3 / mainWindow->num_threads);
+
+ auto func = std::bind(&BlendWindow::Effect, this, std::ref(originalImageData_1),std::ref(originalImageData_2),  std::placeholders::_1, std::placeholders::_2,  std::placeholders::_3, std::placeholders::_4, std::placeholders::_5);
+
+    for (int i = 0; i < mainWindow->num_threads; i++) {
+        int start = i * segmentSize;
+        int end = (i == mainWindow->num_threads - 1) ? myValue.imageData.size() / 3 : (i + 1) *segmentSize;
+        threads[i] =
+            std::thread(func, width, height, blendMode, start, end);
+    }
+
+    for (auto &thread : threads) {
+        thread.join();
+    }
+
+    //Effect(originalImageData_1, originalImageData_2, width, height, blendMode,start,end);
 
 
     //out image for debug
@@ -108,6 +126,7 @@ void BlendWindow::BlendImages()
     //store to blendedimage
 
     ShowImage();
+    threads.clear();
 }
 
 void BlendWindow::ShowImage()
@@ -186,7 +205,7 @@ void BlendWindow::SwitchBlendMode(uint8_t &destR, uint8_t &destG, uint8_t &destB
 }
 
 void BlendWindow::Effect(std::vector<uint8_t> &imageData, const std::vector<uint8_t> &effectData, int width, int height,
-                         BlendMode blendMode) {
+                         BlendMode blendMode,size_t start,size_t end) {
     double alpha=currentAlpha;
     if (imageData.size() != effectData.size()) {
         QMessageBox* myBox = new QMessageBox;
@@ -205,17 +224,14 @@ void BlendWindow::Effect(std::vector<uint8_t> &imageData, const std::vector<uint
     }
 
 
-    for (size_t i = 0; i < imageData.size(); i += 3) {
-
-        //获取原图RGB
-        uint8_t &destR = imageData[i];
-        uint8_t &destG = imageData[i + 1];
-        uint8_t &destB = imageData[i + 2];
-        //获取背景RGB
-        uint8_t srcR = effectData[i];
-        uint8_t srcG = effectData[i + 1];
-        uint8_t srcB = effectData[i + 2];
-        SwitchBlendMode(destR, destG, destB, srcR, srcG, srcB, blendMode,alpha);
+    for (int i = start; i < end; i++) {
+        uint8_t &destR = imageData[i * 3];
+        uint8_t &destG = imageData[i * 3 + 1];
+        uint8_t &destB = imageData[i * 3 + 2];
+        uint8_t srcR = effectData[i * 3];
+        uint8_t srcG = effectData[i * 3 + 1];
+        uint8_t srcB = effectData[i * 3 + 2];
+        SwitchBlendMode(destR, destG, destB, srcR, srcG, srcB, blendMode, alpha);
     }
 }
 

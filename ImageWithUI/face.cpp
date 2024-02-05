@@ -1,5 +1,7 @@
 #include "face.h"
 #include "ui_face.h"
+#include <functional>
+
 
 Face::Face(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     : QWidget(parent), ui(new Ui::Face), mainWindow(mainWindow), myValue(myValue)
@@ -77,8 +79,10 @@ void Face::on_btn_ok_clicked()
         }
     }
     else {
-        qDebug()<<"click ok";
-        _Face(newValue.imageData,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(),faceCenterX,faceCenterY,value,warpIntensity);
+        std::thread faceThread(std::bind(&Face::_Face, this, std::ref(newValue.imageData), newValue.bmpInfo.GetWidth(), newValue.bmpInfo.GetHeight(), faceCenterX, faceCenterY, value, warpIntensity));
+        faceThread.join();
+
+        //_Face(newValue.imageData,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(),faceCenterX,faceCenterY,value,warpIntensity);
         ShowImage(newValue.imageData);
 
     }

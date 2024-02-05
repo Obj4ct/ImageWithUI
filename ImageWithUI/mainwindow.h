@@ -32,10 +32,21 @@ public:
     ReturnValue CheckOK(QLineEdit* lineEdit);
     void SaveImageDataToHistory(std::vector<uint8_t>& imageData);
     void UndoImageProcessing();
+    //清理每段数据,防止数据冲突引发异常
+    void ClearSegmentData();
     ~MainWindow();
 public:
     std::list<std::vector<uint8_t>> imageDataHistory;
+
+    //分段处理数据
+    int num_threads;
     size_t imageSize;
+    std::vector<std::thread> threads;              // 存储线程对象，每个线程对象将处理图像数据的不同部分
+    size_t segmentSize; // 均分处理
+    std::vector<size_t> segmentStarts; // 用来存储每个数据段的起始位置
+
+
+
     //QImage
     QImage m_bmpImage;
     MyValue myValue;

@@ -20,4 +20,6 @@
 #include <QGraphicsView>
 #include <QGraphicsScene>
 #include <QImageReader>
+#include <QtConcurrent>
+
 #endif // QTHEADER_H

@@ -48,26 +48,19 @@ void eye::mousePressEvent(QMouseEvent* event)
 
 }
 
-void eye::Eye(std::vector<uint8_t> &imageData, int32_t width, int32_t height, int32_t centerX, int32_t centerY, int32_t radius, double intensity)
+void eye::Eye(std::vector<uint8_t> &imageData, int32_t width, int32_t height, int32_t centerX, int32_t centerY, int32_t radius, double intensity,size_t startRow,size_t endRow)
 {
-    // 遍历图像像素
-    for (int y = 0; y < height; y++) {
+    for (int y = startRow; y < endRow; y++) {
         for (int x = 0; x < width; x++) {
             int pixelIndex = (y * width + x) * 3;
 
-            // 计算像素到中心点的距离
-            double distance = std::sqrt(
-                        static_cast<double>((x - centerX) * (x - centerX) + (y - centerY) * (y - centerY)));
+            double distance = std::sqrt(static_cast<double>((x - centerX) * (x - centerX) + (y - centerY) * (y - centerY)));
 
             if (distance < radius) {
-
                 double warpAmount = intensity * std::sin(distance / radius * 3.14159265);
-
-                // 使用线性插值计算目标像素坐标
                 double newX = x + warpAmount;
                 double newY = y + warpAmount;
 
-                // 使用双线性插值获取目标像素的颜色值
                 int x0 = static_cast<int>(newX);
                 int y0 = static_cast<int>(newY);
                 int x1 = std::min(x0 + 1, width - 1);
@@ -80,13 +73,11 @@ void eye::Eye(std::vector<uint8_t> &imageData, int32_t width, int32_t height, in
                 int targetPixelIndex10 = (y1 * width + x0) * 3;
                 int targetPixelIndex11 = (y1 * width + x1) * 3;
 
-                // 使用双线性插值计算目标像素的颜色值
                 for (int c = 0; c < 3; c++) {
-                    double interpolatedValue =
-                            imageData[targetPixelIndex00 + c] * (1 - dx) * (1 - dy) +
-                            imageData[targetPixelIndex01 + c] * dx * (1 - dy) +
-                            imageData[targetPixelIndex10 + c] * (1 - dx) * dy +
-                            imageData[targetPixelIndex11 + c] * dx * dy;
+                    double interpolatedValue = imageData[targetPixelIndex00 + c] * (1 - dx) * (1 - dy) +
+                                               imageData[targetPixelIndex01 + c] * dx * (1 - dy) +
+                                               imageData[targetPixelIndex10 + c] * (1 - dx) * dy +
+                                               imageData[targetPixelIndex11 + c] * dx * dy;
 
                     imageData[pixelIndex + c] = static_cast<uint8_t>(interpolatedValue);
                 }
@@ -155,6 +146,7 @@ void eye::on_btn_save_clicked()
 
 void eye::on_btn_ok_clicked()
 {
+    qDebug()<<"click ok";
     if(ui->label_first->text()==nullptr||ui->label_second->text()==nullptr)
     {
         if(!function.CreateMessagebox("提示","还没成功获取两个坐标值"))
@@ -163,9 +155,27 @@ void eye::on_btn_ok_clicked()
         }
     }
     else{
-        qDebug()<<"click ok";
-        Eye(newValue.imageData,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(),firstX,firstY,eyeRadius,warpIntensity);
-        Eye(newValue.imageData,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(),secondX,secondY,eyeRadius,warpIntensity);
+        int num_threads = 4;
+        std::vector<std::thread> threads;
+        std::mutex mtx; // 用于线程同步
+
+        // 分段处理图像数据
+        std::vector<size_t> segmentStarts;
+        size_t segmentSize = myValue.bmpInfo.GetHeight() / num_threads;
+        for (int i = 0; i < num_threads; i++) {
+            size_t start = i * segmentSize;
+            size_t end = (i == num_threads - 1) ? myValue.bmpInfo.GetHeight() : start + segmentSize;
+            segmentStarts.push_back(start);
+            threads.emplace_back([&, start, end] {  // 使用 [&] 捕获列表
+                Eye(newValue.imageData, newValue.bmpInfo.GetWidth(), newValue.bmpInfo.GetHeight(), firstX, firstY, eyeRadius, warpIntensity, start, end);
+                Eye(newValue.imageData, newValue.bmpInfo.GetWidth(), newValue.bmpInfo.GetHeight(), secondX, secondY, eyeRadius, warpIntensity, start, end);
+                std::lock_guard<std::mutex> lock(mtx);
+            });
+        }
+
+        for (auto &thread : threads) {
+            thread.join();
+        }
         ShowImage(newValue.imageData);
     }
 }

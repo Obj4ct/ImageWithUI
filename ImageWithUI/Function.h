@@ -16,18 +16,18 @@ public:
     //create messagebox
     bool CreateMessagebox(QString title,QString message);
     //gray
-    void ConvertToGray(std::vector<uint8_t>& imageData,int start,int end);
-
+    void ConvertToGray(std::vector<uint8_t>& imageData,size_t start,size_t end);
+    uint32_t GetSum(const std::vector<uint8_t> &imageData);
     //自动对比度相关
     //平均值
     double CalAver(const std::vector<uint8_t> &imageData);
     //标准差 需要先计算出平均值
     double CalStandard(const std::vector<uint8_t> &imageData, double aver);
     //自动对比度
-    void AutoContrast(std::vector<uint8_t> &imageData);
+    void AutoContrast(std::vector<uint8_t> &imageData, float_t aver, float_t standard, size_t start, size_t end);
 
     //均值模糊
-    void AverageBlur(std::vector<uint8_t>& imageData, uint32_t width, uint32_t height);
+    void AverageBlur(std::vector<uint8_t>& imageData, uint32_t width, uint32_t height,size_t start,size_t end);
 
 
 
@@ -50,12 +50,12 @@ public:
     //色彩映射 (需要用到之前写的转为灰度图函数)
     void ColorMap(std::vector<uint8_t>& imageData, std::vector<uint8_t>& colorMap);
     //颜色反转
-    void InvertColors(std::vector<uint8_t>& imageData);
+    void InvertColors(std::vector<uint8_t>& imageData,size_t start,size_t end);
     //补色
-    void Complementary(std::vector<uint8_t>& imageData);
+    void Complementary(std::vector<uint8_t>& imageData,size_t start,size_t end);
 
     //鱼眼镜头
-    std::vector<uint8_t> Fisheye(const std::vector<uint8_t>& imageData, int32_t width, int32_t height);
+    void Fisheye(const std::vector<uint8_t> &imageData,std::promise<std::vector<uint8_t>>& result, int32_t width, int32_t height);
     //高斯模糊
     double Gaussian(double sigma, int x, int y);
     std::vector<uint8_t> Gauss(const std::vector<uint8_t> &imageData, int width, int height, double sigma);

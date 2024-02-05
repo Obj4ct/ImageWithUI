@@ -54,19 +54,8 @@ bool Function::CreateMessagebox(QString title,QString message)
     }
 }
 //to gray
-void Function::ConvertToGray(std::vector<uint8_t>& imageData,int start,int end)
+void Function::ConvertToGray(std::vector<uint8_t>& imageData,size_t start,size_t end)
 {
-//    for (size_t i = 0; i < imageData.size(); i += 3) {
-//        uint8_t r = imageData[i];
-//        uint8_t g = imageData[i + 1];
-//        uint8_t b = imageData[i + 2];
-//        // cal gray
-//        auto gray = static_cast<uint8_t>(0.299 * r + 0.587 * g + 0.114 * b);
-//        // gary to every chanel
-//        imageData[i] = gray;
-//        imageData[i + 1] = gray;
-//        imageData[i + 2] = gray;
-//    }
     for (int i = start; i < end; i += 3) {
          uint8_t gray = static_cast<uint8_t>(0.299 * imageData[i] + 0.587 * imageData[i + 1] + 0.114 * imageData[i + 2]);
          imageData[i] = gray;
@@ -75,72 +64,60 @@ void Function::ConvertToGray(std::vector<uint8_t>& imageData,int start,int end)
     }
 }
 
-
+uint32_t Function::GetSum(const std::vector<uint8_t> &imageData)
+{
+    return std::accumulate(imageData.begin(), imageData.end(), 0);
+}
 double Function::CalAver(const std::vector<uint8_t> &imageData)
 {
-    double sum = 0.0;
-    for (uint8_t pixel: imageData) {
-        sum += pixel;
-    }
+    uint32_t sum = GetSum(imageData);
     return sum / imageData.size();
 }
 
 double Function::CalStandard(const std::vector<uint8_t> &imageData, double aver)
 {
-    uint32_t tempSum = 0, sum = 0, variance;
-    for (int i = 0; i < imageData.size(); i++) {
-        sum += imageData[i];
+    float_t tempSum = 0.0;
+    for (uint8_t i : imageData) {
+        tempSum += (i - aver) * (i - aver);
     }
-    aver = sum / imageData.size();
-    for (int i = 0; i < imageData.size(); ++i) {
-        tempSum += ((imageData[i] - aver) * (imageData[i] - aver));
-
-    }
-    variance = tempSum / imageData.size();
-
-
+    float_t variance = tempSum / static_cast<float_t>(imageData.size());
+    return std::sqrt(variance);
     double_t standard = std::sqrt(variance);
     return standard;
 }
-void Function::AutoContrast(std::vector<uint8_t> &imageData)
+void Function::AutoContrast(std::vector<uint8_t> &imageData, float_t aver, float_t standard, size_t start, size_t end)
 {
-    double aver = CalAver(imageData);
-    double standard = CalStandard(imageData, aver);
-    //缩放因子 中间亮度值
-    double factor = 128.0 / standard;
+                                float_t factor = 128.0 / standard;
 
-    for (size_t i = 0; i < imageData.size(); i += 3) {
-
-        imageData[i] = std::max(0, std::min(255,
-                                            static_cast<int>(factor * (imageData[i] - aver) + 128)));
-        imageData[i + 1] = std::max(0, std::min(255,
-                                                static_cast<int>(factor * (imageData[i + 1] - aver) +
-                                                128)));
-        imageData[i + 2] = std::max(0, std::min(255,
-                                                static_cast<int>(factor * (imageData[i + 2] - aver) +
-                                                128)));
-    }
+                                    for (size_t i = start; i < end; i += 3) {
+                                        imageData[i] = std::max(0, std::min(255, static_cast<int32_t>(factor * (imageData[i] - aver) + 128)));
+                                        imageData[i + 1] = std::max(0, std::min(255, static_cast<int32_t>(factor * (imageData[i + 1] - aver) + 128)));
+                                        imageData[i + 2] = std::max(0, std::min(255, static_cast<int32_t>(factor * (imageData[i + 2] - aver) + 128)));
+                                    }
 }
 
-void Function::AverageBlur(std::vector<uint8_t> &imageData, uint32_t width, uint32_t height)
+void Function::AverageBlur(std::vector<uint8_t> &imageData, uint32_t width, uint32_t height,size_t start ,size_t end)
 {
-    std::vector<uint8_t> blurImage(imageData);
+    for (size_t i = start; i < end; i += 3) {
+        size_t y = i / (width * 3);
+        size_t x = (i / 3) % width;
+        size_t index = i;
 
-    for (uint32_t y = 1; y < height - 1; y++) {
-        for (uint32_t x = 1; x < width - 1; x++) {
-            uint32_t index = (y * width + x) * 3;
-            uint32_t left = imageData[index - 3];
-            uint32_t right = imageData[index + 3];
-            uint32_t up = imageData[index - width * 3];
-            uint32_t down = imageData[index + width * 3];
-            uint32_t mid = imageData[index];
-            uint32_t leftUp = imageData[index - width * 3 + 3];
-            uint32_t rightUp = imageData[index - width * 3 - 3];
-            uint32_t leftDown = imageData[index + width * 3 - 3];
-            uint32_t rightDown = imageData[index + width * 3 + 3];
-            auto averPix = (left + right + up + down + mid + leftUp + rightUp + leftDown + rightDown) / 9;
-            imageData[index] = static_cast<uint8_t>(averPix);
+        uint32_t sum = 0;
+        size_t count = 0;
+
+        for (int8_t dy = -1; dy <= 1; dy++) {
+            for (int8_t dx = -1; dx <= 1; dx++) {
+                if (y + dy >= 0 && y + dy < height && x + dx >= 0 && x + dx < width) {
+                    size_t neighborIndex = ((y + dy) * width + (x + dx)) * 3;
+                    sum += imageData[neighborIndex];
+                    count++;
+                }
+            }
         }
+
+        uint8_t averagePixel = static_cast<uint8_t>(sum / count);
+        imageData[index] = averagePixel;
     }
 }
 
@@ -347,30 +324,30 @@ void Function::ColorMap(std::vector<uint8_t> &imageData, std::vector<uint8_t> &c
     }
 
 }
-void Function::InvertColors(std::vector<uint8_t>& imageData) {
-    for (size_t i = 0; i < imageData.size(); i +=3) {
+void Function::InvertColors(std::vector<uint8_t>& imageData,size_t start,size_t end) {
+    for (int i = start; i < end; i += 3) {
         imageData[i] = 255 - imageData[i];
-        imageData[i + 1] = 255 - imageData[i+1];
-        imageData[i + 2] = 255 - imageData[i+2];
+        imageData[i + 1] = 255 - imageData[i + 1];
+        imageData[i + 2] = 255 - imageData[i + 2];
     }
 }
 
-void Function::Complementary(std::vector<uint8_t> &imageData)
+void Function::Complementary(std::vector<uint8_t> &imageData,size_t start,size_t end)
 {
-    for (size_t i = 0; i < imageData.size(); i += 3) {
-        size_t r=imageData[i];
-        size_t g=imageData[i+1];
-        size_t b=imageData[i+2];
-        size_t maxRgb=std::max(std::max(r,g),b);
-        size_t minRgb=std::min(std::min(r,g),b);
-        imageData[i]=maxRgb+minRgb-r;
-        imageData[i+1]=maxRgb+minRgb-g;
-        imageData[i+2]=maxRgb+minRgb-b;
+    for (size_t i = start; i < end; i += 3) {
+        size_t r = imageData[i];
+        size_t g = imageData[i + 1];
+        size_t b = imageData[i + 2];
+        size_t maxRgb = std::max(std::max(r, g), b);
+        size_t minRgb = std::min(std::min(r, g), b);
+        imageData[i] = maxRgb + minRgb - r;
+        imageData[i + 1] = maxRgb + minRgb - g;
+        imageData[i + 2] = maxRgb + minRgb - b;
     }
 }
 
 
-std::vector<uint8_t> Function::Fisheye(const std::vector<uint8_t> &imageData, int32_t width, int32_t height)
+void Function::Fisheye(const std::vector<uint8_t> &imageData,std::promise<std::vector<uint8_t>>& result, int32_t width, int32_t height)
 {
     // 首先确定图像的中心点坐标，以及最大半径
     int32_t centerX = width / 2;
@@ -378,30 +355,30 @@ std::vector<uint8_t> Function::Fisheye(const std::vector<uint8_t> &imageData, in
     int32_t maxRadius = std::min(centerX, centerY);
 
     std::vector<uint8_t> fisheyeImage(width * height * 3);
-    //遍历每个像素，计算像素到图像中心的距离，并检查是否小于最大半径，以确保像素位于鱼眼效果的范围内。
+    // 遍历每个像素，计算像素到图像中心的距离，并检查是否小于最大半径，以确保像素位于鱼眼效果的范围内。
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
             int32_t offsetX = x - centerX;
             int32_t offsetY = y - centerY;
             float distance = std::sqrt(static_cast<float>(offsetX * offsetX + offsetY * offsetY));
-            //小于=应用鱼眼
+            // 小于=应用鱼眼
             if (distance < maxRadius) {
-
-                //当前像素相对于图像中心点的极坐标角度
+                // 当前像素相对于图像中心点的极坐标角度
                 float angle = std::atan2(static_cast<float>(offsetY), static_cast<float>(offsetX));
-                //用于计算每个像素的新半径
+                // 用于计算每个像素的新半径
                 float normalizedRadius = distance / maxRadius;
-                //进行非线性变换
+                // 进行非线性变换
                 float mappedRadius = normalizedRadius * normalizedRadius;
 
-                //极坐标变换
+                // 极坐标变换
                 int32_t newX = static_cast<int32_t>(centerX + maxRadius * mappedRadius * std::cos(angle));
                 int32_t newY = static_cast<int32_t>(centerY + maxRadius * mappedRadius * std::sin(angle));
 
                 for (int channel = 0; channel < 3; ++channel) {
                     fisheyeImage[(y * width + x) * 3 + channel] = imageData[(newY * width + newX) * 3 + channel];
                 }
-            } else {
+            }
+            else {
                 // 超出范围保持原始颜色
                 for (int channel = 0; channel < 3; ++channel) {
                     fisheyeImage[(y * width + x) * 3 + channel] = 0;
@@ -410,7 +387,7 @@ std::vector<uint8_t> Function::Fisheye(const std::vector<uint8_t> &imageData, in
         }
     }
 
-    return fisheyeImage;
+    result.set_value(fisheyeImage);
 }
 
 double Function::Gaussian(double sigma, int x, int y)
@@ -469,48 +446,35 @@ std::vector<uint8_t> Function::HighContrast(const std::vector<uint8_t> &imageDat
 void Function::RotateImage(std::vector<uint8_t> &imageData, int32_t width, int32_t height, double_t angle)
 {
     double_t radians = angle * M_PI / 180.0;
-    std::vector<uint8_t> rotatedImageData(imageData.size());
+     std::vector<uint8_t> rotatedImageData(width * height * 3);
 
-    int32_t centerX = width / 2;
-    int32_t centerY = height / 2;
 
-    int32_t rotatedWidth = width;
-    int32_t rotatedHeight = height;
+     int32_t centerX =  width / 2;
+     int32_t centerY =  height / 2;
 
-    for (int y = 0; y < rotatedHeight; ++y)
-    {
-        for (int x = 0; x < rotatedWidth; ++x)
-        {
-            // 计算旋转后的坐标
-            double_t rotatedX = std::cos(radians) * (x - centerX) - std::sin(radians) * (y - centerY) + centerX;
-            double_t rotatedY = std::sin(radians) * (x - centerX) + std::cos(radians) * (y - centerY) + centerY;
+     for (int y = 0; y < height; ++y) {
+         for (int x = 0; x < width; ++x) {
+             double_t rotatedX = std::cos(radians) * (x - centerX) -
+                               std::sin(radians) * (y - centerY) + centerX;
+             double_t rotatedY = std::sin(radians) * (x - centerX) +
+                               std::cos(radians) * (y - centerY) + centerY;
 
-            // 防止插值过程中超出边界
-            rotatedX = std::max(0.0, std::min(rotatedX, static_cast<double>(width - 1)));
-            rotatedY = std::max(0.0, std::min(rotatedY, static_cast<double>(height - 1)));
+             if (rotatedX >= 0 && rotatedX < width && rotatedY >= 0 && rotatedY < height)
+             {
+                 int originalIndex = static_cast<int>(std::round(rotatedY)) * width * 3 +
+                                     static_cast<int>(std::round(rotatedX)) * 3;
+                 int newIndex = y * width * 3 + x * 3;
+                 rotatedImageData[newIndex] = imageData[originalIndex];
+                 rotatedImageData[newIndex + 1] = imageData[originalIndex + 1];
+                 rotatedImageData[newIndex + 2] = imageData[originalIndex + 2];
 
-            // 双线性插值
-            int x0 = std::floor(rotatedX);
-            int x1 = std::ceil(rotatedX);
-            int y0 = std::floor(rotatedY);
-            int y1 = std::ceil(rotatedY);
-
-            double tx = rotatedX - x0;
-            double ty = rotatedY - y0;
-
-            for (int c = 0; c < 3; ++c)
-            {
-                double interpolatedValue = (1 - tx) * (1 - ty) * imageData[y0 * width * 3 + x0 * 3 + c] +
-                        tx * (1 - ty) * imageData[y0 * width * 3 + x1 * 3 + c] +
-                        (1 - tx) * ty * imageData[y1 * width * 3 + x0 * 3 + c] +
-                        tx * ty * imageData[y1 * width * 3 + x1 * 3 + c];
-
-                rotatedImageData[y * rotatedWidth * 3 + x * 3 + c] = static_cast<uint8_t>(interpolatedValue);
-            }
+             }
         }
-    }
+     }
 
-    imageData = rotatedImageData;
+
+     imageData = rotatedImageData;
+
 }
 
 

@@ -46,7 +46,7 @@ private:
     double warpIntensity = 5;
 private:
     void Eye(std::vector<uint8_t> &imageData, int32_t width, int32_t height,
-             int32_t centerX, int32_t centerY, int32_t radius, double intensity);
+             int32_t centerX, int32_t centerY, int32_t radius, double intensity,size_t startRow,size_t endRow);
     void ShowImage(std::vector<uint8_t>&inImageData);
     void ResetImage();
 };

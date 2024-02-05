@@ -19,4 +19,5 @@
 #include <numeric>
 #include <iomanip>
 #include <list>
+#include <functional>
 #endif // STDCPP_H
