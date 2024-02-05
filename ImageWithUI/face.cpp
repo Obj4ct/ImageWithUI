@@ -57,7 +57,7 @@ void Face::on_btn_ok_clicked()
     QString inputText= ui->lineEdit_radius->text(); // 获取输入的文本
     bool isNumeric;
     double_t value = inputText.toDouble(&isNumeric);
-    if(ui->label_first->text()==nullptr)
+    if(ui->label_first->text()==nullptr||faceCenterX==0||faceCenterY==0)
     {
         if(!function.CreateMessagebox("提示","还没成功获取两个坐标值"))
         {

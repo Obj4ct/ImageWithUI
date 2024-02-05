@@ -147,7 +147,7 @@ void eye::on_btn_save_clicked()
 void eye::on_btn_ok_clicked()
 {
     qDebug()<<"click ok";
-    if(ui->label_first->text()==nullptr||ui->label_second->text()==nullptr)
+    if(ui->label_first->text()==nullptr||ui->label_second->text()==nullptr||firstX==0||firstY==0||secondX==0||secondY==0)
     {
         if(!function.CreateMessagebox("提示","还没成功获取两个坐标值"))
         {

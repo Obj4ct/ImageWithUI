@@ -597,7 +597,10 @@ void MainWindow::on_btn_rotate_ok_clicked()
         {
             tempImageData = imageDataHistory.back(); // 复制当前图像数据
         }
-        function.RotateImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(), returnValue.value);
+        auto func = std::bind(&Function::RotateImage, &function, std::ref(tempImageData), std::placeholders::_1, std::placeholders::_2,std::placeholders::_3);
+        std::thread rotateThread(func, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(), returnValue.value);
+
+        rotateThread.join();
         SaveImageDataToHistory(tempImageData);// 保存当前图像数据到链表
         ShowImage(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
 
@@ -625,7 +628,9 @@ void MainWindow::on_btn_rotate_r_clicked()
         {
             tempImageData = imageDataHistory.back(); // 复制当前图像数据
         }
-        function.RotateReverse(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(), returnValue.value);
+        auto func = std::bind(&Function::RotateReverse, &function, std::ref(tempImageData), std::placeholders::_1, std::placeholders::_2,std::placeholders::_3);
+        std::thread rotateThread(func, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(), returnValue.value);
+        rotateThread.join();
         SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
         ShowImage(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
 

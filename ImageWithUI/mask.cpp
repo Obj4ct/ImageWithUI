@@ -112,9 +112,10 @@ void Mask::on_btn_ok_clicked()
     QString inputText= ui->lineEdit_radius->text(); // 获取输入的文本
     bool isNumeric;
     double_t value = inputText.toDouble(&isNumeric);
-    if(ui->label_firstPos->text()==nullptr||ui->label_secondPos->text()==nullptr)
+    if(ui->label_firstPos->text()==nullptr||ui->label_secondPos->text()==nullptr||firstX==0||firstY==0||secondX==0||secondY==0)
     {
-        if(!function.CreateMessagebox("提示","还没成功获取两个坐标值"))
+        qDebug()<<"not ok";
+        if(!function.CreateMessagebox("提示","还没成功获取坐标值"))
         {
             return;
         }
