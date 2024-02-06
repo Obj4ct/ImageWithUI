@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1399</width>
+    <width>1421</width>
     <height>801</height>
    </rect>
   </property>
@@ -62,9 +62,16 @@
        <widget class="QWidget" name="widget_11" native="true">
         <layout class="QVBoxLayout" name="verticalLayout_4">
          <item>
-          <widget class="QPushButton" name="btn_gray">
+          <widget class="QPushButton" name="btn_averBlur">
            <property name="text">
-            <string>转为灰度图</string>
+            <string>均值模糊</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btn_medianBlur">
+           <property name="text">
+            <string>中值模糊</string>
            </property>
           </widget>
          </item>
@@ -76,13 +83,6 @@
           </widget>
          </item>
          <item>
-          <widget class="QPushButton" name="btn_colorMap">
-           <property name="text">
-            <string>色彩映射</string>
-           </property>
-          </widget>
-         </item>
-         <item>
           <widget class="QPushButton" name="btn_mask">
            <property name="text">
             <string>局部磨皮</string>
@@ -90,23 +90,9 @@
           </widget>
          </item>
          <item>
-          <widget class="QPushButton" name="btn_averBlur">
-           <property name="text">
-            <string>均值模糊</string>
-           </property>
-          </widget>
-         </item>
-         <item>
           <widget class="QPushButton" name="btn_mosaic">
            <property name="text">
             <string>马赛克</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="btn_inter">
-           <property name="text">
-            <string>插值</string>
            </property>
           </widget>
          </item>
@@ -138,6 +124,20 @@
        <widget class="QWidget" name="widget_12" native="true">
         <layout class="QVBoxLayout" name="verticalLayout_5">
          <item>
+          <widget class="QPushButton" name="btn_gray">
+           <property name="text">
+            <string>转为灰度图</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btn_colorMap">
+           <property name="text">
+            <string>色彩映射</string>
+           </property>
+          </widget>
+         </item>
+         <item>
           <widget class="QPushButton" name="btn_autoContrast">
            <property name="text">
             <string>自动调整对比度</string>
@@ -166,9 +166,9 @@
           </widget>
          </item>
          <item>
-          <widget class="QPushButton" name="btn_sharpen">
+          <widget class="QPushButton" name="btn_inter">
            <property name="text">
-            <string>一键锐化</string>
+            <string>插值</string>
            </property>
           </widget>
          </item>
@@ -183,13 +183,6 @@
           <widget class="QPushButton" name="btn_face">
            <property name="text">
             <string>图像微调</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="btn_medianBlur">
-           <property name="text">
-            <string>中值模糊</string>
            </property>
           </widget>
          </item>
@@ -541,6 +534,48 @@
       </item>
      </layout>
     </widget>
+    <widget class="QWidget" name="widget_26" native="true">
+     <property name="geometry">
+      <rect>
+       <x>380</x>
+       <y>30</y>
+       <width>181</width>
+       <height>141</height>
+      </rect>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_14">
+      <item>
+       <widget class="QLabel" name="label_35">
+        <property name="text">
+         <string>锐化</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QWidget" name="widget_27" native="true">
+        <layout class="QHBoxLayout" name="horizontalLayout_15">
+         <item>
+          <widget class="QLabel" name="label_36">
+           <property name="text">
+            <string>锐化程度</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLineEdit" name="lineEdit_sharpen"/>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_sharpen">
+        <property name="text">
+         <string>确定</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
    </widget>
    <widget class="QWidget" name="widget_operation" native="true">
     <property name="geometry">
@@ -598,7 +633,7 @@ image: url(:/icon/reset.png);</string>
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1399</width>
+     <width>1421</width>
      <height>25</height>
     </rect>
    </property>

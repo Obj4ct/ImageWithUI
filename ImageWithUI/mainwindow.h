@@ -10,6 +10,7 @@
 #include "tailor.h"
 #include "interpolation.h"
 #include "face.h"
+#include "colormap.h"
 struct ReturnValue{
     bool isNull;
     bool isNumeric;

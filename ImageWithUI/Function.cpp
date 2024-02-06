@@ -1,16 +1,4 @@
 #include "Function.h"
-// 映射表 随便写几个
-std::vector<uint8_t> colorMap = {
-    100, 10, 200,
-    255, 100, 190,
-    100, 200, 190,
-    105, 0, 255,
-    100, 200, 0,
-    255, 0, 255,
-    0, 150, 5
-};
-
-
 // 定义结构体表示像素
 //先定义一个结构体来表示图像中的像素，包括红、绿和蓝三个通道的值
 struct Pixel {
@@ -307,23 +295,7 @@ void Function::ColorBalance(std::vector<uint8_t> &imageData, int32_t width, int3
     }
 }
 
-void Function::ColorMap(std::vector<uint8_t> &imageData, std::vector<uint8_t> &colorMap)
-{
-    //计算颜色映射表中颜色的数量,3表示channel
-    int numColors = colorMap.size()/3;
-    //转灰度图先
-    //ConvertToGray(imageData);
-    for (size_t i = 0; i < imageData.size(); i += 3) {
-        uint8_t gray = imageData[i];
-        //先归一化然后执行 乘法
-        int index = static_cast<int>(static_cast<float>(gray) / 255.0f * (numColors - 1));
 
-        imageData[i] = colorMap[index * 3];
-        imageData[i + 1] = colorMap[index * 3 + 1];
-        imageData[i + 2] = colorMap[index * 3 + 2];
-    }
-
-}
 void Function::InvertColors(std::vector<uint8_t>& imageData,size_t start,size_t end) {
     for (int i = start; i < end; i += 3) {
         imageData[i] = 255 - imageData[i];
@@ -533,17 +505,16 @@ void Function::HighLight(std::vector<uint8_t> &imageData, std::vector<uint8_t> &
     }
 }
 
-std::vector<uint8_t> Function::Sharpen(const std::vector<uint8_t> &imageData, const std::vector<uint8_t> &highContrastImageData)
+void Function::Sharpen(const std::vector<uint8_t> &imageData, std::promise<std::vector<uint8_t>> &result,const std::vector<uint8_t> &highContrastImageData)
 {
     std::vector<uint8_t> sharpenImageData(imageData.size());
 
     for (size_t i = 0; i < imageData.size(); i++) {
         int addValue = static_cast<int>(imageData[i]) + static_cast<int>(highContrastImageData[i]);
-        sharpenImageData[i] = static_cast<uint8_t>(std::max(std::min(addValue-175, 255), 0));
-
+        sharpenImageData[i] = static_cast<uint8_t>(std::max(std::min(addValue - 170, 255), 0));
     }
 
-    return sharpenImageData;
+    result.set_value(sharpenImageData);
 }
 
 std::vector<uint8_t> Function::SobelEdge(const std::vector<uint8_t> &imageData, int width, int height)

@@ -77,7 +77,7 @@ public:
 
     //图像锐化
 
-    std::vector<uint8_t> Sharpen(const std::vector<uint8_t> &imageData, const std::vector<uint8_t> &highContrastImageData);
+    void Sharpen(const std::vector<uint8_t> &imageData,std::promise<std::vector<uint8_t>> &result, const std::vector<uint8_t> &highContrastImageData);
 
     //边缘检测
     std::vector<uint8_t> SobelEdge(const std::vector<uint8_t>& imageData, int width, int height);

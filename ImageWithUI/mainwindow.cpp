@@ -409,15 +409,9 @@ void MainWindow::on_btn_color_balance_clicked()
 }
 void MainWindow::on_btn_colorMap_clicked()
 {
-    std::vector<uint8_t> tempImageData=imageData;
-    if(!imageDataHistory.empty())
-    {
-        tempImageData = imageDataHistory.back(); // 复制当前图像数据
-    }
-    function.ColorMap(tempImageData,colorMap);
-
-    SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
-    ShowImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+    qDebug() << "I am in a color map window!";
+    ColorMap *colorMap= new ColorMap(this,myValue);
+    colorMap->show();
 }
 
 
@@ -789,21 +783,51 @@ void MainWindow::on_btn_highlight_ok_clicked()
 
 void MainWindow::on_btn_sharpen_clicked()
 {
-    //    std::vector<uint8_t> tempImageData=imageData;
-    //    if(!imageDataHistory.empty())
-    //    {
-    //        tempImageData = imageDataHistory.back(); // 复制当前图像数据
-    //    }
-    //    std::vector<uint8_t> blurImageData = function.Gauss(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),10);
-    //    std::vector<uint8_t> highContrast = function.HighContrast(tempImageData, blurImageData);
-    //    std::vector<uint8_t> sharpenImageData = function.Sharpen(tempImageData, highContrast);
+    qDebug()<<"ok";
+    ReturnValue returnValue=CheckOK(ui->lineEdit_sharpen);
 
-    //    SaveImageDataToHistory(sharpenImageData); // 保存当前图像数据到链表
+    if(returnValue.isNull==true)
+    {
+        if(!function.CreateMessagebox("提示","请输入"))
+            return;
+    }else if(returnValue.isNumeric==false){
+        if(!function.CreateMessagebox("提示","输入数字"))
+            return;
+    }
+    else{
+    std::vector<uint8_t> tempImageData=imageData;
+    if(!imageDataHistory.empty())
+    {
+        tempImageData = imageDataHistory.back(); // 复制当前图像数据
+    }
+    std::promise<std::vector<uint8_t>> blurPromise;
+    std::promise<std::vector<uint8_t>> highPromise;
+    std::promise<std::vector<uint8_t>> sharpenPromise;
 
-    //    ShowImage(sharpenImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+
+    std::future<std::vector<uint8_t>> blurValue=blurPromise.get_future();
+    std::future<std::vector<uint8_t>> highValue=highPromise.get_future();
+    std::future<std::vector<uint8_t>> sharpenValue=sharpenPromise.get_future();
+    auto gaussFunc = std::bind(&Function::Gauss, &function, std::ref(tempImageData), std::placeholders::_1, std::placeholders::_2,std::placeholders::_3,std::placeholders::_4);
+    auto highContrastFunc = std::bind(&Function::HighContrast, &function, std::ref(tempImageData), std::placeholders::_1, std::placeholders::_2);
+    auto sharpenFunc = std::bind(&Function::Sharpen, &function, std::ref(tempImageData), std::placeholders::_1, std::placeholders::_2);
 
 
+    std::thread gauss(gaussFunc,std::ref(blurPromise),myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),returnValue.value);
+    std::vector<uint8_t> gaussValue = blurValue.get();
+    gauss.join();
+    std::thread highContrast(highContrastFunc, std::ref(highPromise), std::ref(gaussValue));
+    std::vector<uint8_t> highContrastValue = highValue.get();
+    highContrast.join();
 
+    std::thread sharpen(sharpenFunc, std::ref(sharpenPromise), std::ref(highContrastValue));
+    std::vector<uint8_t> finalResult = sharpenValue.get();
+    sharpen.join();
+
+    SaveImageDataToHistory(finalResult); // 保存当前图像数据到链表
+
+    ShowImage(finalResult,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+    }
 }
 
 

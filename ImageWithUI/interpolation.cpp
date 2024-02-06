@@ -44,25 +44,25 @@ std::vector<uint8_t> Interpolation::LargeImage_Nearest(const std::vector<uint8_t
 {
     std::vector<uint8_t> resizedImage(newHeight * newWidth * 3);
 
-    // 放大因子
-    double scaleX = static_cast<double>(newWidth) / width;
-    double scaleY = static_cast<double>(newHeight) / height;
+       // 放大因子
+       double scaleX = static_cast<double>(newWidth) / width;
+       double scaleY = static_cast<double>(newHeight) / height;
 
-    for (int32_t y = 0; y < newHeight; y++) {
-        for (int32_t x = 0; x < newWidth; x++) {
-            // 原图坐标
-            auto srcX = static_cast<int32_t>(x / scaleX);
-            auto srcY = static_cast<int32_t>(y / scaleY);
-            int32_t srcIndex = (srcY * width + srcX) * 3;
-            int32_t destIndex = (y * newWidth + x) * 3;
-            // 复制到目标
-            resizedImage[destIndex] = imageData[srcIndex];
-            resizedImage[destIndex + 1] = imageData[srcIndex + 1];
-            resizedImage[destIndex + 2] = imageData[srcIndex + 2];
-        }
-    }
+       for (int32_t y = 0; y < newHeight; y++) {
+           for (int32_t x = 0; x < newWidth; x++) {
+               // 原图坐标
+               auto srcX = static_cast<int32_t>(x / scaleX);
+               auto srcY = static_cast<int32_t>(y / scaleY);
+               int32_t srcIndex = (srcY * width + srcX) * 3;
+               int32_t destIndex = (y * newWidth + x) * 3;
+               // 复制到目标
+               resizedImage[destIndex] = imageData[srcIndex];
+               resizedImage[destIndex + 1] = imageData[srcIndex + 1];
+               resizedImage[destIndex + 2] = imageData[srcIndex + 2];
+           }
+       }
 
-    return resizedImage;
+       return resizedImage;
 }
 
 
@@ -204,10 +204,10 @@ std::vector<uint8_t> Interpolation::SmallImage_Bilinear(const std::vector<uint8_
             auto srcX = x * scaleX;
             auto srcY = y * scaleY;
             // 计算最近的像素点坐标
-//            auto x1 = static_cast<int32_t>(srcX);
-//            auto x2 = static_cast<int32_t>(x1 + 1);
-//            auto y1 = static_cast<int32_t>(srcY);
-//            auto y2 = static_cast<int32_t>(y1 + 1);
+            //            auto x1 = static_cast<int32_t>(srcX);
+            //            auto x2 = static_cast<int32_t>(x1 + 1);
+            //            auto y1 = static_cast<int32_t>(srcY);
+            //            auto y2 = static_cast<int32_t>(y1 + 1);
             auto x1 = std::max(0, std::min(static_cast<int32_t>(srcX), width - 1));
             auto x2 = std::max(0, std::min(static_cast<int32_t>(x1 + 1), width - 1));
             auto y1 = std::max(0, std::min(static_cast<int32_t>(srcY), height - 1));
@@ -243,46 +243,46 @@ std::vector<uint8_t> Interpolation::LargeImage_Bilinear(const std::vector<uint8_
 {
     std::vector<uint8_t> resizedImage(newWidth * newHeight * 3);
 
-     // 计算放大因子
-     double scaleX = static_cast<double>(newWidth) / width;
-     double scaleY = static_cast<double>(newHeight) / height;
-     for (int32_t y = 0; y < newHeight; y++)
-     {
-         for (int32_t x = 0; x < newWidth; x++)
-         {
-             // 原图坐标
-             auto srcX = x / scaleX;
-             auto srcY = y / scaleY;
-             // 计算最近的像素点坐标
-             auto x1 = std::max(0, std::min(static_cast<int32_t>(srcX), width - 1));
-             auto x2 = std::max(0, std::min(static_cast<int32_t>(x1 + 1), width - 1));
-             auto y1 = std::max(0, std::min(static_cast<int32_t>(srcY), height - 1));
-             auto y2 = std::max(0, std::min(static_cast<int32_t>(y1 + 1), height - 1));
+    // 计算放大因子
+    double scaleX = static_cast<double>(newWidth) / width;
+    double scaleY = static_cast<double>(newHeight) / height;
+    for (int32_t y = 0; y < newHeight; y++)
+    {
+        for (int32_t x = 0; x < newWidth; x++)
+        {
+            // 原图坐标
+            auto srcX = x / scaleX;
+            auto srcY = y / scaleY;
+            // 计算最近的像素点坐标
+            auto x1 = std::max(0, std::min(static_cast<int32_t>(srcX), width - 1));
+            auto x2 = std::max(0, std::min(static_cast<int32_t>(x1 + 1), width - 1));
+            auto y1 = std::max(0, std::min(static_cast<int32_t>(srcY), height - 1));
+            auto y2 = std::max(0, std::min(static_cast<int32_t>(y1 + 1), height - 1));
 
-             // 权重?
-             auto tx = srcX - x1;
-             auto ty = srcY - y1;
-             auto w1 = (1.0 - tx) * (1.0 - ty);
-             auto w2 = tx * (1.0 - ty);
-             auto w3 = (1.0 - tx) * ty;
-             auto w4 = tx * ty;
-             // 新像素值
-             int32_t destIndex = (y * newWidth + x) * 3;
-             int32_t srcIndex1 = (y1 * width + x1) * 3;
-             int32_t srcIndex2 = (y1 * width + x2) * 3;
-             int32_t srcIndex3 = (y2 * width + x1) * 3;
-             int32_t srcIndex4 = (y2 * width + x2) * 3;
-             for (int32_t channel = 0; channel < 3; channel++)
-             {
-                 resizedImage[destIndex + channel] = static_cast<uint8_t>(
-                     w1 * imageData[srcIndex1 + channel] +
-                     w2 * imageData[srcIndex2 + channel] +
-                     w3 * imageData[srcIndex3 + channel] +
-                     w4 * imageData[srcIndex4 + channel]);
-             }
-         }
-     }
-     return resizedImage;
+            // 权重?
+            auto tx = srcX - x1;
+            auto ty = srcY - y1;
+            auto w1 = (1.0 - tx) * (1.0 - ty);
+            auto w2 = tx * (1.0 - ty);
+            auto w3 = (1.0 - tx) * ty;
+            auto w4 = tx * ty;
+            // 新像素值
+            int32_t destIndex = (y * newWidth + x) * 3;
+            int32_t srcIndex1 = (y1 * width + x1) * 3;
+            int32_t srcIndex2 = (y1 * width + x2) * 3;
+            int32_t srcIndex3 = (y2 * width + x1) * 3;
+            int32_t srcIndex4 = (y2 * width + x2) * 3;
+            for (int32_t channel = 0; channel < 3; channel++)
+            {
+                resizedImage[destIndex + channel] = static_cast<uint8_t>(
+                            w1 * imageData[srcIndex1 + channel] +
+                        w2 * imageData[srcIndex2 + channel] +
+                        w3 * imageData[srcIndex3 + channel] +
+                        w4 * imageData[srcIndex4 + channel]);
+            }
+        }
+    }
+    return resizedImage;
 }
 
 float Interpolation::cubicWeight(float t)
@@ -324,14 +324,10 @@ void Interpolation::on_btn_large_nearest_clicked()
     }
     else{
 
-        std::thread threadLarge([&]() {
-                std::vector<uint8_t> largeImageData = LargeImage_Nearest(nearestImageData, newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(),newValue.bmpInfo.GetWidth()*returnValueWidth.value,newValue.bmpInfo.GetHeight()*returnValueHeight.value);
-                ShowImage(largeImageData, newValue.bmpInfo.GetWidth() * returnValueWidth.value, newValue.bmpInfo.GetHeight() * returnValueHeight.value);
 
-            });
-        threadLarge.join();
-        //std::vector<uint8_t> largeImageData=LargeImage_Nearest(nearestImageData,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(),newValue.bmpInfo.GetWidth()*returnValueWidth.value,newValue.bmpInfo.GetHeight()*returnValueHeight.value);
-
+        std::vector<uint8_t> largeImageData=LargeImage_Nearest(nearestImageData,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(),newValue.bmpInfo.GetWidth()*returnValueWidth.value,newValue.bmpInfo.GetHeight()*returnValueHeight.value);
+        ShowImage(largeImageData, newValue.bmpInfo.GetWidth() * returnValueWidth.value, newValue.bmpInfo.GetHeight() * returnValueHeight.value);
+        qDebug()<<"ok";
     }
 }
 
