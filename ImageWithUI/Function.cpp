@@ -431,15 +431,15 @@ void Function::Gauss(const std::vector<uint8_t> &imageData, std::promise<std::ve
     result.set_value(blurImageData);
 }
 
-std::vector<uint8_t> Function::HighContrast(const std::vector<uint8_t> &imageData, const std::vector<uint8_t> &blurImageData)
+void Function::HighContrast(const std::vector<uint8_t> &imageData,std::promise<std::vector<uint8_t>> &result,const std::vector<uint8_t> &blurImageData)
 {
     std::vector<uint8_t> highContrastImageData(imageData.size());
     for (size_t i = 0; i < imageData.size(); i++) {
-        int between = static_cast<int>(imageData[i]) - static_cast<int>(blurImageData[i]);
-        highContrastImageData[i] = static_cast<uint8_t>(between + 128); // 调整到 0-255 范围
+        uint32_t between = static_cast<uint32_t>(imageData[i]) - static_cast<uint32_t>(blurImageData[i]);
+        highContrastImageData[i] = static_cast<uint8_t>(between + 128);  // 调整到 0-255 范围
     }
 
-    return highContrastImageData;
+    result.set_value(highContrastImageData);
 }
 
 void Function::RotateImage(std::vector<uint8_t> &imageData, int32_t width, int32_t height, double_t angle)

@@ -324,7 +324,11 @@ void MainWindow::on_btn_brightness_clicked()
         {
             tempImageData = imageDataHistory.back(); // 复制当前图像数据
         }
-        function.Brightness(tempImageData,returnValue.value);
+
+        auto func = std::bind(&Function::Brightness, &function, std::ref(tempImageData), std::placeholders::_1);
+        std::thread brightThread(func, returnValue.value);
+        brightThread.join();
+        //function.Brightness(tempImageData,returnValue.value);
         SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
         ShowImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
     }
@@ -350,8 +354,10 @@ void MainWindow::on_btn_contrast_clicked()
         {
             tempImageData = imageDataHistory.back(); // 复制当前图像数据
         }
-
-        function.Contrast(tempImageData,returnValue.value);
+        auto func = std::bind(&Function::Contrast, &function, std::ref(tempImageData), std::placeholders::_1);
+        std::thread constrastThread(func,returnValue.value);
+        //function.Contrast(tempImageData,returnValue.value);
+        constrastThread.join();
         SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
         ShowImage(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
     }
@@ -376,7 +382,11 @@ void MainWindow::on_btn_saturation_clicked()
         {
             tempImageData = imageDataHistory.back(); // 复制当前图像数据
         }
-        function.Saturation(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),returnValue.value);
+
+        auto func = std::bind(&Function::Saturation, &function, std::ref(tempImageData), std::placeholders::_1,std::placeholders::_2,std::placeholders::_3);
+        std::thread saturationThread(func,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),returnValue.value);
+        saturationThread.join();
+        //        function.Saturation(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),returnValue.value);
         SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
         ShowImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
     }
@@ -561,31 +571,52 @@ void MainWindow::on_btn_gauss_ok_clicked()
 
 void MainWindow::on_btn_highContrast_ok_clicked()
 {
-//    qDebug()<<"hello";
-//    //正确输入数字
-//    ReturnValue returnValue=CheckOK(ui->lineEdit_highContrast);
+    qDebug()<<"hello";
+    //正确输入数字
+    ReturnValue returnValue=CheckOK(ui->lineEdit_highContrast);
 
-//    if(returnValue.isNull==true)
-//    {
-//        if(!function.CreateMessagebox("提示","请输入"))
-//            return;
-//    }else if(returnValue.isNumeric==false){
-//        if(!function.CreateMessagebox("提示","输入数字"))
-//            return;
-//    }else{
+    if(returnValue.isNull==true)
+    {
+        if(!function.CreateMessagebox("提示","请输入"))
+            return;
+    }else if(returnValue.isNumeric==false){
+        if(!function.CreateMessagebox("提示","输入数字"))
+            return;
+    }else{
 
-//        std::vector<uint8_t> tempImageData=imageData;
-//        if(!imageDataHistory.empty())
-//        {
-//            tempImageData = imageDataHistory.back(); // 复制当前图像数据
-//        }
-//        std::vector<uint8_t> ImageData=function.Gauss(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),returnValue.value);
+        std::vector<uint8_t> tempImageData=imageData;
+        if(!imageDataHistory.empty())
+        {
+            tempImageData = imageDataHistory.back(); // 复制当前图像数据
+        }
 
-//        std::vector<uint8_t> blurImageData = function.Gauss(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),returnValue.value);
-//        std::vector<uint8_t> highContrastImageData = function.HighContrast(tempImageData, blurImageData);
-//        SaveImageDataToHistory(highContrastImageData); // 保存当前图像数据到链表
-//        ShowImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
-//    }
+
+
+        std::promise<std::vector<uint8_t>> gaussPromise;
+        std::promise<std::vector<uint8_t>> highContrastPromise;
+
+        std::future<std::vector<uint8_t>> gaussFuture = gaussPromise.get_future();
+        std::future<std::vector<uint8_t>> highContrastFuture = highContrastPromise.get_future();
+
+        // 使用 std::bind 调用成员函数
+        auto gaussFunc = std::bind(&Function::Gauss, &function, std::ref(tempImageData), std::ref(gaussPromise), std::placeholders::_1, std::placeholders::_2,std::placeholders::_3);
+
+        auto highContrastFunc = std::bind(&Function::HighContrast, &function, std::ref(tempImageData), std::ref(highContrastPromise), std::placeholders::_1);
+
+
+
+        std::thread gaussThread(gaussFunc,myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),returnValue.value);
+
+        // 等待异步任务完成并获取值
+        std::vector<uint8_t> gaussValue = gaussFuture.get();
+        gaussThread.join();
+
+        std::thread highContrastThread(highContrastFunc, std::ref(gaussValue));
+        std::vector<uint8_t> value = highContrastFuture.get();
+        highContrastThread.join();
+        SaveImageDataToHistory(value); // 保存当前图像数据到链表
+        ShowImage(value, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+    }
 
 }
 
@@ -710,7 +741,7 @@ void MainWindow::on_btn_shadow_ok_clicked()
             tempImageData = imageDataHistory.back(); // 复制当前图像数据
         }
 
-            auto func = std::bind(&Function::MakeShadow, &function, std::ref(tempImageData),std::ref(shadowImageData), std::placeholders::_1);
+        auto func = std::bind(&Function::MakeShadow, &function, std::ref(tempImageData),std::ref(shadowImageData), std::placeholders::_1);
         std::thread tMakeShadow(func, std::ref(returnValue.value));
 
         tMakeShadow.join();
@@ -758,18 +789,18 @@ void MainWindow::on_btn_highlight_ok_clicked()
 
 void MainWindow::on_btn_sharpen_clicked()
 {
-//    std::vector<uint8_t> tempImageData=imageData;
-//    if(!imageDataHistory.empty())
-//    {
-//        tempImageData = imageDataHistory.back(); // 复制当前图像数据
-//    }
-//    std::vector<uint8_t> blurImageData = function.Gauss(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),10);
-//    std::vector<uint8_t> highContrast = function.HighContrast(tempImageData, blurImageData);
-//    std::vector<uint8_t> sharpenImageData = function.Sharpen(tempImageData, highContrast);
+    //    std::vector<uint8_t> tempImageData=imageData;
+    //    if(!imageDataHistory.empty())
+    //    {
+    //        tempImageData = imageDataHistory.back(); // 复制当前图像数据
+    //    }
+    //    std::vector<uint8_t> blurImageData = function.Gauss(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),10);
+    //    std::vector<uint8_t> highContrast = function.HighContrast(tempImageData, blurImageData);
+    //    std::vector<uint8_t> sharpenImageData = function.Sharpen(tempImageData, highContrast);
 
-//    SaveImageDataToHistory(sharpenImageData); // 保存当前图像数据到链表
+    //    SaveImageDataToHistory(sharpenImageData); // 保存当前图像数据到链表
 
-//    ShowImage(sharpenImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+    //    ShowImage(sharpenImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
 
 
 
@@ -823,21 +854,21 @@ void MainWindow::on_btn_threshold_ok_clicked()
         }
         auto func = std::bind(&Function::ApplyThreshold, &function, std::ref(tempImageData), std::placeholders::_1, std::placeholders::_2,std::placeholders::_3);
 
-          for (uint8_t i = 0; i < num_threads; i++)  // 创建多个线程
-          {
-              size_t start = i * segmentSize;  // 计算当前线程负责的数据段的起始位置
-              size_t end = (i == num_threads - 1) ? imageSize : start + segmentSize;  // 结尾,同上
-              segmentStarts.push_back(start);
+        for (uint8_t i = 0; i < num_threads; i++)  // 创建多个线程
+        {
+            size_t start = i * segmentSize;  // 计算当前线程负责的数据段的起始位置
+            size_t end = (i == num_threads - 1) ? imageSize : start + segmentSize;  // 结尾,同上
+            segmentStarts.push_back(start);
 
-              // 使用可调用对象传递给线程
-              threads.emplace_back(func, returnValue.value,start, end);
-          }
-          for (auto &thread : threads) {
-              thread.join();
-          }
+            // 使用可调用对象传递给线程
+            threads.emplace_back(func, returnValue.value,start, end);
+        }
+        for (auto &thread : threads) {
+            thread.join();
+        }
 
 
-       //function.ApplyThreshold(tempImageData,returnValue.value);
+        //function.ApplyThreshold(tempImageData,returnValue.value);
         SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
         ShowImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
         ClearSegmentData();

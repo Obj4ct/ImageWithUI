@@ -60,7 +60,7 @@ public:
     double Gaussian(double sigma, int x, int y);
     void Gauss(const std::vector<uint8_t> &imageData,std::promise<std::vector<uint8_t>> &result, int width, int height, double sigma);
     //高反差保留 原图-高斯图
-    std::vector<uint8_t> HighContrast(const std::vector<uint8_t> &imageData, const std::vector<uint8_t> &blurImageData);
+    void HighContrast(const std::vector<uint8_t> &imageData,std::promise<std::vector<uint8_t>> &result,const std::vector<uint8_t> &blurImageData);
 
     //图像旋转
     //顺时针旋转
