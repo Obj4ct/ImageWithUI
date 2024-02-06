@@ -50,6 +50,9 @@ set(PROJECT_SOURCES
         face.cpp
         face.ui
         icon.qrc
+        colormap.h
+        colormap.cpp
+        colormap.ui
 
 )
 
