@@ -114,8 +114,8 @@ LargeImage_BiCubic(const std::vector<uint8_t> &imageData, int32_t width, int32_t
                     int yj = static_cast<int>(std::floor(srcY)) + j;
                     xi = std::max(0, std::min(xi, width - 1));
                     yj = std::max(0, std::min(yj, height - 1));
-                    float wx = cubicWeight(srcX - (xi + 0.5f));
-                    float wy = cubicWeight(srcY - (yj + 0.5f));
+                    float wx = cubicWeight(srcX - (xi + 0.9f));
+                    float wy = cubicWeight(srcY - (yj + 0.9f));
                     weights[j + 1][i + 1] = wx * wy;
                 }
             }
