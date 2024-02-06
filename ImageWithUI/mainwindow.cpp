@@ -539,10 +539,21 @@ void MainWindow::on_btn_gauss_ok_clicked()
         {
             tempImageData = imageDataHistory.back(); // 复制当前图像数据
         }
+        std::promise<std::vector<uint8_t>> promise;
+        std::future<std::vector<uint8_t>> future = promise.get_future();
 
-        std::vector<uint8_t> gaussImageData=function.Gauss(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),returnValue.value);
-        SaveImageDataToHistory(gaussImageData); // 保存当前图像数据到链表
-        ShowImage(gaussImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+        // 使用 std::bind 调用成员函数
+        auto func = std::bind(&Function::Gauss, &function, std::ref(tempImageData), std::ref(promise), std::placeholders::_1, std::placeholders::_2,std::placeholders::_3);
+
+        // 启动一个线程执行绑定的函数
+        std::thread thread(func, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),returnValue.value);  // 这里传入具体的参数
+        std::vector<uint8_t> resultImage = future.get();
+        // 等待线程执行完成
+        thread.join();
+
+        //std::vector<uint8_t> gaussImageData=function.Gauss(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),returnValue.value);
+        SaveImageDataToHistory(resultImage); // 保存当前图像数据到链表
+        ShowImage(resultImage,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
     }
 
 }
@@ -550,31 +561,31 @@ void MainWindow::on_btn_gauss_ok_clicked()
 
 void MainWindow::on_btn_highContrast_ok_clicked()
 {
-    qDebug()<<"hello";
-    //正确输入数字
-    ReturnValue returnValue=CheckOK(ui->lineEdit_highContrast);
+//    qDebug()<<"hello";
+//    //正确输入数字
+//    ReturnValue returnValue=CheckOK(ui->lineEdit_highContrast);
 
-    if(returnValue.isNull==true)
-    {
-        if(!function.CreateMessagebox("提示","请输入"))
-            return;
-    }else if(returnValue.isNumeric==false){
-        if(!function.CreateMessagebox("提示","输入数字"))
-            return;
-    }else{
+//    if(returnValue.isNull==true)
+//    {
+//        if(!function.CreateMessagebox("提示","请输入"))
+//            return;
+//    }else if(returnValue.isNumeric==false){
+//        if(!function.CreateMessagebox("提示","输入数字"))
+//            return;
+//    }else{
 
-        std::vector<uint8_t> tempImageData=imageData;
-        if(!imageDataHistory.empty())
-        {
-            tempImageData = imageDataHistory.back(); // 复制当前图像数据
-        }
-        std::vector<uint8_t> ImageData=function.Gauss(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),returnValue.value);
+//        std::vector<uint8_t> tempImageData=imageData;
+//        if(!imageDataHistory.empty())
+//        {
+//            tempImageData = imageDataHistory.back(); // 复制当前图像数据
+//        }
+//        std::vector<uint8_t> ImageData=function.Gauss(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),returnValue.value);
 
-        std::vector<uint8_t> blurImageData = function.Gauss(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),returnValue.value);
-        std::vector<uint8_t> highContrastImageData = function.HighContrast(tempImageData, blurImageData);
-        SaveImageDataToHistory(highContrastImageData); // 保存当前图像数据到链表
-        ShowImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
-    }
+//        std::vector<uint8_t> blurImageData = function.Gauss(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),returnValue.value);
+//        std::vector<uint8_t> highContrastImageData = function.HighContrast(tempImageData, blurImageData);
+//        SaveImageDataToHistory(highContrastImageData); // 保存当前图像数据到链表
+//        ShowImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+//    }
 
 }
 
@@ -654,7 +665,11 @@ void MainWindow::on_btn_medianBlur_clicked()
     {
         tempImageData = imageDataHistory.back(); // 复制当前图像数据
     }
-    function.MedianBlur(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+    auto func = std::bind(&Function::MedianBlur, &function, std::ref(tempImageData), std::placeholders::_1, std::placeholders::_2);
+    std::thread medianBlur(func,myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+    medianBlur.join();
+
+    //function.MedianBlur(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
 
     SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
     ShowImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
@@ -695,7 +710,12 @@ void MainWindow::on_btn_shadow_ok_clicked()
             tempImageData = imageDataHistory.back(); // 复制当前图像数据
         }
 
-        function.MakeShadow(tempImageData,shadowImageData,returnValue.value);
+            auto func = std::bind(&Function::MakeShadow, &function, std::ref(tempImageData),std::ref(shadowImageData), std::placeholders::_1);
+        std::thread tMakeShadow(func, std::ref(returnValue.value));
+
+        tMakeShadow.join();
+
+        //function.MakeShadow(tempImageData,shadowImageData,returnValue.value);
 
         SaveImageDataToHistory(shadowImageData); // 保存当前图像数据到链表
         ShowImage(shadowImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
@@ -738,18 +758,18 @@ void MainWindow::on_btn_highlight_ok_clicked()
 
 void MainWindow::on_btn_sharpen_clicked()
 {
-    std::vector<uint8_t> tempImageData=imageData;
-    if(!imageDataHistory.empty())
-    {
-        tempImageData = imageDataHistory.back(); // 复制当前图像数据
-    }
-    std::vector<uint8_t> blurImageData = function.Gauss(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),10);
-    std::vector<uint8_t> highContrast = function.HighContrast(tempImageData, blurImageData);
-    std::vector<uint8_t> sharpenImageData = function.Sharpen(tempImageData, highContrast);
+//    std::vector<uint8_t> tempImageData=imageData;
+//    if(!imageDataHistory.empty())
+//    {
+//        tempImageData = imageDataHistory.back(); // 复制当前图像数据
+//    }
+//    std::vector<uint8_t> blurImageData = function.Gauss(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),10);
+//    std::vector<uint8_t> highContrast = function.HighContrast(tempImageData, blurImageData);
+//    std::vector<uint8_t> sharpenImageData = function.Sharpen(tempImageData, highContrast);
 
-    SaveImageDataToHistory(sharpenImageData); // 保存当前图像数据到链表
+//    SaveImageDataToHistory(sharpenImageData); // 保存当前图像数据到链表
 
-    ShowImage(sharpenImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+//    ShowImage(sharpenImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
 
 
 
@@ -772,6 +792,8 @@ void MainWindow::on_btn_tensor_clicked()
     {
         tempImageData = imageDataHistory.back(); // 复制当前图像数据
     }
+
+
     std::vector<uint8_t> edgeImageData = function.SobelEdge(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
     SaveImageDataToHistory(edgeImageData); // 保存当前图像数据到链表
     ShowImage(edgeImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
@@ -783,9 +805,6 @@ void MainWindow::on_btn_tensor_clicked()
 
 void MainWindow::on_btn_threshold_ok_clicked()
 {
-
-    std::vector<uint8_t> highLightImageData(imageData.size());
-    highLightImageData=imageData;
     //正确输入数字
     ReturnValue returnValue=CheckOK(ui->lineEdit_threshold);
 
@@ -802,10 +821,26 @@ void MainWindow::on_btn_threshold_ok_clicked()
         {
             tempImageData = imageDataHistory.back(); // 复制当前图像数据
         }
+        auto func = std::bind(&Function::ApplyThreshold, &function, std::ref(tempImageData), std::placeholders::_1, std::placeholders::_2,std::placeholders::_3);
 
-        function.ApplyThreshold(tempImageData,returnValue.value);
+          for (uint8_t i = 0; i < num_threads; i++)  // 创建多个线程
+          {
+              size_t start = i * segmentSize;  // 计算当前线程负责的数据段的起始位置
+              size_t end = (i == num_threads - 1) ? imageSize : start + segmentSize;  // 结尾,同上
+              segmentStarts.push_back(start);
+
+              // 使用可调用对象传递给线程
+              threads.emplace_back(func, returnValue.value,start, end);
+          }
+          for (auto &thread : threads) {
+              thread.join();
+          }
+
+
+       //function.ApplyThreshold(tempImageData,returnValue.value);
         SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
         ShowImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+        ClearSegmentData();
     }
 }
 

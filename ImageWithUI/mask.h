@@ -46,7 +46,7 @@ private:
     void ShowImage(std::vector<uint8_t>&inImageData);
     void ResetImage();
     //需要用到function类里面的高斯模糊函数
-    std::vector<uint8_t> LocalSkinSmoothing(std::vector<uint8_t> &imageData, int width, int height,
+    void LocalSkinSmoothing(std::vector<uint8_t> &imageData,std::promise<std::vector<uint8_t>>& result, int width, int height,
                                             int startX, int startY, int endX, int endY, int radius);
 };
 

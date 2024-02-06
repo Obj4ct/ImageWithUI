@@ -53,40 +53,40 @@ void Mask::ResetImage()
     ui->label_secondPos->setText(str2);
 }
 
-std::vector<uint8_t> Mask::LocalSkinSmoothing(std::vector<uint8_t> &imageData, int width, int height, int startX, int startY, int endX, int endY, int radius)
+void Mask::LocalSkinSmoothing(std::vector<uint8_t> &imageData,std::promise<std::vector<uint8_t>>& result, int width, int height, int startX, int startY, int endX, int endY, int radius)
 {
     std::vector<uint8_t> smoothedData = imageData;
 
-    for (int y = startY; y < endY; y++) {
-        for (int x = startX; x < endX; x++) {
-            double r = 0.0;
-            double g = 0.0;
-            double b = 0.0;
-            double weightSum = 0.0;
+        for (int y = startY; y < endY; y++) {
+            for (int x = startX; x < endX; x++) {
+                double r = 0.0;
+                double g = 0.0;
+                double b = 0.0;
+                double weightSum = 0.0;
 
-            for (int j = -radius; j <= radius; j++) {
-                for (int i = -radius; i <= radius; i++) {
-                    int pixelX = x + i;
-                    int pixelY = y + j;
-                    if (pixelX >= startX && pixelX < endX && pixelY >= startY && pixelY < endY) {
-                        int pixelIndex = (pixelY * width + pixelX) * 3;
-                        double weight = function.Gaussian(radius, i, j);
-                        r += static_cast<double>(imageData[pixelIndex]) * weight;
-                        g += static_cast<double>(imageData[pixelIndex + 1]) * weight;
-                        b += static_cast<double>(imageData[pixelIndex + 2]) * weight;
-                        weightSum += weight;
+                for (int j = -radius; j <= radius; j++) {
+                    for (int i = -radius; i <= radius; i++) {
+                        int pixelX = x + i;
+                        int pixelY = y + j;
+                        if (pixelX >= startX && pixelX < endX && pixelY >= startY && pixelY < endY) {
+                            int pixelIndex = (pixelY * width + pixelX) * 3;
+                            double weight =function.Gaussian(radius, i, j);
+                            r += static_cast<double>(imageData[pixelIndex]) * weight;
+                            g += static_cast<double>(imageData[pixelIndex + 1]) * weight;
+                            b += static_cast<double>(imageData[pixelIndex + 2]) * weight;
+                            weightSum += weight;
+                        }
                     }
                 }
+
+                int index = (y * width + x) * 3;
+                smoothedData[index] = static_cast<uint8_t>(r / weightSum);
+                smoothedData[index + 1] = static_cast<uint8_t>(g / weightSum);
+                smoothedData[index + 2] = static_cast<uint8_t>(b / weightSum);
             }
-
-            int index = (y * width + x) * 3;
-            smoothedData[index] = static_cast<uint8_t>(r / weightSum);
-            smoothedData[index + 1] = static_cast<uint8_t>(g / weightSum);
-            smoothedData[index + 2] = static_cast<uint8_t>(b / weightSum);
         }
-    }
 
-    return smoothedData;
+        result.set_value(smoothedData);
 }
 
 void Mask::on_btn_save_clicked()
@@ -136,9 +136,18 @@ void Mask::on_btn_ok_clicked()
     }
     else {
         qDebug()<<"click ok";
-        std::vector<uint8_t> smoothData = LocalSkinSmoothing(newValue.imageData, newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight() ,firstX, firstY, secondX, secondY, value);
-        newValue.imageData=smoothData;
-        ShowImage(smoothData);
+
+        std::promise<std::vector<uint8_t>> promise;
+        std::future<std::vector<uint8_t>> future = promise.get_future();
+        std::thread thread(&Mask::LocalSkinSmoothing, this, std::ref(newValue.imageData), std::ref(promise), newValue.bmpInfo.GetWidth(), newValue.bmpInfo.GetHeight(), firstX, firstY, secondX, secondY, value);
+
+        // 等待异步任务完成并获取值
+        std::vector<uint8_t> resultImage = future.get();
+
+        thread.join();
+        // std::vector<uint8_t> smoothData = LocalSkinSmoothing(newValue.imageData, newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight() ,firstX, firstY, secondX, secondY, value);
+        newValue.imageData = resultImage;
+        ShowImage(resultImage);
 
     }
 }

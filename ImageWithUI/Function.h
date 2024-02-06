@@ -58,7 +58,7 @@ public:
     void Fisheye(const std::vector<uint8_t> &imageData,std::promise<std::vector<uint8_t>>& result, int32_t width, int32_t height);
     //高斯模糊
     double Gaussian(double sigma, int x, int y);
-    std::vector<uint8_t> Gauss(const std::vector<uint8_t> &imageData, int width, int height, double sigma);
+    void Gauss(const std::vector<uint8_t> &imageData,std::promise<std::vector<uint8_t>> &result, int width, int height, double sigma);
     //高反差保留 原图-高斯图
     std::vector<uint8_t> HighContrast(const std::vector<uint8_t> &imageData, const std::vector<uint8_t> &blurImageData);
 
@@ -82,7 +82,7 @@ public:
     //边缘检测
     std::vector<uint8_t> SobelEdge(const std::vector<uint8_t>& imageData, int width, int height);
     //阈值处理
-    void ApplyThreshold(std::vector<uint8_t>& imageData, uint32_t threshold);
+    void ApplyThreshold(std::vector<uint8_t>& imageData, uint32_t threshold,size_t start,size_t end);
     //重置图像
     void RestImage(MyValue &myValue);
 

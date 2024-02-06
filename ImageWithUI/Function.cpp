@@ -392,44 +392,43 @@ void Function::Fisheye(const std::vector<uint8_t> &imageData,std::promise<std::v
 
 double Function::Gaussian(double sigma, int x, int y)
 {
-    double exponent = -(x * x + y * y) / (2.0 * sigma * sigma);
-    return exp(exponent) / (2.0 * M_PI * sigma * sigma);
+ return exp(-(x * x + y * y) / (2.0 * sigma * sigma)) / (2.0 * M_PI * sigma * sigma);
 }
 
-std::vector<uint8_t> Function::Gauss(const std::vector<uint8_t> &imageData, int width, int height, double sigma)
+void Function::Gauss(const std::vector<uint8_t> &imageData, std::promise<std::vector<uint8_t>> &result,int width, int height, double sigma)
 {
     std::vector<uint8_t> blurImageData(imageData.size());
 
-    for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++) {
-            double r = 0.0;
-            double g = 0.0;
-            double b = 0.0;
-            double weightSum = 0.0;
+    for (uint16_t y = 0; y < height; y++) {
+        for (uint16_t x = 0; x < width; x++) {
+            float_t r = 0.0;
+            float_t g = 0.0;
+            float_t b = 0.0;
+            float_t weightSum = 0.0;
 
-            for (int j = -2; j <= 2; j++) {
-                for (int i = -2; i <= 2; i++) {
-                    int pixelX = x + i;
-                    int pixelY = y + j;
+            for (int8_t j = -2; j <= 2; j++) {
+                for (int8_t i = -2; i <= 2; i++) {
+                    uint16_t pixelX = x + i;
+                    uint16_t pixelY = y + j;
                     if (pixelX >= 0 && pixelX < width && pixelY >= 0 && pixelY < height) {
-                        int pixelIndex = (pixelY * width + pixelX) * 3;
-                        double weight = Gaussian(sigma, i, j);
-                        r += static_cast<double>(imageData[pixelIndex]) * weight;
-                        g += static_cast<double>(imageData[pixelIndex + 1]) * weight;
-                        b += static_cast<double>(imageData[pixelIndex + 2]) * weight;
+                        uint32_t pixelIndex = (pixelY * width + pixelX) * 3;
+                        float_t weight = Gaussian(sigma, i, j);
+                        r += static_cast<float_t>(imageData[pixelIndex]) * weight;
+                        g += static_cast<float_t>(imageData[pixelIndex + 1]) * weight;
+                        b += static_cast<float_t>(imageData[pixelIndex + 2]) * weight;
                         weightSum += weight;
                     }
                 }
             }
 
-            int index = (y * width + x) * 3;
+            uint32_t index = (y * width + x) * 3;
             blurImageData[index] = static_cast<uint8_t>(r / weightSum);
             blurImageData[index + 1] = static_cast<uint8_t>(g / weightSum);
             blurImageData[index + 2] = static_cast<uint8_t>(b / weightSum);
         }
     }
 
-    return blurImageData;
+    result.set_value(blurImageData);
 }
 
 std::vector<uint8_t> Function::HighContrast(const std::vector<uint8_t> &imageData, const std::vector<uint8_t> &blurImageData)
@@ -520,13 +519,17 @@ void Function::MakeShadow(std::vector<uint8_t> &imageData, std::vector<uint8_t> 
 
 void Function::HighLight(std::vector<uint8_t> &imageData, std::vector<uint8_t> &highLightImageData, uint32_t pixel)
 {
-    for (size_t i = 0; i < imageData.size(); ++i)
-    {
-        if(imageData[i]>pixel){
-            // 在指定像素值之上的像素降低值，确保颜色值不会小于0
-            int newValue = imageData[i] - 100;
-            highLightImageData[i] = (newValue >= 0) ? static_cast<uint8_t>(newValue) : 0;
-        }
+    // 确保 highLightImageData 的大小与 imageData 一致
+    if (highLightImageData.size() != imageData.size()) {
+        // 处理大小不一致的情况，这里简单示范直接将 highLightImageData 大小设置为 imageData 大小
+        highLightImageData.resize(imageData.size());
+    }
+
+    for (size_t i = 0; i < imageData.size(); ++i) {
+        // 对所有像素进行处理，不仅仅是大于 pixel 的像素
+        int newValue = imageData[i] - 100;
+        // 确保颜色值不会小于0
+        highLightImageData[i] = (newValue >= 0) ? static_cast<uint8_t>(newValue) : 0;
     }
 }
 
@@ -575,31 +578,31 @@ std::vector<uint8_t> Function::SobelEdge(const std::vector<uint8_t> &imageData, 
     return edgeImageData;
 }
 
-void Function::ApplyThreshold(std::vector<uint8_t> &imageData, uint32_t threshold)
+void Function::ApplyThreshold(std::vector<uint8_t> &imageData, uint32_t threshold,size_t start,size_t end)
 {
-    for (size_t i = 0; i < imageData.size(); i += 3) {
-        uint8_t r = imageData[i];
-        uint8_t g = imageData[i + 1];
-        uint8_t b = imageData[i + 2];
+    for (size_t i = start; i < end; i += 3) {
+           uint8_t r = imageData[i];
+           uint8_t g = imageData[i + 1];
+           uint8_t b = imageData[i + 2];
 
-        // 计算灰度值并使用double类型保存
-        double gray = 0.299 * r + 0.587 * g + 0.114 * b;
+           // 计算灰度值并使用double类型保存
+           float_t gray = 0.299 * r + 0.587 * g + 0.114 * b;
 
-        if (gray > threshold) {
-            //阈值处理后，你将颜色通道的值分别增加或减少100。这种硬编码的方式可能会导致颜色通道的值超出合理范围（0-255）。你可以考虑使用一个比例因子，而不是固定的100，以确保颜色通道的值在合理范围内。
-            // 使用比例因子来调整颜色通道值
-            double factor = (gray - threshold) / (255.0 - threshold);
-            imageData[i] = std::min(255, static_cast<int>(r + 100 * factor));
-            imageData[i + 1] = std::min(255, static_cast<int>(g + 100 * factor));
-            imageData[i + 2] = std::min(255, static_cast<int>(b + 100 * factor));
-        } else {
-            // 使用比例因子来调整颜色通道值
-            double factor = gray / threshold;
-            imageData[i] = std::max(0, static_cast<int>(r * factor));
-            imageData[i + 1] = std::max(0, static_cast<int>(g * factor));
-            imageData[i + 2] = std::max(0, static_cast<int>(b * factor));
-        }
-    }
+           if (gray > threshold) {
+               // 使用比例因子来调整颜色通道值
+               float_t factor = (gray - threshold) / (255.0 - threshold);
+               imageData[i] = std::min(255, static_cast<int>(r + 100 * factor));
+               imageData[i + 1] = std::min(255, static_cast<int>(g + 100 * factor));
+               imageData[i + 2] = std::min(255, static_cast<int>(b + 100 * factor));
+           }
+           else {
+               // 使用比例因子来调整颜色通道值
+               float_t factor = gray / threshold;
+               imageData[i] = std::max(0, static_cast<int>(r * factor));
+               imageData[i + 1] = std::max(0, static_cast<int>(g * factor));
+               imageData[i + 2] = std::max(0, static_cast<int>(b * factor));
+           }
+       }
 }
 
 

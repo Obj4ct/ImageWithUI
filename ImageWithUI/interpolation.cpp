@@ -323,8 +323,14 @@ void Interpolation::on_btn_large_nearest_clicked()
             return;
     }
     else{
-        std::vector<uint8_t> largeImageData=LargeImage_Nearest(nearestImageData,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(),newValue.bmpInfo.GetWidth()*returnValueWidth.value,newValue.bmpInfo.GetHeight()*returnValueHeight.value);
-         ShowImage(largeImageData, newValue.bmpInfo.GetWidth() * returnValueWidth.value, newValue.bmpInfo.GetHeight() * returnValueHeight.value);
+
+        std::thread threadLarge([&]() {
+                std::vector<uint8_t> largeImageData = LargeImage_Nearest(nearestImageData, newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(),newValue.bmpInfo.GetWidth()*returnValueWidth.value,newValue.bmpInfo.GetHeight()*returnValueHeight.value);
+                ShowImage(largeImageData, newValue.bmpInfo.GetWidth() * returnValueWidth.value, newValue.bmpInfo.GetHeight() * returnValueHeight.value);
+
+            });
+        threadLarge.join();
+        //std::vector<uint8_t> largeImageData=LargeImage_Nearest(nearestImageData,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(),newValue.bmpInfo.GetWidth()*returnValueWidth.value,newValue.bmpInfo.GetHeight()*returnValueHeight.value);
 
     }
 }
