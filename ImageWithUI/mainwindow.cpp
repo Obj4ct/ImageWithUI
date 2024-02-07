@@ -7,6 +7,7 @@ MainWindow::MainWindow(QWidget *parent)
       ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+    setWindowIcon(QIcon(":/icon/logo.png"));
     //根据设备cpu线程数判断程序需要设置的线程
     if(std::thread::hardware_concurrency()>=2)
     {
@@ -920,3 +921,31 @@ void MainWindow::on_btn_undo_clicked()
     UndoImageProcessing();
 }
 
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    QMessageBox::StandardButton button;
+
+    button=QMessageBox::question(this,tr("退出程序"),QString(tr("确认退出程序")),QMessageBox::Yes|QMessageBox::No);
+
+    if(button==QMessageBox::No)
+
+    {
+
+        event->ignore(); // 忽略退出信号，程序继续进行
+
+    }
+
+    else if(button==QMessageBox::Yes)
+
+    {
+
+        event->accept(); // 接受退出信号，程序退出
+
+    }
+
+
+
+    //TODO: 在退出窗口之前，实现希望做的操作
+
+
+}

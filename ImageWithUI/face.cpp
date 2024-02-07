@@ -8,6 +8,8 @@ Face::Face(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
 {
     ui->setupUi(this);
     newValue=myValue;
+    setWindowTitle(QString("图像微调"));
+    setWindowIcon(QIcon(":/icon/logo.png"));
     m_bmpImage = QImage(newValue.imageData.data(), myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),QImage::Format_BGR888);
     imageData=newValue.imageData;
     // 进行垂直翻转

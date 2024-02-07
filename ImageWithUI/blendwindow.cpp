@@ -7,6 +7,8 @@
 BlendWindow::BlendWindow(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     : QWidget(parent), ui(new Ui::BlendWindow), mainWindow(mainWindow), myValue(myValue) {
     ui->setupUi(this);
+    setWindowTitle(QString("图层混合"));
+    setWindowIcon(QIcon(":/icon/logo.png"));
     ui->widget_select_blendMode->setVisible(false);
 
     ui->widget_select_alpha->setVisible(false);

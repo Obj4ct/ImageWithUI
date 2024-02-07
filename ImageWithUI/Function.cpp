@@ -32,6 +32,7 @@ bool Function::CreateMessagebox(QString title,QString message)
     QString str = message;
     myBox->setWindowTitle(title);
     myBox->setText(str);
+    myBox->setWindowIcon(QIcon(":/icon/what.png"));
     myBox->addButton(okBtn, QMessageBox::AcceptRole);
     myBox->show();
     myBox->exec();//阻塞等待用户输入

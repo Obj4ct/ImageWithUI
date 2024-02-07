@@ -6,6 +6,8 @@ eye::eye(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     : QWidget(parent), ui(new Ui::eye), mainWindow(mainWindow), myValue(myValue)
 {
     ui->setupUi(this);
+    setWindowTitle(QString("眼部区域液化"));
+    setWindowIcon(QIcon(":/icon/logo.png"));
     newValue=myValue;
     m_bmpImage = QImage(newValue.imageData.data(), myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),QImage::Format_BGR888);
     imageData=newValue.imageData;

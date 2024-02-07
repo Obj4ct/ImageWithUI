@@ -130,6 +130,7 @@ private:
     Ui::MainWindow *ui;
     BlendWindow * blendWindow;
     bool canSave=false;
+    void closeEvent(QCloseEvent *event) override;
 
 };
 #endif // MAINWINDOW_H

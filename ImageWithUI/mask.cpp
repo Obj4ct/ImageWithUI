@@ -4,6 +4,8 @@ Mask::Mask(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     : QWidget(parent), ui(new Ui::Mask), mainWindow(mainWindow), myValue(myValue)
 {
     ui->setupUi(this);
+    setWindowTitle(QString("磨皮"));
+    setWindowIcon(QIcon(":/icon/logo.png"));
     newValue=myValue;
     m_bmpImage = QImage(newValue.imageData.data(), myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),QImage::Format_BGR888);
     imageData=newValue.imageData;
@@ -126,6 +128,7 @@ void Mask::on_btn_ok_clicked()
         QString str = "请输入数字";
         myBox->setWindowTitle("提示");
         myBox->setText(str);
+        myBox->setWindowIcon(QIcon(":/icon/what.png"));
         myBox->addButton(okBtn, QMessageBox::AcceptRole);
         myBox->show();
         myBox->exec();//阻塞等待用户输入

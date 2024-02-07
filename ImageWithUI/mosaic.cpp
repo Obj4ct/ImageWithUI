@@ -4,7 +4,8 @@
 Mosaic::Mosaic(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     : QWidget(parent), ui(new Ui::Mosaic), mainWindow(mainWindow), myValue(myValue)
 {
-    ui->setupUi(this);
+    ui->setupUi(this);    setWindowTitle(QString("马赛克"));
+    setWindowIcon(QIcon(":/icon/logo.png"));
     newValue=myValue;
     m_bmpImage = QImage(newValue.imageData.data(), newValue.bmpInfo.GetWidth(), newValue.bmpInfo.GetHeight(),QImage::Format_BGR888);
     imageData=newValue.imageData;

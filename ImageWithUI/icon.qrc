@@ -2,5 +2,7 @@
     <qresource prefix="/">
         <file>icon/reset.png</file>
         <file>icon/undo.png</file>
+        <file>icon/logo.png</file>
+        <file>icon/what.png</file>
     </qresource>
 </RCC>
