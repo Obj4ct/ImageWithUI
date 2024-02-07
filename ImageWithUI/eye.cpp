@@ -1,3 +1,4 @@
+#include "mainwindow.h"
 #include "eye.h"
 #include "ui_eye.h"
 
@@ -150,7 +151,17 @@ void eye::on_btn_save_clicked()
 void eye::on_btn_ok_clicked()
 {
     qDebug()<<"click ok";
-    if(ui->label_first->text()==nullptr||ui->label_second->text()==nullptr||firstX==0||firstY==0||secondX==0||secondY==0)
+    ReturnValue returnRange=mainWindow->CheckOK(ui->lineEdit_range);
+    ReturnValue returnNum=mainWindow->CheckOK(ui->lineEdit_increase);
+    if(returnRange.isNull==true||returnNum.isNull==true)
+    {
+        if(!function.CreateMessagebox("提示","请输入"))
+            return;
+    }else if(returnRange.isNumeric==false||returnNum.isNumeric==false){
+        if(!function.CreateMessagebox("提示","输入数字"))
+            return;
+    }
+    else if(ui->label_first->text()==nullptr||ui->label_second->text()==nullptr||firstX==0||firstY==0||secondX==0||secondY==0)
     {
         if(!function.CreateMessagebox("提示","还没成功获取两个坐标值"))
         {
@@ -170,8 +181,8 @@ void eye::on_btn_ok_clicked()
             size_t end = (i == num_threads - 1) ? myValue.bmpInfo.GetHeight() : start + segmentSize;
             segmentStarts.push_back(start);
             threads.emplace_back([&, start, end] {  // 使用 [&] 捕获列表
-                Eye(newValue.imageData, newValue.bmpInfo.GetWidth(), newValue.bmpInfo.GetHeight(), firstX, firstY, eyeRadius, warpIntensity, start, end);
-                Eye(newValue.imageData, newValue.bmpInfo.GetWidth(), newValue.bmpInfo.GetHeight(), secondX, secondY, eyeRadius, warpIntensity, start, end);
+                Eye(newValue.imageData, newValue.bmpInfo.GetWidth(), newValue.bmpInfo.GetHeight(), firstX, firstY, returnRange.value, returnNum.value, start, end);
+                Eye(newValue.imageData, newValue.bmpInfo.GetWidth(), newValue.bmpInfo.GetHeight(), secondX, secondY, returnRange.value, returnNum.value, start, end);
                 std::lock_guard<std::mutex> lock(mtx);
             });
         }

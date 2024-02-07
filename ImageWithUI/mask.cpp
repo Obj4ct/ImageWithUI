@@ -162,13 +162,10 @@ void Mask::on_btn_reset_clicked()
 void Mask::mousePressEvent(QMouseEvent *event)
 {
     QPoint clickPos = event->pos();
-    // 将窗口坐标转换为图像坐标
-    int imageX = clickPos.x();
-    int imageY = myValue.bmpInfo.GetHeight() - clickPos.y();  // 图像上下翻转
     if (clickCount == 0) {
 
         // 第一次点击，保存坐标到firstClick
-        firstClick = QPoint(imageX, imageY);
+        firstClick = clickPos;
         qDebug()<<"current click count is "<<clickCount;
         qDebug() << "First click at: " << firstClick;
         clickCount++;
@@ -178,7 +175,7 @@ void Mask::mousePressEvent(QMouseEvent *event)
         ui->label_firstPos->setText(str);
     } else if (clickCount == 1) {
         // 第二次点击，保存坐标到secondClick
-        secondClick = QPoint(imageX, imageY);
+        secondClick = clickPos;
         qDebug()<<"current click count is "<<clickCount;
         qDebug() << "Second click at: " << secondClick;
         clickCount = 0;

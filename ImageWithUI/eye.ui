@@ -54,8 +54,8 @@
   <widget class="QPushButton" name="btn_save">
    <property name="geometry">
     <rect>
-     <x>330</x>
-     <y>630</y>
+     <x>340</x>
+     <y>690</y>
      <width>92</width>
      <height>29</height>
     </rect>
@@ -107,8 +107,8 @@
   <widget class="QPushButton" name="btn_ok">
    <property name="geometry">
     <rect>
-     <x>90</x>
-     <y>630</y>
+     <x>70</x>
+     <y>690</y>
      <width>92</width>
      <height>29</height>
     </rect>
@@ -121,7 +121,7 @@
    <property name="geometry">
     <rect>
      <x>210</x>
-     <y>630</y>
+     <y>690</y>
      <width>92</width>
      <height>29</height>
     </rect>
@@ -129,6 +129,38 @@
    <property name="text">
     <string>重置图像</string>
    </property>
+  </widget>
+  <widget class="QWidget" name="widget_2" native="true">
+   <property name="geometry">
+    <rect>
+     <x>80</x>
+     <y>630</y>
+     <width>331</width>
+     <height>51</height>
+    </rect>
+   </property>
+   <layout class="QHBoxLayout" name="horizontalLayout_2">
+    <item>
+     <widget class="QLabel" name="label_4">
+      <property name="text">
+       <string>范围</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QLineEdit" name="lineEdit_range"/>
+    </item>
+    <item>
+     <widget class="QLabel" name="label_5">
+      <property name="text">
+       <string>程度</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QLineEdit" name="lineEdit_increase"/>
+    </item>
+   </layout>
   </widget>
  </widget>
  <resources/>

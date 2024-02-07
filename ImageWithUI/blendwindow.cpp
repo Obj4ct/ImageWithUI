@@ -32,7 +32,7 @@ BlendWindow::~BlendWindow() {
 }
 
 void BlendWindow::on_btn_open_1_clicked() {
-    QString defaultPath = QDir::currentPath();
+    QString defaultPath = QDir::homePath();
     QString filter = "BMP文件(*.BMP)";
     QString path = QFileDialog::getOpenFileName(this, "选择BMP文件", defaultPath, filter);
 

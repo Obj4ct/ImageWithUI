@@ -41,9 +41,7 @@ private:
     int firstY;
     int secondX;
     int secondY;
-    int clickCount=0;
-    int32_t eyeRadius = 20;
-    double warpIntensity = 5;
+    int clickCount=0;;
 private:
     void Eye(std::vector<uint8_t> &imageData, int32_t width, int32_t height,
              int32_t centerX, int32_t centerY, int32_t radius, double intensity,size_t startRow,size_t endRow);
