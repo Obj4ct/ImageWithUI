@@ -22,6 +22,7 @@ set(PROJECT_SOURCES
         BMPFile.h
         BMPFile.cpp
         Debug.h
+        Debug.cpp
         #two diffrent header
         stdcpp.h
         QTHeader.h

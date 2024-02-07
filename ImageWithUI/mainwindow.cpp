@@ -147,14 +147,21 @@ void MainWindow::on_openImage_triggered()
         //ImgInfo(myValue.bmp,myValue.bmpInfo);
         // 将图像数据转换为QImage
         //BGR排序
+
+
+
         m_bmpImage = QImage(myValue.imageData.data(), myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),QImage::Format_BGR888);
+        m_bmpImage.mirror(false,true);
+
+
+//        Debug::PrintImagePixelsToFile(m_bmpImage, "output.txt");
+//        qDebug()<<"write ok!";
+
         imageData=myValue.imageData;
-        // 进行垂直翻转
-        m_bmpImage = m_bmpImage.mirrored(false, true);
         // 显示图像在imageLabel上
         QPixmap pixmap = QPixmap::fromImage(m_bmpImage);
         ui->imageLabel->setPixmap(pixmap);
-        ui->imageLabel->setScaledContents(true); // 使图像适应 label 大小
+
         canSave=true;
     }
 }
