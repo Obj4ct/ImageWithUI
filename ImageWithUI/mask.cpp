@@ -58,36 +58,36 @@ void Mask::LocalSkinSmoothing(std::vector<uint8_t> &imageData,std::promise<std::
 {
     std::vector<uint8_t> smoothedData = imageData;
 
-    for (int y = startY; y < endY; y++) {
-        for (int x = startX; x < endX; x++) {
-            double r = 0.0;
-            double g = 0.0;
-            double b = 0.0;
-            double weightSum = 0.0;
+        for (int y = startY; y < endY; y++) {
+            for (int x = startX; x < endX; x++) {
+                double r = 0.0;
+                double g = 0.0;
+                double b = 0.0;
+                double weightSum = 0.0;
 
-            for (int j = -radius; j <= radius; j++) {
-                for (int i = -radius; i <= radius; i++) {
-                    int pixelX = x + i;
-                    int pixelY = y + j;
-                    if (pixelX >= startX && pixelX < endX && pixelY >= startY && pixelY < endY) {
-                        int pixelIndex = (pixelY * width + pixelX) * 3;
-                        double weight =function.Gaussian(radius, i, j);
-                        r += static_cast<double>(imageData[pixelIndex]) * weight;
-                        g += static_cast<double>(imageData[pixelIndex + 1]) * weight;
-                        b += static_cast<double>(imageData[pixelIndex + 2]) * weight;
-                        weightSum += weight;
+                for (int j = -radius; j <= radius; j++) {
+                    for (int i = -radius; i <= radius; i++) {
+                        int pixelX = x + i;
+                        int pixelY = y + j;
+                        if (pixelX >= startX && pixelX < endX && pixelY >= startY && pixelY < endY) {
+                            int pixelIndex = (pixelY * width + pixelX) * 3;
+                            double weight =function.Gaussian(radius, i, j);
+                            r += static_cast<double>(imageData[pixelIndex]) * weight;
+                            g += static_cast<double>(imageData[pixelIndex + 1]) * weight;
+                            b += static_cast<double>(imageData[pixelIndex + 2]) * weight;
+                            weightSum += weight;
+                        }
                     }
                 }
+
+                int index = (y * width + x) * 3;
+                smoothedData[index] = static_cast<uint8_t>(r / weightSum);
+                smoothedData[index + 1] = static_cast<uint8_t>(g / weightSum);
+                smoothedData[index + 2] = static_cast<uint8_t>(b / weightSum);
             }
-
-            int index = (y * width + x) * 3;
-            smoothedData[index] = static_cast<uint8_t>(r / weightSum);
-            smoothedData[index + 1] = static_cast<uint8_t>(g / weightSum);
-            smoothedData[index + 2] = static_cast<uint8_t>(b / weightSum);
         }
-    }
 
-    result.set_value(smoothedData);
+        result.set_value(smoothedData);
 }
 
 void Mask::on_btn_save_clicked()
@@ -162,13 +162,11 @@ void Mask::on_btn_reset_clicked()
 void Mask::mousePressEvent(QMouseEvent *event)
 {
     QPoint clickPos = event->pos();
-    // 将窗口坐标转换为图像坐标
-    int imageX = clickPos.x();
-    int imageY = myValue.bmpInfo.GetHeight() - clickPos.y();  // 图像上下翻转
+
     if (clickCount == 0) {
 
         // 第一次点击，保存坐标到firstClick
-        firstClick = QPoint(imageX, imageY);
+        firstClick = clickPos;
         qDebug()<<"current click count is "<<clickCount;
         qDebug() << "First click at: " << firstClick;
         clickCount++;
@@ -178,7 +176,7 @@ void Mask::mousePressEvent(QMouseEvent *event)
         ui->label_firstPos->setText(str);
     } else if (clickCount == 1) {
         // 第二次点击，保存坐标到secondClick
-        secondClick = QPoint(imageX, imageY);
+        secondClick = clickPos;
         qDebug()<<"current click count is "<<clickCount;
         qDebug() << "Second click at: " << secondClick;
         clickCount = 0;
