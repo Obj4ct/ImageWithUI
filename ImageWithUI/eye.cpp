@@ -13,7 +13,6 @@ eye::eye(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     // 显示图像在imageLabel上
     QPixmap pixmap = QPixmap::fromImage(m_bmpImage);
     ui->imageLabel->setPixmap(pixmap);
-
     //ui->imageLabel->setScaledContents(true);
     Function function;
 
@@ -21,31 +20,21 @@ eye::eye(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
 
 void eye::mousePressEvent(QMouseEvent* event)
 {
-
     QPoint clickPos = event->pos();
-    // 将窗口坐标转换为图像坐标
-    int imageX = clickPos.x();
-    int imageY = myValue.bmpInfo.GetHeight() - clickPos.y();  // 图像上下翻转
-
     if (clickCount == 0) {
 
         // 第一次点击，保存坐标到firstClick
-        //firstClick = clickPos;
-        firstClick = QPoint(imageX, imageY);
+        firstClick = clickPos;
         qDebug()<<"current click count is "<<clickCount;
         qDebug() << "First click at: " << firstClick;
         clickCount++;
-
-
-
         firstX=firstClick.x();
         firstY=firstClick.y();
         QString str = QString("%1, %2").arg(firstX).arg(firstY);
         ui->label_first->setText(str);
     } else if (clickCount == 1) {
         // 第二次点击，保存坐标到secondClick
-        //secondClick = clickPos;
-        secondClick = QPoint(imageX, imageY);
+        secondClick = clickPos;
         qDebug()<<"current click count is "<<clickCount;
         qDebug() << "Second click at: " << secondClick;
         clickCount = 0;
@@ -61,7 +50,6 @@ void eye::mousePressEvent(QMouseEvent* event)
 
 void eye::Eye(std::vector<uint8_t> &imageData, int32_t width, int32_t height, int32_t centerX, int32_t centerY, int32_t radius, double intensity,size_t startRow,size_t endRow)
 {
-    qDebug()<<"work at:"<<centerX<<" "<<centerY;
     for (int y = startRow; y < endRow; y++) {
         for (int x = 0; x < width; x++) {
             int pixelIndex = (y * width + x) * 3;
@@ -87,9 +75,9 @@ void eye::Eye(std::vector<uint8_t> &imageData, int32_t width, int32_t height, in
 
                 for (int c = 0; c < 3; c++) {
                     double interpolatedValue = imageData[targetPixelIndex00 + c] * (1 - dx) * (1 - dy) +
-                            imageData[targetPixelIndex01 + c] * dx * (1 - dy) +
-                            imageData[targetPixelIndex10 + c] * (1 - dx) * dy +
-                            imageData[targetPixelIndex11 + c] * dx * dy;
+                                               imageData[targetPixelIndex01 + c] * dx * (1 - dy) +
+                                               imageData[targetPixelIndex10 + c] * (1 - dx) * dy +
+                                               imageData[targetPixelIndex11 + c] * dx * dy;
 
                     imageData[pixelIndex + c] = static_cast<uint8_t>(interpolatedValue);
                 }
