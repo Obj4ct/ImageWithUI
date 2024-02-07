@@ -21,10 +21,13 @@ Face::Face(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
 void Face::mousePressEvent(QMouseEvent* event)
 {
     QPoint clickPos = event->pos();
+    // 将窗口坐标转换为图像坐标
+       int imageX = clickPos.x();
+       int imageY = myValue.bmpInfo.GetHeight() - clickPos.y();  // 图像上下翻转
     if (clickCount == 0) {
 
         // 第一次点击，保存坐标到firstClick
-        firstClick = clickPos;
+        firstClick = QPoint(imageX, imageY);
         qDebug()<<"current click count is "<<clickCount;
         qDebug() << "First click at: " << firstClick;
         clickCount++;
@@ -34,7 +37,7 @@ void Face::mousePressEvent(QMouseEvent* event)
         ui->label_first->setText(str);
     } else if (clickCount == 1) {
         // 第二次点击，保存坐标到secondClick
-        secondClick = clickPos;
+        secondClick = QPoint(imageX, imageY);
         qDebug()<<"current click count is "<<clickCount;
         qDebug() << "Second click at: " << secondClick;
         clickCount = 0;

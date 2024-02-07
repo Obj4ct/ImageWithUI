@@ -112,10 +112,13 @@ void Mosaic::on_btn_save_clicked()
 void Mosaic::mousePressEvent(QMouseEvent *event)
 {
     QPoint clickPos = event->pos();
+    // 将窗口坐标转换为图像坐标
+    int imageX = clickPos.x();
+    int imageY = myValue.bmpInfo.GetHeight() - clickPos.y();  // 图像上下翻转
     if (clickCount == 0) {
 
         // 第一次点击，保存坐标到firstClick
-        firstClick = clickPos;
+        firstClick = QPoint(imageX, imageY);
         qDebug()<<"current click count is "<<clickCount;
         qDebug() << "First click at: " << firstClick;
         clickCount++;
@@ -125,7 +128,7 @@ void Mosaic::mousePressEvent(QMouseEvent *event)
         ui->label_firstPos->setText(str);
     } else if (clickCount == 1) {
         // 第二次点击，保存坐标到secondClick
-        secondClick = clickPos;
+        secondClick = QPoint(imageX, imageY);
         qDebug()<<"current click count is "<<clickCount;
         qDebug() << "Second click at: " << secondClick;
         clickCount = 0;
@@ -154,6 +157,7 @@ void Mosaic::ShowImage(std::vector<uint8_t> &inImageData)
 
 void Mosaic::ResetImage()
 {
+    newValue.imageData=myValue.imageData;
     // 恢复原始图像
     QImage originalImage(myValue.imageData.data(), myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(), QImage::Format_BGR888);
     originalImage = originalImage.mirrored(false, true);
