@@ -16,6 +16,12 @@ struct ReturnValue{
     bool isNumeric;
     double_t value;
 };
+enum OperationType
+{
+    UNDO,
+    REDO
+};
+
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
@@ -31,14 +37,15 @@ public:
     void ShowImage(std::vector<uint8_t> &inImageData,MyValue value,int32_t width,int32_t height);
     void ResetAll(MyValue &myValue);
     ReturnValue CheckOK(QLineEdit* lineEdit);
-    void SaveImageDataToHistory(std::vector<uint8_t>& imageData);
+    OperationType SaveImageDataToHistory(std::vector<uint8_t>& imageData);
     void UndoImageProcessing();
+    void RedoImageProcessing();
     //清理每段数据,防止数据冲突引发异常
     void ClearSegmentData();
     ~MainWindow();
 public:
     std::list<std::vector<uint8_t>> imageDataHistory;
-
+    std::list<std::vector<uint8_t>> redoImageDataHistory;
     //分段处理数据
     int num_threads;
     size_t imageSize;

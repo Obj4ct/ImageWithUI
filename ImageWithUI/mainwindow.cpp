@@ -68,8 +68,6 @@ void MainWindow::ResetAll(MyValue &myValue)
     originalImage = originalImage.mirrored(false, true);
     QPixmap originalPixmap = QPixmap::fromImage(originalImage);
     ui->imageLabel->setPixmap(originalPixmap);
-    //clear list
-    imageDataHistory.clear();
 }
 ReturnValue MainWindow::CheckOK(QLineEdit * lineEdit)
 {
@@ -101,6 +99,27 @@ MainWindow::~MainWindow()
     delete ui;
 }
 // 撤销操作，从链表中获取上一步的图像数据进行恢复
+OperationType MainWindow::SaveImageDataToHistory(std::vector<uint8_t> &imageData)
+{
+    // 保存当前图像数据到链表
+    if (!imageDataHistory.empty())
+    {
+        if (imageData != imageDataHistory.back())
+        {
+            imageDataHistory.push_back(imageData);
+            return UNDO;
+        }
+    }
+    else
+    {
+        imageDataHistory.push_back(imageData);
+        return UNDO;
+    }
+
+    return REDO; // 返回重做类型
+}
+
+
 void MainWindow::UndoImageProcessing()
 {
     if (!imageDataHistory.empty())
@@ -111,28 +130,46 @@ void MainWindow::UndoImageProcessing()
         // 恢复图像数据
         imageData = previousImageData;
 
+        // 保存当前图像数据到重做链表
+        redoImageDataHistory.push_back(previousImageData);
+
         // 更新图像显示
-        ShowImage(imageData, myValue,myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
-        qDebug()<<"undo ok";
+        ShowImage(imageData, myValue, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+        qDebug() << "Undo operation";
     }
     else
     {
-        imageData=myValue.imageData;
-        ShowImage(imageData,myValue,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
-        qDebug()<<"list is empty and undo ok";
+        qDebug() << "Undo operation failed: history is empty";
     }
 }
-void MainWindow::SaveImageDataToHistory(std::vector<uint8_t> &imageData)
+void MainWindow::RedoImageProcessing()
 {
-    // 在图像处理函数中保存当前图像数据到链表
-    imageDataHistory.push_back(imageData);
+    if (!redoImageDataHistory.empty())
+    {
+        std::vector<uint8_t> nextImageData = redoImageDataHistory.back();
+        redoImageDataHistory.pop_back();
 
+        // 恢复图像数据
+        imageData = nextImageData;
 
+        // 保存当前图像数据到撤销链表
+        imageDataHistory.push_back(nextImageData);
+
+        // 更新图像显示
+        ShowImage(imageData, myValue, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+        qDebug() << "Redo operation";
+    }
+    else
+    {
+        qDebug() << "Redo operation failed: no redo history";
+    }
 }
+
 void MainWindow::on_openImage_triggered()
 {
     //clear list
     imageDataHistory.clear();
+    redoImageDataHistory.clear();
     // 文件默认路径
     QString defaultPath = QDir::homePath();
     // 设置过滤
@@ -951,6 +988,7 @@ void MainWindow::on_actionreset_triggered()
 void MainWindow::on_actionredo_triggered()
 {
     qDebug()<<"redo";
+    RedoImageProcessing();
 }
 
 void MainWindow::_SetVisible(bool set)
