@@ -21,5 +21,5 @@
 #include <QGraphicsScene>
 #include <QImageReader>
 #include <QtConcurrent>
-
+#include <QInputDialog>
 #endif // QTHEADER_H

@@ -28,7 +28,7 @@ public:
     MainWindow(QWidget *parent = nullptr);
     //reset image
     void ResetImage(MyValue &myValue);
-    void ShowImage(std::vector<uint8_t> &inImageData,int32_t width,int32_t height);
+    void ShowImage(std::vector<uint8_t> &inImageData,MyValue value,int32_t width,int32_t height);
     void ResetAll(MyValue &myValue);
     ReturnValue CheckOK(QLineEdit* lineEdit);
     void SaveImageDataToHistory(std::vector<uint8_t>& imageData);
@@ -45,9 +45,6 @@ public:
     std::vector<std::thread> threads;              // 存储线程对象，每个线程对象将处理图像数据的不同部分
     size_t segmentSize; // 均分处理
     std::vector<size_t> segmentStarts; // 用来存储每个数据段的起始位置
-
-
-
     //QImage
     QImage m_bmpImage;
     MyValue myValue;
@@ -66,15 +63,9 @@ private slots:
     void on_openImage_triggered();
     void on_actionsave_triggered();
 
-    void on_btn_gray_clicked();
-
-    void on_btn_autoContrast_clicked();
-
-    void on_btn_averBlur_clicked();
 
     void on_btn_resetAll_clicked();
 
-    void on_btn_blend_clicked();
 
     void on_btn_brightness_clicked();
 
@@ -82,21 +73,6 @@ private slots:
 
     void on_btn_saturation_clicked();
 
-    void on_btn_color_balance_clicked();
-
-    void on_btn_colorMap_clicked();
-
-    void on_btn_reverse_color_clicked();
-
-    void on_btn_complementary_clicked();
-
-    void on_btn_eye_clicked();
-
-    void on_btn_face_clicked();
-
-    void on_btn_fish_eye_clicked();
-
-    void on_btn_gauss_ok_clicked();
 
     void on_btn_highContrast_ok_clicked();
 
@@ -104,11 +80,7 @@ private slots:
 
     void on_btn_rotate_r_clicked();
 
-    void on_btn_mask_clicked();
 
-    void on_btn_medianBlur_clicked();
-
-    void on_btn_mosaic_clicked();
 
     void on_btn_shadow_ok_clicked();
 
@@ -116,21 +88,57 @@ private slots:
 
     void on_btn_sharpen_clicked();
 
-    void on_btn_tailor_clicked();
-
-    void on_btn_tensor_clicked();
-
     void on_btn_threshold_ok_clicked();
 
-    void on_btn_inter_clicked();
-
     void on_btn_undo_clicked();
+
+    void on_actionmedian_triggered();
+
+    void on_actionaver_triggered();
+
+    void on_actiongauss_triggered();
+
+    void on_actiongray_triggered();
+
+    void on_actionreverse_triggered();
+
+    void on_actioncomplementary_triggered();
+
+    void on_actionautoContrast_triggered();
+
+    void on_actioncolorBalance_triggered();
+
+    void on_actionblend_triggered();
+
+    void on_actionmask_triggered();
+
+    void on_actionmosaic_triggered();
+
+    void on_actionsobel_triggered();
+
+    void on_actionliquefaction_triggered();
+
+    void on_actioncolorMap_triggered();
+
+    void on_actionfishEye_triggered();
+
+    void on_actionface_triggered();
+
+    void on_actionundo_triggered();
+
+    void on_actionreset_triggered();
+
+    void on_actiontailor_triggered();
+
+    void on_actionscale_triggered();
 
 private:
     Ui::MainWindow *ui;
     BlendWindow * blendWindow;
     bool canSave=false;
     void closeEvent(QCloseEvent *event) override;
+    void _SetVisible(bool set);
+    void _SetShortCut();
 
 };
 #endif // MAINWINDOW_H

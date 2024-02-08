@@ -7,7 +7,10 @@ MainWindow::MainWindow(QWidget *parent)
       ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+    setFocus();
+
     setWindowIcon(QIcon(":/icon/logo.png"));
+
     //根据设备cpu线程数判断程序需要设置的线程
     if(std::thread::hardware_concurrency()>=2)
     {
@@ -19,9 +22,9 @@ MainWindow::MainWindow(QWidget *parent)
     }
     qDebug()<<"thread is:"<<num_threads;
     // num_threads=std::thread::hardware_concurrency()/3;
-    ui->widget->setVisible(false);
-    ui->widget_add->setVisible(false);
-    ui->widget_operation->setVisible(false);
+    _SetShortCut();
+    _SetVisible(false);
+
 }
 
 void MainWindow::ResetImage(MyValue &myValue)
@@ -34,9 +37,17 @@ void MainWindow::ResetImage(MyValue &myValue)
     ui->imageLabel->setPixmap(originalPixmap);
 }
 
-void MainWindow::ShowImage(std::vector<uint8_t> &inImageData,int32_t width,int32_t height)
+void MainWindow::ShowImage(std::vector<uint8_t> &inImageData,MyValue value,int32_t width,int32_t height)
 {
-
+    if(inImageData!=imageData)
+    {
+        qDebug()<<"not equal";
+        imageData=myValue.imageData;
+    }
+   else{
+        imageData=inImageData;
+        myValue=value;
+    }
     QImage image(inImageData.data(), width, height, QImage::Format_BGR888);
 
     // 进行垂直翻转
@@ -45,7 +56,7 @@ void MainWindow::ShowImage(std::vector<uint8_t> &inImageData,int32_t width,int32
     // 显示灰度图像在imageLabel上
     QPixmap pixmap = QPixmap::fromImage(image);
     ui->imageLabel->setPixmap(pixmap);
-    ui->imageLabel->setScaledContents(true); // 使图像适应 label 大小
+
 }
 
 void MainWindow::ResetAll(MyValue &myValue)
@@ -101,13 +112,13 @@ void MainWindow::UndoImageProcessing()
         imageData = previousImageData;
 
         // 更新图像显示
-        ShowImage(imageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+        ShowImage(imageData, myValue,myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
         qDebug()<<"undo ok";
     }
     else
     {
         imageData=myValue.imageData;
-        ShowImage(imageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+        ShowImage(imageData,myValue,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
         qDebug()<<"list is empty and undo ok";
     }
 }
@@ -133,9 +144,7 @@ void MainWindow::on_openImage_triggered()
         return;
     }
     else{
-        ui->widget->setVisible(true);
-        ui->widget_add->setVisible(true);
-        ui->widget_operation->setVisible(true);
+        _SetVisible(true);
         // 读取BMP文件并且存入变量中
         std::string BMPPath = path.toStdString();
         myValue = MYFunction::ReadBMPFile(BMPPath);
@@ -155,14 +164,14 @@ void MainWindow::on_openImage_triggered()
         m_bmpImage.mirror(false,true);
 
 
-//        Debug::PrintImagePixelsToFile(m_bmpImage, "output.txt");
-//        qDebug()<<"write ok!";
+        //        Debug::PrintImagePixelsToFile(m_bmpImage, "output.txt");
+        //        qDebug()<<"write ok!";
 
         imageData=myValue.imageData;
         // 显示图像在imageLabel上
         QPixmap pixmap = QPixmap::fromImage(m_bmpImage);
         ui->imageLabel->setPixmap(pixmap);
-
+        SaveImageDataToHistory(imageData);
         canSave=true;
     }
 }
@@ -214,7 +223,7 @@ void MainWindow::ClearSegmentData()
     threads.clear();
     segmentStarts.clear();
 }
-void MainWindow::on_btn_gray_clicked()
+void MainWindow::on_actiongray_triggered()
 {
     std::vector<uint8_t> tempImageData = imageData;
     if (!imageDataHistory.empty()) {
@@ -237,11 +246,12 @@ void MainWindow::on_btn_gray_clicked()
         thread.join();
     }
     SaveImageDataToHistory(tempImageData);  // 保存当前图像数据到链表
-    ShowImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+    ShowImage(tempImageData, myValue,myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
     ClearSegmentData();
 }
-void MainWindow::on_btn_autoContrast_clicked()
+void MainWindow::on_actionautoContrast_triggered()
 {
+    qDebug()<<"click auto contrast";
     std::vector<uint8_t> tempImageData=imageData;
     if(!imageDataHistory.empty())
     {
@@ -263,14 +273,15 @@ void MainWindow::on_btn_autoContrast_clicked()
         thread.join();
     }
     SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
-    ShowImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+    ShowImage(tempImageData, myValue,myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
     ClearSegmentData();
 
 }
 
 
-void MainWindow::on_btn_averBlur_clicked()
+void MainWindow::on_actionaver_triggered()
 {
+    qDebug()<<"aver";
     std::vector<uint8_t> tempImageData=imageData;
     if(!imageDataHistory.empty())
     {
@@ -295,7 +306,7 @@ void MainWindow::on_btn_averBlur_clicked()
     //function.AverageBlur(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
 
     SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
-    ShowImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+    ShowImage(tempImageData, myValue,myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
     ClearSegmentData();
 }
 
@@ -305,7 +316,7 @@ void MainWindow::on_btn_resetAll_clicked()
 }
 
 
-void MainWindow::on_btn_blend_clicked()
+void MainWindow::on_actionblend_triggered()
 {
     qDebug()<<"i am in a blend window!";
     blendWindow = new BlendWindow(this,myValue);
@@ -338,7 +349,7 @@ void MainWindow::on_btn_brightness_clicked()
         brightThread.join();
         //function.Brightness(tempImageData,returnValue.value);
         SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
-        ShowImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+        ShowImage(tempImageData, myValue,myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
     }
 }
 
@@ -367,7 +378,7 @@ void MainWindow::on_btn_contrast_clicked()
         //function.Contrast(tempImageData,returnValue.value);
         constrastThread.join();
         SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
-        ShowImage(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+        ShowImage(tempImageData,myValue,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
     }
 }
 
@@ -396,12 +407,13 @@ void MainWindow::on_btn_saturation_clicked()
         saturationThread.join();
         //        function.Saturation(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),returnValue.value);
         SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
-        ShowImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+        ShowImage(tempImageData,myValue, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
     }
 }
 
 
-void MainWindow::on_btn_color_balance_clicked()
+
+void MainWindow::on_actioncolorBalance_triggered()
 {
     std::vector<uint8_t> tempImageData=imageData;
     if(!imageDataHistory.empty())
@@ -412,10 +424,11 @@ void MainWindow::on_btn_color_balance_clicked()
 
     function.ColorBalance(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
     SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
-    ShowImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+    ShowImage(tempImageData,myValue, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
 
 }
-void MainWindow::on_btn_colorMap_clicked()
+
+void MainWindow::on_actioncolorMap_triggered()
 {
     qDebug() << "I am in a color map window!";
     ColorMap *colorMap= new ColorMap(this,myValue);
@@ -423,7 +436,7 @@ void MainWindow::on_btn_colorMap_clicked()
 }
 
 
-void MainWindow::on_btn_reverse_color_clicked()
+void MainWindow::on_actionreverse_triggered()
 {
     std::vector<uint8_t> tempImageData=imageData;
     if(!imageDataHistory.empty())
@@ -447,12 +460,12 @@ void MainWindow::on_btn_reverse_color_clicked()
 
     //function.InvertColors(tempImageData);
     SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
-    ShowImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+    ShowImage(tempImageData,myValue, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
     ClearSegmentData();
 }
 
 
-void MainWindow::on_btn_complementary_clicked()
+void MainWindow::on_actioncomplementary_triggered()
 {
 
     std::vector<uint8_t> tempImageData=imageData;
@@ -478,7 +491,7 @@ void MainWindow::on_btn_complementary_clicked()
 
     //function.Complementary(tempImageData);
     SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
-    ShowImage(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+    ShowImage(tempImageData,myValue,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
 
 
     ClearSegmentData();
@@ -486,7 +499,7 @@ void MainWindow::on_btn_complementary_clicked()
 }
 
 
-void MainWindow::on_btn_eye_clicked()
+void MainWindow::on_actionliquefaction_triggered()
 {
     qDebug() << "I am in a eye window!";
     eye *myEye= new eye(this,myValue);
@@ -494,7 +507,7 @@ void MainWindow::on_btn_eye_clicked()
 }
 
 
-void MainWindow::on_btn_face_clicked()
+void MainWindow::on_actionface_triggered()
 {
     qDebug() << "I am in a face window!";
     Face *face = new Face(this,myValue);
@@ -503,7 +516,7 @@ void MainWindow::on_btn_face_clicked()
 }
 
 
-void MainWindow::on_btn_fish_eye_clicked()
+void MainWindow::on_actionfishEye_triggered()
 {
     std::vector<uint8_t> tempImageData=imageData;
     if(!imageDataHistory.empty())
@@ -527,46 +540,50 @@ void MainWindow::on_btn_fish_eye_clicked()
     // 获取函数的结果
     std::vector<uint8_t> result = future.get();
     SaveImageDataToHistory(result); // 保存当前图像数据到链表
-    ShowImage(result, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+    ShowImage(result, myValue,myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
 
 
 }
 
 
-void MainWindow::on_btn_gauss_ok_clicked()
+void MainWindow::on_actiongauss_triggered()
 {
-    //正确输入数字
-    ReturnValue returnValue=CheckOK(ui->lineEdit_gauss);
+    qDebug()<<"gauss";
+    bool dialogClosed = false;
+    while (!dialogClosed) {
+        bool ok;
+        double degree = QInputDialog::getDouble(this, tr("输入程度"), tr("程度:"), 0, 0, 100, 1, &ok);
 
-    if(returnValue.isNull==true)
-    {
-        if(!function.CreateMessagebox("提示","请输入"))
-            return;
-    }else if(returnValue.isNumeric==false){
-        if(!function.CreateMessagebox("提示","输入数字"))
-            return;
-    }else{
-        std::vector<uint8_t> tempImageData=imageData;
-        if(!imageDataHistory.empty())
-        {
-            tempImageData = imageDataHistory.back(); // 复制当前图像数据
+        if (ok) {
+
+            qDebug() << "用户输入的程度:" << degree;
+            std::vector<uint8_t> tempImageData=imageData;
+            if(!imageDataHistory.empty())
+            {
+                tempImageData = imageDataHistory.back(); // 复制当前图像数据
+            }
+            std::promise<std::vector<uint8_t>> promise;
+            std::future<std::vector<uint8_t>> future = promise.get_future();
+
+            // 使用 std::bind 调用成员函数
+            auto func = std::bind(&Function::Gauss, &function, std::ref(tempImageData), std::ref(promise), std::placeholders::_1, std::placeholders::_2,std::placeholders::_3);
+
+            // 启动一个线程执行绑定的函数
+            std::thread thread(func, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),degree);
+            std::vector<uint8_t> resultImage = future.get();
+            // 等待线程执行完成
+            thread.join();
+
+            SaveImageDataToHistory(resultImage); // 保存当前图像数据到链表
+            ShowImage(resultImage,myValue,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+
+        } else {
+
+            qDebug() << "用户取消输入";
+            dialogClosed = true; // 设置标志以退出循环
         }
-        std::promise<std::vector<uint8_t>> promise;
-        std::future<std::vector<uint8_t>> future = promise.get_future();
-
-        // 使用 std::bind 调用成员函数
-        auto func = std::bind(&Function::Gauss, &function, std::ref(tempImageData), std::ref(promise), std::placeholders::_1, std::placeholders::_2,std::placeholders::_3);
-
-        // 启动一个线程执行绑定的函数
-        std::thread thread(func, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),returnValue.value);  // 这里传入具体的参数
-        std::vector<uint8_t> resultImage = future.get();
-        // 等待线程执行完成
-        thread.join();
-
-        //std::vector<uint8_t> gaussImageData=function.Gauss(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),returnValue.value);
-        SaveImageDataToHistory(resultImage); // 保存当前图像数据到链表
-        ShowImage(resultImage,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
     }
+
 
 }
 
@@ -617,7 +634,7 @@ void MainWindow::on_btn_highContrast_ok_clicked()
         std::vector<uint8_t> value = highContrastFuture.get();
         highContrastThread.join();
         SaveImageDataToHistory(value); // 保存当前图像数据到链表
-        ShowImage(value, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+        ShowImage(value, myValue,myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
     }
 
 }
@@ -646,7 +663,7 @@ void MainWindow::on_btn_rotate_ok_clicked()
 
         rotateThread.join();
         SaveImageDataToHistory(tempImageData);// 保存当前图像数据到链表
-        ShowImage(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+        ShowImage(tempImageData,myValue,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
 
 
     }
@@ -676,14 +693,13 @@ void MainWindow::on_btn_rotate_r_clicked()
         std::thread rotateThread(func, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(), returnValue.value);
         rotateThread.join();
         SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
-        ShowImage(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+        ShowImage(tempImageData,myValue,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
 
     }
 
 }
 
-
-void MainWindow::on_btn_mask_clicked()
+void MainWindow::on_actionmask_triggered()
 {
     qDebug() << "I am in a mask window!";
     Mask *mask = new Mask(this,myValue);
@@ -691,8 +707,9 @@ void MainWindow::on_btn_mask_clicked()
 }
 
 
-void MainWindow::on_btn_medianBlur_clicked()
+void MainWindow::on_actionmedian_triggered()
 {
+    qDebug()<<"median";
     std::vector<uint8_t> tempImageData=imageData;
     if(!imageDataHistory.empty())
     {
@@ -705,13 +722,14 @@ void MainWindow::on_btn_medianBlur_clicked()
     //function.MedianBlur(tempImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
 
     SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
-    ShowImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+    ShowImage(tempImageData,myValue, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
 
 
 }
 
 
-void MainWindow::on_btn_mosaic_clicked()
+
+void MainWindow::on_actionmosaic_triggered()
 {
 
     qDebug() << "I am in a mosaic window!";
@@ -751,7 +769,7 @@ void MainWindow::on_btn_shadow_ok_clicked()
         //function.MakeShadow(tempImageData,shadowImageData,returnValue.value);
 
         SaveImageDataToHistory(shadowImageData); // 保存当前图像数据到链表
-        ShowImage(shadowImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+        ShowImage(shadowImageData,myValue,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
 
 
 
@@ -784,7 +802,7 @@ void MainWindow::on_btn_highlight_ok_clicked()
         }
         function.HighLight(tempImageData,highLightImageData,returnValue.value);
         SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
-        ShowImage(highLightImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+        ShowImage(highLightImageData,myValue,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
     }
 }
 
@@ -803,43 +821,43 @@ void MainWindow::on_btn_sharpen_clicked()
             return;
     }
     else{
-    std::vector<uint8_t> tempImageData=imageData;
-    if(!imageDataHistory.empty())
-    {
-        tempImageData = imageDataHistory.back(); // 复制当前图像数据
-    }
-    std::promise<std::vector<uint8_t>> blurPromise;
-    std::promise<std::vector<uint8_t>> highPromise;
-    std::promise<std::vector<uint8_t>> sharpenPromise;
+        std::vector<uint8_t> tempImageData=imageData;
+        if(!imageDataHistory.empty())
+        {
+            tempImageData = imageDataHistory.back(); // 复制当前图像数据
+        }
+        std::promise<std::vector<uint8_t>> blurPromise;
+        std::promise<std::vector<uint8_t>> highPromise;
+        std::promise<std::vector<uint8_t>> sharpenPromise;
 
 
-    std::future<std::vector<uint8_t>> blurValue=blurPromise.get_future();
-    std::future<std::vector<uint8_t>> highValue=highPromise.get_future();
-    std::future<std::vector<uint8_t>> sharpenValue=sharpenPromise.get_future();
-    auto gaussFunc = std::bind(&Function::Gauss, &function, std::ref(tempImageData), std::placeholders::_1, std::placeholders::_2,std::placeholders::_3,std::placeholders::_4);
-    auto highContrastFunc = std::bind(&Function::HighContrast, &function, std::ref(tempImageData), std::placeholders::_1, std::placeholders::_2);
-    auto sharpenFunc = std::bind(&Function::Sharpen, &function, std::ref(tempImageData), std::placeholders::_1, std::placeholders::_2);
+        std::future<std::vector<uint8_t>> blurValue=blurPromise.get_future();
+        std::future<std::vector<uint8_t>> highValue=highPromise.get_future();
+        std::future<std::vector<uint8_t>> sharpenValue=sharpenPromise.get_future();
+        auto gaussFunc = std::bind(&Function::Gauss, &function, std::ref(tempImageData), std::placeholders::_1, std::placeholders::_2,std::placeholders::_3,std::placeholders::_4);
+        auto highContrastFunc = std::bind(&Function::HighContrast, &function, std::ref(tempImageData), std::placeholders::_1, std::placeholders::_2);
+        auto sharpenFunc = std::bind(&Function::Sharpen, &function, std::ref(tempImageData), std::placeholders::_1, std::placeholders::_2);
 
 
-    std::thread gauss(gaussFunc,std::ref(blurPromise),myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),returnValue.value);
-    std::vector<uint8_t> gaussValue = blurValue.get();
-    gauss.join();
-    std::thread highContrast(highContrastFunc, std::ref(highPromise), std::ref(gaussValue));
-    std::vector<uint8_t> highContrastValue = highValue.get();
-    highContrast.join();
+        std::thread gauss(gaussFunc,std::ref(blurPromise),myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),returnValue.value);
+        std::vector<uint8_t> gaussValue = blurValue.get();
+        gauss.join();
+        std::thread highContrast(highContrastFunc, std::ref(highPromise), std::ref(gaussValue));
+        std::vector<uint8_t> highContrastValue = highValue.get();
+        highContrast.join();
 
-    std::thread sharpen(sharpenFunc, std::ref(sharpenPromise), std::ref(highContrastValue));
-    std::vector<uint8_t> finalResult = sharpenValue.get();
-    sharpen.join();
+        std::thread sharpen(sharpenFunc, std::ref(sharpenPromise), std::ref(highContrastValue));
+        std::vector<uint8_t> finalResult = sharpenValue.get();
+        sharpen.join();
 
-    SaveImageDataToHistory(finalResult); // 保存当前图像数据到链表
+        SaveImageDataToHistory(finalResult); // 保存当前图像数据到链表
 
-    ShowImage(finalResult,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+        ShowImage(finalResult,myValue,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
     }
 }
 
 
-void MainWindow::on_btn_tailor_clicked()
+void MainWindow::on_actiontailor_triggered()
 {
 
     qDebug() << "I am in a tailor window!";
@@ -848,7 +866,7 @@ void MainWindow::on_btn_tailor_clicked()
 }
 
 
-void MainWindow::on_btn_tensor_clicked()
+void MainWindow::on_actionsobel_triggered()
 {
     std::vector<uint8_t> tempImageData=imageData;
     if(!imageDataHistory.empty())
@@ -859,7 +877,7 @@ void MainWindow::on_btn_tensor_clicked()
 
     std::vector<uint8_t> edgeImageData = function.SobelEdge(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
     SaveImageDataToHistory(edgeImageData); // 保存当前图像数据到链表
-    ShowImage(edgeImageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+    ShowImage(edgeImageData,myValue,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
 
 
 
@@ -902,13 +920,12 @@ void MainWindow::on_btn_threshold_ok_clicked()
 
         //function.ApplyThreshold(tempImageData,returnValue.value);
         SaveImageDataToHistory(tempImageData); // 保存当前图像数据到链表
-        ShowImage(tempImageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+        ShowImage(tempImageData,myValue, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
         ClearSegmentData();
     }
 }
 
-
-void MainWindow::on_btn_inter_clicked()
+void MainWindow::on_actionscale_triggered()
 {
     qDebug() << "I am in a inter window!";
     Interpolation *inter = new Interpolation(this,myValue);
@@ -920,6 +937,35 @@ void MainWindow::on_btn_undo_clicked()
 {
     UndoImageProcessing();
 }
+
+void MainWindow::on_actionundo_triggered()
+{
+    UndoImageProcessing();
+}
+
+void MainWindow::on_actionreset_triggered()
+{
+    ResetAll(myValue);
+}
+void MainWindow::_SetVisible(bool set)
+{
+    qDebug() << "Setting visibility to:" << set;
+    ui->menu_edit->menuAction()->setVisible(set);
+    ui->menu_blur->menuAction()->setVisible(set);
+    ui->menu_base->menuAction()->setVisible(set);
+    ui->menu_unbase->menuAction()->setVisible(set);
+    ui->widget->setVisible(set);
+
+}
+
+void MainWindow::_SetShortCut()
+{
+    ui->openImage->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_N));
+    ui->actionsave->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_S));
+    ui->actionundo->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Z));
+    ui->actionreset->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_R));
+}
+
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
@@ -949,3 +995,10 @@ void MainWindow::closeEvent(QCloseEvent *event)
 
 
 }
+
+
+
+
+
+
+

@@ -15,7 +15,7 @@ Tailor::Tailor(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     // 显示图像在imageLabel上
     QPixmap pixmap = QPixmap::fromImage(m_bmpImage);
     ui->imageLabel->setPixmap(pixmap);
-    ui->imageLabel->setScaledContents(true);
+
     Function function;
 
 }
@@ -89,7 +89,7 @@ void Tailor::ShowImage(std::vector<uint8_t>& imageData, int32_t width, int32_t h
 
     // 设置 QLabel 的图像
     imageLabel->setPixmap(QPixmap::fromImage(newImage));
-    imageLabel->setScaledContents(true);
+
 
     // 设置新窗口的中心部件为 QLabel
     newWindow->setCentralWidget(imageLabel);

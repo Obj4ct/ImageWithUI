@@ -1,9 +1,6 @@
 #include "mainwindow.h"
 #include "blendwindow.h"
 #include "ui_blendwindow.h"
-
-
-
 BlendWindow::BlendWindow(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     : QWidget(parent), ui(new Ui::BlendWindow), mainWindow(mainWindow), myValue(myValue) {
     ui->setupUi(this);
@@ -55,13 +52,14 @@ void BlendWindow::on_btn_open_1_clicked() {
 
     QPixmap pixmap = QPixmap::fromImage(bmpImage_1);
     ui->imageLabel_1->setPixmap(pixmap);
-    ui->imageLabel_1->setScaledContents(true);
+
     selectCount++;
     qDebug()<<selectCount;
-    if(selectCount==2)
+    if(selectCount>=2)
     {
         ui->widget_select_blendMode->setVisible(true);
     }
+    ui->imageLabel_1->setScaledContents(true);
 }
 
 void BlendWindow::on_btn_open_2_clicked() {
@@ -85,50 +83,57 @@ void BlendWindow::on_btn_open_2_clicked() {
 
     QPixmap pixmap = QPixmap::fromImage(bmpImage_2);
     ui->imageLabel_2->setPixmap(pixmap);
-    ui->imageLabel_2->setScaledContents(true);
+
     selectCount++;
     qDebug()<<selectCount;
-    if(selectCount==2)
+    if(selectCount>=2)
     {
         ui->widget_select_blendMode->setVisible(true);
     }
+    ui->imageLabel_2->setScaledContents(true);
+}
+
+void BlendWindow::on_btn_apply_clicked()
+{
+    qDebug()<<"apply";
+    mainWindow->ShowImage(originalImageData_1,myValue_1,myValue_1.bmpInfo.GetWidth(),myValue_1.bmpInfo.GetHeight());
 }
 
 void BlendWindow::BlendImages()
 {
+
     int32_t width = myValue_1.bmpInfo.GetWidth();
     int32_t height = myValue_1.bmpInfo.GetHeight();
     BlendMode blendMode = currentBlendMode;
     originalImageData_1=myValue_1.imageData;
     originalImageData_2=myValue_2.imageData;
+    if(myValue_1.imageData.size()!=myValue_2.imageData.size())
+    {
+        Function function;
+        function.CreateMessagebox("提示","图片大小不一致!!");
+        return;
+    }
     std::vector<std::thread> threads(mainWindow->num_threads);
-int segmentSize = static_cast<int>(myValue.imageData.size() / 3 / mainWindow->num_threads);
+    int segmentSize = static_cast<int>(myValue.imageData.size() / 3 / mainWindow->num_threads);
 
- auto func = std::bind(&BlendWindow::Effect, this, std::ref(originalImageData_1),std::ref(originalImageData_2),  std::placeholders::_1, std::placeholders::_2,  std::placeholders::_3, std::placeholders::_4, std::placeholders::_5);
+    auto func = std::bind(&BlendWindow::Effect, this, std::ref(originalImageData_1),std::ref(originalImageData_2),  std::placeholders::_1, std::placeholders::_2,  std::placeholders::_3, std::placeholders::_4, std::placeholders::_5);
 
     for (int i = 0; i < mainWindow->num_threads; i++) {
         int start = i * segmentSize;
-        int end = (i == mainWindow->num_threads - 1) ? myValue.imageData.size() / 3 : (i + 1) *segmentSize;
+        int end = (i == mainWindow->num_threads - 1) ? myValue_1.imageData.size() / 3 : (i + 1) *segmentSize;
         threads[i] =
-            std::thread(func, width, height, blendMode, start, end);
+                std::thread(func, width, height, blendMode, start, end);
     }
 
     for (auto &thread : threads) {
         thread.join();
     }
-
-    //Effect(originalImageData_1, originalImageData_2, width, height, blendMode,start,end);
-
-
-    //out image for debug
-    //    MYFunction::WriteBMPFile("outputBlendedImage.bmp", originalImageData_1, myValue_1.bmp,
-    //                             myValue_1.bmpInfo);
-
-
     //store to blendedimage
 
     ShowImage();
     threads.clear();
+    mainWindow->SaveImageDataToHistory(originalImageData_1);
+
 }
 
 void BlendWindow::ShowImage()
@@ -140,7 +145,7 @@ void BlendWindow::ShowImage()
     // 显示图像在imageLabel上
     QPixmap pixmap = QPixmap::fromImage(blendedImage);
     ui->blendImageLabel->setPixmap(pixmap);
-    ui->blendImageLabel->setScaledContents(true); // 使图像适应 label 大小
+    ui->blendImageLabel->setScaledContents(true);
 
 }
 

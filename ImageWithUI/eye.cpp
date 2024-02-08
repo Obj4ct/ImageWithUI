@@ -16,7 +16,7 @@ eye::eye(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     // 显示图像在imageLabel上
     QPixmap pixmap = QPixmap::fromImage(m_bmpImage);
     ui->imageLabel->setPixmap(pixmap);
-    //ui->imageLabel->setScaledContents(true);
+
     Function function;
 
 }
@@ -102,7 +102,7 @@ void eye::ShowImage(std::vector<uint8_t>&inImageData)
     // 显示灰度图像在imageLabel上
     QPixmap pixmap = QPixmap::fromImage(image);
     ui->imageLabel->setPixmap(pixmap);
-    //ui->imageLabel->setScaledContents(true); // 使图像适应 label 大小
+
 }
 
 void eye::ResetImage()

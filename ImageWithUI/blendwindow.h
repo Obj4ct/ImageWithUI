@@ -27,7 +27,7 @@ public:
 private slots:
     void on_btn_open_1_clicked();
     void on_btn_open_2_clicked();
-
+    void on_btn_apply_clicked();
     void on_comboBox_blendMode_currentIndexChanged(int index);
     void on_horizontalSlider_alpha_valueChanged(int value);
 
