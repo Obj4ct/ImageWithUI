@@ -947,6 +947,12 @@ void MainWindow::on_actionreset_triggered()
 {
     ResetAll(myValue);
 }
+
+void MainWindow::on_actionredo_triggered()
+{
+    qDebug()<<"redo";
+}
+
 void MainWindow::_SetVisible(bool set)
 {
     qDebug() << "Setting visibility to:" << set;
@@ -964,6 +970,7 @@ void MainWindow::_SetShortCut()
     ui->actionsave->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_S));
     ui->actionundo->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Z));
     ui->actionreset->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_R));
+    ui->actionredo->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Y));
 }
 
 
@@ -995,6 +1002,8 @@ void MainWindow::closeEvent(QCloseEvent *event)
 
 
 }
+
+
 
 
 

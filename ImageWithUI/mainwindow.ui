@@ -680,6 +680,7 @@
      <string>编辑</string>
     </property>
     <addaction name="actionundo"/>
+    <addaction name="actionredo"/>
     <addaction name="actionreset"/>
    </widget>
    <widget class="QMenu" name="menu_blur">
@@ -852,6 +853,18 @@
   <action name="actionscale">
    <property name="text">
     <string>图像缩放</string>
+   </property>
+  </action>
+  <action name="actionredo">
+   <property name="icon">
+    <iconset resource="icon.qrc">
+     <normaloff>:/icon/redo.png</normaloff>:/icon/redo.png</iconset>
+   </property>
+   <property name="text">
+    <string>重做</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Y</string>
    </property>
   </action>
  </widget>

@@ -132,6 +132,8 @@ private slots:
 
     void on_actionscale_triggered();
 
+    void on_actionredo_triggered();
+
 private:
     Ui::MainWindow *ui;
     BlendWindow * blendWindow;

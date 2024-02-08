@@ -4,5 +4,6 @@
         <file>icon/undo.png</file>
         <file>icon/logo.png</file>
         <file>icon/what.png</file>
+        <file>icon/redo.png</file>
     </qresource>
 </RCC>
