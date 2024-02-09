@@ -11,6 +11,7 @@
 #include "interpolation.h"
 #include "face.h"
 #include "colormap.h"
+
 struct ReturnValue{
     bool isNull;
     bool isNumeric;
@@ -140,6 +141,18 @@ private slots:
     void on_actionscale_triggered();
 
     void on_actionredo_triggered();
+
+    void on_actionlarge_near_triggered();
+
+    void on_actionsmall_near_triggered();
+
+    void on_actionlarge_bilinear_triggered();
+
+    void on_actionsmall_bilinear_triggered();
+
+    void on_actionlarge_bicubic_triggered();
+
+    void on_actionsmall_bicubic_triggered();
 
 private:
     Ui::MainWindow *ui;

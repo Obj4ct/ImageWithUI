@@ -11,7 +11,6 @@
 #include <cstring>
 #include <algorithm>
 #include <stdlib.h>
-#include <time.h>
 #include<thread>
 #include <chrono>
 #include <future>

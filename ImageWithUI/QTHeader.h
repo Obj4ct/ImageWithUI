@@ -9,6 +9,8 @@
 #include <QString>
 #include <QDialog>
 #include <QPushButton>
+#include <QDialogButtonBox>
+#include <QToolBar>
 #include <QWidget>
 #include <QPainter>
 #include <QLineEdit>

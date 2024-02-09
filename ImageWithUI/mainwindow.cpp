@@ -39,15 +39,9 @@ void MainWindow::ResetImage(MyValue &myValue)
 
 void MainWindow::ShowImage(std::vector<uint8_t> &inImageData,MyValue value,int32_t width,int32_t height)
 {
-    if(inImageData!=imageData)
-    {
-        qDebug()<<"not equal";
-        imageData=myValue.imageData;
-    }
-   else{
-        imageData=inImageData;
-        myValue=value;
-    }
+
+    imageData=inImageData;
+    myValue=value;
     QImage image(inImageData.data(), width, height, QImage::Format_BGR888);
 
     // 进行垂直翻转
@@ -210,6 +204,7 @@ void MainWindow::on_openImage_triggered()
         ui->imageLabel->setPixmap(pixmap);
         SaveImageDataToHistory(imageData);
         canSave=true;
+
     }
 }
 void MainWindow::on_actionsave_triggered()
@@ -1041,11 +1036,141 @@ void MainWindow::closeEvent(QCloseEvent *event)
 
 }
 
+void MainWindow::on_actionlarge_near_triggered()
+{
+    bool ok1;
+    bool ok2;
+    int height = QInputDialog::getInt(this, tr("输入高度倍数"), tr("高度倍数:"), 0, 0, 100, 1, &ok1);
+    int width = QInputDialog::getInt(this, tr("输入宽度倍数"), tr("宽度倍数:"), 0, 0, 100, 1, &ok2);
+
+    if (ok1 && ok2) {
+
+        qDebug() << "用户输入的高度倍数:" << height;
+        qDebug() << "用户输入的宽度倍数:" << width;
+Interpolation inter(this,myValue);
+        inter.ShowLargeNear(height,width);
 
 
+    } else {
+
+        qDebug() << "用户取消输入";
+
+    }
+
+}
 
 
+void MainWindow::on_actionsmall_near_triggered()
+{
+    bool ok1;
+    bool ok2;
+    int height = QInputDialog::getInt(this, tr("输入高度倍数"), tr("高度倍数:"), 0, 0, 100, 1, &ok1);
+    int width = QInputDialog::getInt(this, tr("输入宽度倍数"), tr("宽度倍数:"), 0, 0, 100, 1, &ok2);
+
+    if (ok1 && ok2) {
+
+        qDebug() << "用户输入的高度倍数:" << height;
+        qDebug() << "用户输入的宽度倍数:" << width;
+Interpolation inter(this,myValue);
+        inter.ShowSmallNear(height,width);
 
 
+    } else {
 
+        qDebug() << "用户取消输入";
+
+    }
+}
+
+
+void MainWindow::on_actionlarge_bilinear_triggered()
+{
+    bool ok1;
+    bool ok2;
+    int height = QInputDialog::getInt(this, tr("输入高度倍数"), tr("高度倍数:"), 0, 0, 100, 1, &ok1);
+    int width = QInputDialog::getInt(this, tr("输入宽度倍数"), tr("宽度倍数:"), 0, 0, 100, 1, &ok2);
+
+    if (ok1 && ok2) {
+
+        qDebug() << "用户输入的高度倍数:" << height;
+        qDebug() << "用户输入的宽度倍数:" << width;
+Interpolation inter(this,myValue);
+        inter.ShowLargeBilinear(height,width);
+
+
+    } else {
+
+        qDebug() << "用户取消输入";
+
+    }
+}
+
+
+void MainWindow::on_actionsmall_bilinear_triggered()
+{
+    bool ok1;
+    bool ok2;
+    int height = QInputDialog::getInt(this, tr("输入高度倍数"), tr("高度倍数:"), 0, 0, 100, 1, &ok1);
+    int width = QInputDialog::getInt(this, tr("输入宽度倍数"), tr("宽度倍数:"), 0, 0, 100, 1, &ok2);
+
+    if (ok1 && ok2) {
+
+        qDebug() << "用户输入的高度倍数:" << height;
+        qDebug() << "用户输入的宽度倍数:" << width;
+Interpolation inter(this,myValue);
+        inter.ShowSmallBilinear(height,width);
+
+
+    } else {
+
+        qDebug() << "用户取消输入";
+
+    }
+}
+
+
+void MainWindow::on_actionlarge_bicubic_triggered()
+{
+    bool ok1;
+    bool ok2;
+    int height = QInputDialog::getInt(this, tr("输入高度倍数"), tr("高度倍数:"), 0, 0, 100, 1, &ok1);
+    int width = QInputDialog::getInt(this, tr("输入宽度倍数"), tr("宽度倍数:"), 0, 0, 100, 1, &ok2);
+
+    if (ok1 && ok2) {
+
+        qDebug() << "用户输入的高度倍数:" << height;
+        qDebug() << "用户输入的宽度倍数:" << width;
+Interpolation inter(this,myValue);
+        inter.ShowLargeBicubic(height,width);
+
+
+    } else {
+
+        qDebug() << "用户取消输入";
+
+    }
+}
+
+
+void MainWindow::on_actionsmall_bicubic_triggered()
+{
+    bool ok1;
+    bool ok2;
+    int height = QInputDialog::getInt(this, tr("输入高度倍数"), tr("高度倍数:"), 0, 0, 100, 1, &ok1);
+    int width = QInputDialog::getInt(this, tr("输入宽度倍数"), tr("宽度倍数:"), 0, 0, 100, 1, &ok2);
+
+    if (ok1 && ok2) {
+
+        qDebug() << "用户输入的高度倍数:" << height;
+        qDebug() << "用户输入的宽度倍数:" << width;
+Interpolation inter(this,myValue);
+        inter.ShowSmallBicubic(height,width);
+
+
+    } else {
+
+        qDebug() << "用户取消输入";
+
+    }
+}
 

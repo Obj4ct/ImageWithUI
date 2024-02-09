@@ -25,8 +25,7 @@ public:
     ~BlendWindow();
 
 private slots:
-    void on_btn_open_1_clicked();
-    void on_btn_open_2_clicked();
+    void on_btn_open_clicked();
     void on_btn_apply_clicked();
     void on_comboBox_blendMode_currentIndexChanged(int index);
     void on_horizontalSlider_alpha_valueChanged(int value);
@@ -38,12 +37,12 @@ private:
     QImage bmpImage_1;
     QImage bmpImage_2;
     QImage blendedImage;
+
     //first image value
     MyValue myValue_1;
     //second image value
     MyValue myValue_2;
 
-    static int selectCount;
     //下拉框选项
     BlendMode currentBlendMode;
     double currentAlpha;

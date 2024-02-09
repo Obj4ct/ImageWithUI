@@ -6,9 +6,6 @@ BlendWindow::BlendWindow(MainWindow* mainWindow, MyValue myValue, QWidget *paren
     ui->setupUi(this);
     setWindowTitle(QString("图层混合"));
     setWindowIcon(QIcon(":/icon/logo.png"));
-    ui->widget_select_blendMode->setVisible(false);
-
-    ui->widget_select_alpha->setVisible(false);
 
     // 设置滑块的最小值和最大值
     ui->horizontalSlider_alpha->setMinimum(0);  // 设置最小值
@@ -22,47 +19,26 @@ BlendWindow::BlendWindow(MainWindow* mainWindow, MyValue myValue, QWidget *paren
     ui->comboBox_blendMode->addItem("滤色");
     ui->comboBox_blendMode->addItem("叠加");
 
+    //默认显示原始图像
+    originalImageData_1=mainWindow->imageData;
+    myValue_1=mainWindow->myValue;
+    QImage image(originalImageData_1.data(), myValue_1.bmpInfo.GetWidth(),myValue_1.bmpInfo.GetHeight(), QImage::Format_BGR888);
 
+    // 进行垂直翻转
+    image = image.mirrored(false, true);
 
+    // 显示灰度图像在imageLabel上
+    QPixmap pixmap = QPixmap::fromImage(image);
+    ui->imageLabel_1->setPixmap(pixmap);
+    ui->imageLabel_1->setScaledContents(true);
 }
-int BlendWindow::selectCount=0;
+
 BlendWindow::~BlendWindow() {
     delete ui;
 }
 
-void BlendWindow::on_btn_open_1_clicked() {
-    QString defaultPath = QDir::homePath();
-    QString filter = "BMP文件(*.BMP)";
-    QString path = QFileDialog::getOpenFileName(this, "选择BMP文件", defaultPath, filter);
 
-    if (path.isEmpty()) {
-        qDebug() << "未选择文件";
-        return;
-    }
-
-    std::string BMPPath = path.toStdString();
-    myValue_1 = MYFunction::ReadBMPFile(BMPPath);
-
-    originalImageData_1 = myValue_1.imageData;
-
-    bmpImage_1 = QImage(originalImageData_1.data(), myValue_1.bmpInfo.GetWidth(),
-                        myValue_1.bmpInfo.GetHeight(), QImage::Format_BGR888);
-
-    bmpImage_1 = bmpImage_1.mirrored(false, true);
-
-    QPixmap pixmap = QPixmap::fromImage(bmpImage_1);
-    ui->imageLabel_1->setPixmap(pixmap);
-
-    selectCount++;
-    qDebug()<<selectCount;
-    if(selectCount>=2)
-    {
-        ui->widget_select_blendMode->setVisible(true);
-    }
-    ui->imageLabel_1->setScaledContents(true);
-}
-
-void BlendWindow::on_btn_open_2_clicked() {
+void BlendWindow::on_btn_open_clicked() {
     QString defaultPath = QDir::currentPath();
     QString filter = "BMP文件(*.BMP)";
     QString path = QFileDialog::getOpenFileName(this, "选择BMP文件", defaultPath, filter);
@@ -84,12 +60,7 @@ void BlendWindow::on_btn_open_2_clicked() {
     QPixmap pixmap = QPixmap::fromImage(bmpImage_2);
     ui->imageLabel_2->setPixmap(pixmap);
 
-    selectCount++;
-    qDebug()<<selectCount;
-    if(selectCount>=2)
-    {
-        ui->widget_select_blendMode->setVisible(true);
-    }
+
     ui->imageLabel_2->setScaledContents(true);
 }
 
@@ -105,13 +76,21 @@ void BlendWindow::BlendImages()
     int32_t width = myValue_1.bmpInfo.GetWidth();
     int32_t height = myValue_1.bmpInfo.GetHeight();
     BlendMode blendMode = currentBlendMode;
-    originalImageData_1=myValue_1.imageData;
+    originalImageData_1=mainWindow->imageData;
     originalImageData_2=myValue_2.imageData;
-    if(myValue_1.imageData.size()!=myValue_2.imageData.size())
+    if(myValue_2.imageData.size()==0)
     {
+        Function function;
+        function.CreateMessagebox("提示","请选择图片!!");
+        return;
+    }
+    else if(myValue_1.imageData.size()!=myValue_2.imageData.size())
+    {
+        qDebug()<<myValue_2.imageData.size();
         Function function;
         function.CreateMessagebox("提示","图片大小不一致!!");
         return;
+
     }
     std::vector<std::thread> threads(mainWindow->num_threads);
     int segmentSize = static_cast<int>(myValue.imageData.size() / 3 / mainWindow->num_threads);
@@ -214,23 +193,7 @@ void BlendWindow::SwitchBlendMode(uint8_t &destR, uint8_t &destG, uint8_t &destB
 void BlendWindow::Effect(std::vector<uint8_t> &imageData, const std::vector<uint8_t> &effectData, int width, int height,
                          BlendMode blendMode,size_t start,size_t end) {
     double alpha=currentAlpha;
-    if (imageData.size() != effectData.size()) {
-        QMessageBox* myBox = new QMessageBox;
-        QPushButton* okBtn = new QPushButton("确定");
-        QString str = "不支持不同大小的图片混合!!";
-        myBox->setWindowTitle("提示");
-        myBox->setText(str);
-        myBox->addButton(okBtn, QMessageBox::AcceptRole);
-        myBox->show();
-        myBox->exec();//阻塞等待用户输入
-
-        if (myBox->clickedButton() == okBtn)
-        {
-            return;
-        }
-    }
-
-
+\
     for (int i = start; i < end; i++) {
         uint8_t &destR = imageData[i * 3];
         uint8_t &destG = imageData[i * 3 + 1];

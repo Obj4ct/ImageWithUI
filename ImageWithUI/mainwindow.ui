@@ -695,13 +695,42 @@
     <property name="title">
      <string>基本工具</string>
     </property>
+    <widget class="QMenu" name="menu_2">
+     <property name="title">
+      <string>图像缩放</string>
+     </property>
+     <widget class="QMenu" name="menu_3">
+      <property name="title">
+       <string>最临近插值</string>
+      </property>
+      <addaction name="actionlarge_near"/>
+      <addaction name="actionsmall_near"/>
+     </widget>
+     <widget class="QMenu" name="menu_4">
+      <property name="title">
+       <string>双线性插值</string>
+      </property>
+      <addaction name="actionlarge_bilinear"/>
+      <addaction name="actionsmall_bilinear"/>
+     </widget>
+     <widget class="QMenu" name="menu_5">
+      <property name="title">
+       <string>双立方插值</string>
+      </property>
+      <addaction name="actionlarge_bicubic"/>
+      <addaction name="actionsmall_bicubic"/>
+     </widget>
+     <addaction name="menu_3"/>
+     <addaction name="menu_4"/>
+     <addaction name="menu_5"/>
+    </widget>
     <addaction name="actiongray"/>
     <addaction name="actionreverse"/>
     <addaction name="actioncomplementary"/>
     <addaction name="actionautoContrast"/>
     <addaction name="actioncolorBalance"/>
     <addaction name="actiontailor"/>
-    <addaction name="actionscale"/>
+    <addaction name="menu_2"/>
    </widget>
    <widget class="QMenu" name="menu_unbase">
     <property name="title">
@@ -850,11 +879,6 @@
     <string>图像裁剪</string>
    </property>
   </action>
-  <action name="actionscale">
-   <property name="text">
-    <string>图像缩放</string>
-   </property>
-  </action>
   <action name="actionredo">
    <property name="icon">
     <iconset resource="icon.qrc">
@@ -865,6 +889,36 @@
    </property>
    <property name="shortcut">
     <string>Ctrl+Y</string>
+   </property>
+  </action>
+  <action name="actionlarge_near">
+   <property name="text">
+    <string>放大</string>
+   </property>
+  </action>
+  <action name="actionsmall_near">
+   <property name="text">
+    <string>缩小</string>
+   </property>
+  </action>
+  <action name="actionlarge_bilinear">
+   <property name="text">
+    <string>放大</string>
+   </property>
+  </action>
+  <action name="actionsmall_bilinear">
+   <property name="text">
+    <string>缩小</string>
+   </property>
+  </action>
+  <action name="actionlarge_bicubic">
+   <property name="text">
+    <string>放大</string>
+   </property>
+  </action>
+  <action name="actionsmall_bicubic">
+   <property name="text">
+    <string>缩小</string>
    </property>
   </action>
  </widget>

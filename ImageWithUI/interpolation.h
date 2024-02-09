@@ -17,8 +17,12 @@ class Interpolation : public QWidget
 
 public:
     explicit Interpolation(MainWindow* mainWindow, MyValue myValue, QWidget *parent = nullptr);
-    ~Interpolation();
-
+    void ShowLargeNear(int height,int width);
+    void ShowSmallNear(int height,int width);
+    void ShowSmallBilinear(int height,int width);
+    void ShowLargeBilinear(int height,int width);
+    void ShowSmallBicubic(int height,int width);
+    void ShowLargeBicubic(int height,int width);
 private:
     Ui::Interpolation *ui;
     MainWindow* mainWindow;
@@ -27,15 +31,10 @@ private:
     MyValue myValue;
     MyValue newValue;
     std::vector<uint8_t>imageData;
-    QImage m_bmpImage;
+public slots:
+    void SaveImageToFile(const std::vector<uint8_t>& imageData, int32_t width, int32_t height);
 
-private slots:
-    void on_btn_large_biCubic_clicked();
-    void on_btn_small_biCubic_clicked();
-    void on_btn_large_bilinear_clicked();
-    void on_btn_small_bilinear_clicked();
-    void on_btn_small_nearest_clicked();
-    void on_btn_large_nearest_clicked();
+
 private:
     //双立方插值相关
     //权重函数
