@@ -18,11 +18,11 @@ public:
     ~Mask();
 
 private slots:
-    void on_btn_save_clicked();
-
     void on_btn_ok_clicked();
 
     void on_btn_reset_clicked();
+    void on_btn_apply_clicked();
+
 protected:
     void mousePressEvent(QMouseEvent* event) override;
 

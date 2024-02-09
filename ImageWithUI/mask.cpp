@@ -1,3 +1,4 @@
+#include "mainwindow.h"
 #include "mask.h"
 #include "ui_mask.h"
 Mask::Mask(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
@@ -6,13 +7,17 @@ Mask::Mask(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     ui->setupUi(this);
     setWindowTitle(QString("磨皮"));
     setWindowIcon(QIcon(":/icon/logo.png"));
-    newValue=myValue;
-    m_bmpImage = QImage(newValue.imageData.data(), myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),QImage::Format_BGR888);
-    imageData=newValue.imageData;
+    //newValue=myValue;
+    //默认显示原始图像
+    imageData=mainWindow->imageData;
+     newValue=mainWindow->myValue;
+    QImage image(imageData.data(), newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(), QImage::Format_BGR888);
+
     // 进行垂直翻转
-    m_bmpImage = m_bmpImage.mirrored(false, true);
-    // 显示图像在imageLabel上
-    QPixmap pixmap = QPixmap::fromImage(m_bmpImage);
+    image = image.mirrored(false, true);
+
+    // 显示灰度图像在imageLabel上
+    QPixmap pixmap = QPixmap::fromImage(image);
     ui->imageLabel->setPixmap(pixmap);
 
     Function function;
@@ -92,22 +97,6 @@ void Mask::LocalSkinSmoothing(std::vector<uint8_t> &imageData,std::promise<std::
         result.set_value(smoothedData);
 }
 
-void Mask::on_btn_save_clicked()
-{
-    QString filePath = QFileDialog::getSaveFileName(nullptr, "保存文件", "", "BMP文件(*.bmp)");
-    if (filePath.isEmpty()) {
-        qDebug() << "Save operation canceled.";
-        return;
-    }
-    savePath=filePath.toStdString();
-
-    QFileInfo fileInfo(filePath);
-    QString fileName = fileInfo.fileName();
-    std::string str=fileName.toStdString();
-    std::cout<<"filename is "<<str<<std::endl;
-    MYFunction::WriteBMPFile(str,newValue.imageData,newValue.bmp,newValue.bmpInfo);
-    qDebug()<<"succeed!";
-}
 //core function
 
 void Mask::on_btn_ok_clicked()
@@ -143,7 +132,7 @@ void Mask::on_btn_ok_clicked()
 
         std::promise<std::vector<uint8_t>> promise;
         std::future<std::vector<uint8_t>> future = promise.get_future();
-        std::thread thread(&Mask::LocalSkinSmoothing, this, std::ref(newValue.imageData), std::ref(promise), newValue.bmpInfo.GetWidth(), newValue.bmpInfo.GetHeight(), firstX, firstY, secondX, secondY, value);
+        std::thread thread(&Mask::LocalSkinSmoothing, this, std::ref(imageData), std::ref(promise), newValue.bmpInfo.GetWidth(), newValue.bmpInfo.GetHeight(), firstX, firstY, secondX, secondY, value);
 
         // 等待异步任务完成并获取值
         std::vector<uint8_t> resultImage = future.get();
@@ -152,6 +141,7 @@ void Mask::on_btn_ok_clicked()
         // std::vector<uint8_t> smoothData = LocalSkinSmoothing(newValue.imageData, newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight() ,firstX, firstY, secondX, secondY, value);
         newValue.imageData = resultImage;
         ShowImage(resultImage);
+        mainWindow->SaveImageDataToHistory(resultImage);
 
     }
 }
@@ -190,5 +180,12 @@ void Mask::mousePressEvent(QMouseEvent *event)
     }
 
 
+}
+
+
+void Mask::on_btn_apply_clicked()
+{
+    qDebug()<<"apply";
+    mainWindow->ShowImage(newValue.imageData ,newValue,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight());
 }
 
