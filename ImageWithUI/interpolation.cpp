@@ -32,16 +32,6 @@ void Interpolation::ShowImage(const std::vector<uint8_t>& imageData, int32_t wid
     // 设置新窗口的中心部件为 QLabel
     newWindow->setCentralWidget(imageLabel);
 
-    // 添加保存按钮
-    QPushButton* saveButton = new QPushButton("保存", newWindow);
-    connect(saveButton, &QPushButton::clicked, [=]() {
-        SaveImageToFile(imageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
-    });
-
-
-    // 设置新窗口的底部工具栏
-    QToolBar* toolBar = newWindow->addToolBar("SaveToolBar");
-    toolBar->addWidget(saveButton);
 
     // 显示新窗口
     newWindow->show();
@@ -52,25 +42,25 @@ std::vector<uint8_t> Interpolation::LargeImage_Nearest(const std::vector<uint8_t
 {
     std::vector<uint8_t> resizedImage(newHeight * newWidth * 3);
 
-       // 放大因子
-       double scaleX = static_cast<double>(newWidth) / width;
-       double scaleY = static_cast<double>(newHeight) / height;
+    // 放大因子
+    double scaleX = static_cast<double>(newWidth) / width;
+    double scaleY = static_cast<double>(newHeight) / height;
 
-       for (int32_t y = 0; y < newHeight; y++) {
-           for (int32_t x = 0; x < newWidth; x++) {
-               // 原图坐标
-               auto srcX = static_cast<int32_t>(x / scaleX);
-               auto srcY = static_cast<int32_t>(y / scaleY);
-               int32_t srcIndex = (srcY * width + srcX) * 3;
-               int32_t destIndex = (y * newWidth + x) * 3;
-               // 复制到目标
-               resizedImage[destIndex] = imageData[srcIndex];
-               resizedImage[destIndex + 1] = imageData[srcIndex + 1];
-               resizedImage[destIndex + 2] = imageData[srcIndex + 2];
-           }
-       }
+    for (int32_t y = 0; y < newHeight; y++) {
+        for (int32_t x = 0; x < newWidth; x++) {
+            // 原图坐标
+            auto srcX = static_cast<int32_t>(x / scaleX);
+            auto srcY = static_cast<int32_t>(y / scaleY);
+            int32_t srcIndex = (srcY * width + srcX) * 3;
+            int32_t destIndex = (y * newWidth + x) * 3;
+            // 复制到目标
+            resizedImage[destIndex] = imageData[srcIndex];
+            resizedImage[destIndex + 1] = imageData[srcIndex + 1];
+            resizedImage[destIndex + 2] = imageData[srcIndex + 2];
+        }
+    }
 
-       return resizedImage;
+    return resizedImage;
 }
 
 
@@ -309,9 +299,28 @@ float Interpolation::cubicWeight(float t)
 void Interpolation::ShowLargeNear(int height,int width)
 {
     std::vector<uint8_t> nearestImageData=imageData;
-        std::vector<uint8_t> largeImageData=LargeImage_Nearest(nearestImageData,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(),newValue.bmpInfo.GetWidth()*width,newValue.bmpInfo.GetHeight()*height);
-        ShowImage(largeImageData, newValue.bmpInfo.GetWidth() * width, newValue.bmpInfo.GetHeight() * height);
-        qDebug()<<"ok";
+    std::vector<uint8_t> largeImageData=LargeImage_Nearest(nearestImageData,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(),newValue.bmpInfo.GetWidth()*width,newValue.bmpInfo.GetHeight()*height);
+    ShowImage(largeImageData, newValue.bmpInfo.GetWidth() * width, newValue.bmpInfo.GetHeight() * height);
+    qDebug()<<"ok";
+    QMessageBox::StandardButton reply;
+    reply = QMessageBox::question(this, "确认", "是否保存文件?",
+                                  QMessageBox::Yes | QMessageBox::No);
+
+    if (reply == QMessageBox::Yes) {
+        // 用户点击了"确定"按钮
+        MYFunction::SetBMPHeaderValues(newValue.bmp, newValue.bmpInfo, newValue.bmpInfo.GetWidth()*width, newValue.bmpInfo.GetHeight()*height, newValue.bmpInfo.GetBitsPerPixel());
+        QString filePath = QFileDialog::getSaveFileName(nullptr, "保存文件", "", "BMP文件(*.bmp)");
+        savePath=filePath.toStdString();
+        QFileInfo fileInfo(filePath);
+        QString fileName = fileInfo.fileName();
+        std::string str=fileName.toStdString();
+        MYFunction::WriteBMPFile(str, largeImageData, newValue.bmp, newValue.bmpInfo);
+
+    } else {
+        // 用户点击了"取消"按钮，不执行操作
+        qDebug() << "用户取消操作";
+        return;
+    }
 
 }
 
@@ -319,9 +328,28 @@ void Interpolation::ShowSmallNear(int height,int width)
 {
     std::vector<uint8_t> nearestImageData=imageData;
 
-        std::vector<uint8_t> smallImageData=SmallImage_Nearest(nearestImageData,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(),newValue.bmpInfo.GetWidth()/width,newValue.bmpInfo.GetHeight()/height);
-        ShowImage(smallImageData, newValue.bmpInfo.GetWidth() / width, newValue.bmpInfo.GetHeight() / height);
-        qDebug()<<"ok";
+    std::vector<uint8_t> smallImageData=SmallImage_Nearest(nearestImageData,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(),newValue.bmpInfo.GetWidth()/width,newValue.bmpInfo.GetHeight()/height);
+    ShowImage(smallImageData, newValue.bmpInfo.GetWidth() / width, newValue.bmpInfo.GetHeight() / height);
+    qDebug()<<"ok";
+    QMessageBox::StandardButton reply;
+    reply = QMessageBox::question(this, "确认", "是否保存文件?",
+                                  QMessageBox::Yes | QMessageBox::No);
+
+    if (reply == QMessageBox::Yes) {
+        // 用户点击了"确定"按钮
+        MYFunction::SetBMPHeaderValues(newValue.bmp, newValue.bmpInfo, newValue.bmpInfo.GetWidth()/width, newValue.bmpInfo.GetHeight()/height, newValue.bmpInfo.GetBitsPerPixel());
+        QString filePath = QFileDialog::getSaveFileName(nullptr, "保存文件", "", "BMP文件(*.bmp)");
+        savePath=filePath.toStdString();
+        QFileInfo fileInfo(filePath);
+        QString fileName = fileInfo.fileName();
+        std::string str=fileName.toStdString();
+        MYFunction::WriteBMPFile(str, smallImageData, newValue.bmp, newValue.bmpInfo);
+
+    } else {
+        // 用户点击了"取消"按钮，不执行操作
+        qDebug() << "用户取消操作";
+        return;
+    }
 
 
 }
@@ -331,17 +359,54 @@ void Interpolation::ShowSmallBilinear(int height,int width)
 {
     std::vector<uint8_t> bilinearImageData=imageData;
 
-        std::vector<uint8_t> smallImageData=LargeImage_Bilinear(bilinearImageData,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(),newValue.bmpInfo.GetWidth()/width,newValue.bmpInfo.GetHeight()/height);
-        ShowImage(smallImageData, newValue.bmpInfo.GetWidth() / width, newValue.bmpInfo.GetHeight() / height);
+    std::vector<uint8_t> smallImageData=LargeImage_Bilinear(bilinearImageData,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(),newValue.bmpInfo.GetWidth()/width,newValue.bmpInfo.GetHeight()/height);
+    ShowImage(smallImageData, newValue.bmpInfo.GetWidth() / width, newValue.bmpInfo.GetHeight() / height);
+    QMessageBox::StandardButton reply;
+    reply = QMessageBox::question(this, "确认", "是否保存文件?",
+                                  QMessageBox::Yes | QMessageBox::No);
 
+    if (reply == QMessageBox::Yes) {
+        // 用户点击了"确定"按钮
+        MYFunction::SetBMPHeaderValues(newValue.bmp, newValue.bmpInfo, newValue.bmpInfo.GetWidth()/width, newValue.bmpInfo.GetHeight()/height, newValue.bmpInfo.GetBitsPerPixel());
+        QString filePath = QFileDialog::getSaveFileName(nullptr, "保存文件", "", "BMP文件(*.bmp)");
+        savePath=filePath.toStdString();
+        QFileInfo fileInfo(filePath);
+        QString fileName = fileInfo.fileName();
+        std::string str=fileName.toStdString();
+        MYFunction::WriteBMPFile(str, smallImageData, newValue.bmp, newValue.bmpInfo);
+
+    } else {
+        // 用户点击了"取消"按钮，不执行操作
+        qDebug() << "用户取消操作";
+        return;
+    }
 }
 
 void Interpolation::ShowLargeBilinear(int height,int width)
 {
     std::vector<uint8_t> bilinearImageData=imageData;
-        std::vector<uint8_t> largeImageData=LargeImage_Bilinear(bilinearImageData,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(),newValue.bmpInfo.GetWidth()*width,newValue.bmpInfo.GetHeight()*height);
-        std::cout << "largeImageData size: " << largeImageData.size() << std::endl;
-        ShowImage(largeImageData, newValue.bmpInfo.GetWidth() * width, newValue.bmpInfo.GetHeight() * height);
+    std::vector<uint8_t> largeImageData=LargeImage_Bilinear(bilinearImageData,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(),newValue.bmpInfo.GetWidth()*width,newValue.bmpInfo.GetHeight()*height);
+    std::cout << "largeImageData size: " << largeImageData.size() << std::endl;
+    ShowImage(largeImageData, newValue.bmpInfo.GetWidth() * width, newValue.bmpInfo.GetHeight() * height);
+    QMessageBox::StandardButton reply;
+    reply = QMessageBox::question(this, "确认", "是否保存文件?",
+                                  QMessageBox::Yes | QMessageBox::No);
+
+    if (reply == QMessageBox::Yes) {
+        // 用户点击了"确定"按钮
+        MYFunction::SetBMPHeaderValues(newValue.bmp, newValue.bmpInfo, newValue.bmpInfo.GetWidth()*width, newValue.bmpInfo.GetHeight()*height, newValue.bmpInfo.GetBitsPerPixel());
+        QString filePath = QFileDialog::getSaveFileName(nullptr, "保存文件", "", "BMP文件(*.bmp)");
+        savePath=filePath.toStdString();
+        QFileInfo fileInfo(filePath);
+        QString fileName = fileInfo.fileName();
+        std::string str=fileName.toStdString();
+        MYFunction::WriteBMPFile(str, largeImageData, newValue.bmp, newValue.bmpInfo);
+
+    } else {
+        // 用户点击了"取消"按钮，不执行操作
+        qDebug() << "用户取消操作";
+        return;
+    }
 
 }
 
@@ -350,8 +415,27 @@ void Interpolation::ShowSmallBicubic(int height,int width)
 {
     std::vector<uint8_t> biCubicImageData=imageData;
 
-        std::vector<uint8_t> smallImageData=SmallImage_BiCubic(biCubicImageData,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(),newValue.bmpInfo.GetWidth()/width,newValue.bmpInfo.GetHeight()/height);
-        ShowImage(smallImageData, newValue.bmpInfo.GetWidth() / width, newValue.bmpInfo.GetHeight() / height);
+    std::vector<uint8_t> smallImageData=SmallImage_BiCubic(biCubicImageData,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(),newValue.bmpInfo.GetWidth()/width,newValue.bmpInfo.GetHeight()/height);
+    ShowImage(smallImageData, newValue.bmpInfo.GetWidth() / width, newValue.bmpInfo.GetHeight() / height);
+    QMessageBox::StandardButton reply;
+    reply = QMessageBox::question(this, "确认", "是否保存文件?",
+                                  QMessageBox::Yes | QMessageBox::No);
+
+    if (reply == QMessageBox::Yes) {
+        // 用户点击了"确定"按钮
+        MYFunction::SetBMPHeaderValues(newValue.bmp, newValue.bmpInfo, newValue.bmpInfo.GetWidth()/width, newValue.bmpInfo.GetHeight()/height, newValue.bmpInfo.GetBitsPerPixel());
+        QString filePath = QFileDialog::getSaveFileName(nullptr, "保存文件", "", "BMP文件(*.bmp)");
+        savePath=filePath.toStdString();
+        QFileInfo fileInfo(filePath);
+        QString fileName = fileInfo.fileName();
+        std::string str=fileName.toStdString();
+        MYFunction::WriteBMPFile(str, smallImageData, newValue.bmp, newValue.bmpInfo);
+
+    } else {
+        // 用户点击了"取消"按钮，不执行操作
+        qDebug() << "用户取消操作";
+        return;
+    }
 
 
 }
@@ -362,27 +446,32 @@ void Interpolation::ShowLargeBicubic(int height,int width)
     std::vector<uint8_t> biCubicImageData=imageData;
 
 
-        std::vector<uint8_t> largeImageData=LargeImage_BiCubic(biCubicImageData,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(),newValue.bmpInfo.GetWidth()*width,newValue.bmpInfo.GetHeight()*height);
-        ShowImage(largeImageData, newValue.bmpInfo.GetWidth() * width, newValue.bmpInfo.GetHeight() * height);
+    std::vector<uint8_t> largeImageData=LargeImage_BiCubic(biCubicImageData,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(),newValue.bmpInfo.GetWidth()*width,newValue.bmpInfo.GetHeight()*height);
+    ShowImage(largeImageData, newValue.bmpInfo.GetWidth() * width, newValue.bmpInfo.GetHeight() * height);
 
+    QMessageBox::StandardButton reply;
+    reply = QMessageBox::question(this, "确认", "是否保存文件?",
+                                  QMessageBox::Yes | QMessageBox::No);
 
-}
+    if (reply == QMessageBox::Yes) {
+        // 用户点击了"确定"按钮
+        MYFunction::SetBMPHeaderValues(newValue.bmp, newValue.bmpInfo, newValue.bmpInfo.GetWidth()*width, newValue.bmpInfo.GetHeight()*height, newValue.bmpInfo.GetBitsPerPixel());
+        QString filePath = QFileDialog::getSaveFileName(nullptr, "保存文件", "", "BMP文件(*.bmp)");
+        savePath=filePath.toStdString();
+        QFileInfo fileInfo(filePath);
+        QString fileName = fileInfo.fileName();
+        std::string str=fileName.toStdString();
+        MYFunction::WriteBMPFile(str, largeImageData, newValue.bmp, newValue.bmpInfo);
 
-void Interpolation::SaveImageToFile(const std::vector<uint8_t> &imageData, int32_t width, int32_t height)
-{
-    qDebug()<<"in save";
-    QString filePath = QFileDialog::getSaveFileName(nullptr, "保存文件", "", "BMP文件(*.bmp)");
-    if (filePath.isEmpty()) {
-        qDebug() << "Save operation canceled.";
+    } else {
+        // 用户点击了"取消"按钮，不执行操作
+        qDebug() << "用户取消操作";
         return;
     }
-    savePath=filePath.toStdString();
 
-    QFileInfo fileInfo(filePath);
-    QString fileName = fileInfo.fileName();
-    std::string str=fileName.toStdString();
-    std::cout<<"filename is "<<str<<std::endl;
-    MYFunction::WriteBMPFile(str,newValue.imageData,newValue.bmp,newValue.bmpInfo);
-    qDebug()<<"succeed!";
+
+
+
 }
+
 

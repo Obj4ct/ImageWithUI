@@ -31,8 +31,8 @@ private:
     MyValue myValue;
     MyValue newValue;
     std::vector<uint8_t>imageData;
-public slots:
-    void SaveImageToFile(const std::vector<uint8_t>& imageData, int32_t width, int32_t height);
+
+
 
 
 private:
