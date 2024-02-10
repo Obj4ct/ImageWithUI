@@ -102,6 +102,7 @@ void Tailor::ShowImage(std::vector<uint8_t>& imageData, int32_t width, int32_t h
     // 显示新窗口
     newWindow->show();
 
+
 }
 
 
@@ -133,15 +134,14 @@ void Tailor::on_btn_ok_clicked()
         if(TailorImg(returnValueX.value, returnValueY.value, returnValueHeight.value, returnValueWidth.value, imageData,newValue.bmpInfo,newValue.bmp,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight()))
         {
             ShowImage(imageData,returnValueWidth.value,returnValueHeight.value);
-            imageData=mainWindow->imageData;
-            newValue=mainWindow->myValue;
+//            imageData=mainWindow->imageData;
+//            newValue=mainWindow->myValue;
             QMessageBox::StandardButton reply;
             reply = QMessageBox::question(this, "确认", "是否保存文件?",
                                           QMessageBox::Yes | QMessageBox::No);
 
             if (reply == QMessageBox::Yes) {
                 // 用户点击了"确定"按钮
-                MYFunction::SetBMPHeaderValues(newValue.bmp, newValue.bmpInfo,returnValueWidth.value, returnValueHeight.value, newValue.bmpInfo.GetBitsPerPixel());
                 QString filePath = QFileDialog::getSaveFileName(nullptr, "保存文件", "", "BMP文件(*.bmp)");
                 savePath=filePath.toStdString();
                 QFileInfo fileInfo(filePath);
@@ -159,6 +159,7 @@ void Tailor::on_btn_ok_clicked()
         else{
             function.CreateMessagebox("提示","超出原始图像范围");
         }
+
     }
 }
 

@@ -7,7 +7,6 @@ Mask::Mask(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     ui->setupUi(this);
     setWindowTitle(QString("磨皮"));
     setWindowIcon(QIcon(":/icon/logo.png"));
-    //newValue=myValue;
     //默认显示原始图像
     imageData=mainWindow->imageData;
      newValue=mainWindow->myValue;
@@ -44,7 +43,8 @@ void Mask::ShowImage(std::vector<uint8_t> &inImageData)
 
 void Mask::ResetImage()
 {
-    imageData=mainWindow->imageData;
+   // newValue.imageData=imageData;
+
     // 恢复原始图像
     QImage originalImage(imageData.data(), newValue.bmpInfo.GetWidth(), newValue.bmpInfo.GetHeight(), QImage::Format_BGR888);
     originalImage = originalImage.mirrored(false, true);
@@ -59,6 +59,7 @@ void Mask::ResetImage()
 
     QString str2 = QString("%1, %2").arg(secondX).arg(secondY);
     ui->label_secondPos->setText(str2);
+    imageData=mainWindow->imageData;
 }
 
 void Mask::LocalSkinSmoothing(std::vector<uint8_t> &imageData,std::promise<std::vector<uint8_t>>& result, int width, int height, int startX, int startY, int endX, int endY, int radius)

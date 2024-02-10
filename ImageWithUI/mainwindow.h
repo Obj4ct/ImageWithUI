@@ -6,7 +6,6 @@
 #include "blendwindow.h"
 #include "eye.h"
 #include "mask.h"
-#include "mosaic.h"
 #include "tailor.h"
 #include "interpolation.h"
 #include "face.h"

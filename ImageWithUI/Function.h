@@ -83,6 +83,9 @@ public:
     std::vector<uint8_t> SobelEdge(const std::vector<uint8_t>& imageData, int width, int height);
     //阈值处理
     void ApplyThreshold(std::vector<uint8_t>& imageData, uint32_t threshold,size_t start,size_t end);
+
+    //马赛克
+    void FullMosaic(std::vector<uint8_t> &imageData, uint32_t width, uint32_t height, uint32_t degree);
     //重置图像
     void RestImage(MyValue &myValue);
 

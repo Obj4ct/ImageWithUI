@@ -763,10 +763,35 @@ void MainWindow::on_actionmedian_triggered()
 
 void MainWindow::on_actionmosaic_triggered()
 {
+    back:
+    bool dialogClosed = false;
+    while (!dialogClosed) {
+        bool ok;
+        double degree = QInputDialog::getDouble(this, tr("输入程度"), tr("程度:"), 0, 0, 100, 1, &ok);
+        if(degree==0)
+        {
+            goto back;
+        }
+        if (ok) {
 
-    qDebug() << "I am in a mosaic window!";
-    Mosaic *mosaic = new Mosaic(this,myValue);
-    mosaic->show();
+            qDebug() << "用户输入的程度:" << degree;
+            std::vector<uint8_t> tempImageData=imageData;
+            if(!imageDataHistory.empty())
+            {
+                tempImageData = imageDataHistory.back(); // 复制当前图像数据
+            }
+
+            function.FullMosaic(imageData,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight(),degree);
+            SaveImageDataToHistory(imageData); // 保存当前图像数据到链表
+            ShowImage(imageData,myValue,myValue.bmpInfo.GetWidth(),myValue.bmpInfo.GetHeight());
+
+        } else {
+
+            qDebug() << "用户取消输入";
+            dialogClosed = true; // 设置标志以退出循环
+            return;
+        }
+    }
 }
 
 

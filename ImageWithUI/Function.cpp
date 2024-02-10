@@ -577,6 +577,44 @@ void Function::ApplyThreshold(std::vector<uint8_t> &imageData, uint32_t threshol
        }
 }
 
+void Function::FullMosaic(std::vector<uint8_t> &imageData, uint32_t width, uint32_t height, uint32_t degree)
+{
+    // foreach pix 加上步长应该是移动像素方便处理下一个像素
+    for (uint32_t y = 0; y < height; y += degree) {
+        for (uint32_t x = 0; x < width; x += degree) {
+            uint32_t totalR = 0;
+            uint32_t totalG = 0;
+            uint32_t totalB = 0;
+            int mosaic = 0;
+            // avg
+            for (uint32_t dy = 0; dy < degree && y + dy < height; dy++) {
+                for (uint32_t dx = 0; dx < degree && x + dx < width; dx++) {
+                    uint32_t index = ((y + dy) * width + (x + dx)) * 3;
+                    totalR += imageData[index];
+                    totalG += imageData[index + 1];
+                    totalB +=imageData[index + 2];
+                    mosaic++;
+                }
+            }
+            auto averageR = totalR / mosaic;
+            auto averageG = totalG / mosaic;
+            auto averageB = totalB / mosaic;
+            // set each pix
+
+
+            for (uint32_t dy = 0; dy < degree && y + dy < height; dy++) {
+                for (uint32_t dx = 0; dx < degree && x + dx < width; dx++) {
+                    uint32_t index = ((y + dy) * width + (x + dx)) * 3;
+                    imageData[index] = averageR;
+                    imageData[index + 1] = averageG;
+                    imageData[index + 2] = averageB;
+                }
+            }
+        }
+    }
+}
+
+
 
 
 

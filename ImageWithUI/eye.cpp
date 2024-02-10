@@ -8,13 +8,16 @@ eye::eye(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     ui->setupUi(this);
     setWindowTitle(QString("眼部区域液化"));
     setWindowIcon(QIcon(":/icon/logo.png"));
-    newValue=myValue;
-    m_bmpImage = QImage(newValue.imageData.data(), myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),QImage::Format_BGR888);
-    imageData=newValue.imageData;
+    //默认显示原始图像
+    imageData=mainWindow->imageData;
+     newValue=mainWindow->myValue;
+    QImage image(imageData.data(), newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(), QImage::Format_BGR888);
+
     // 进行垂直翻转
-    m_bmpImage = m_bmpImage.mirrored(false, true);
-    // 显示图像在imageLabel上
-    QPixmap pixmap = QPixmap::fromImage(m_bmpImage);
+    image = image.mirrored(false, true);
+
+    // 显示灰度图像在imageLabel上
+    QPixmap pixmap = QPixmap::fromImage(image);
     ui->imageLabel->setPixmap(pixmap);
 
     Function function;

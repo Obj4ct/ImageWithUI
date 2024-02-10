@@ -38,9 +38,6 @@ set(PROJECT_SOURCES
         mask.cpp
         mask.h
         mask.ui
-        mosaic.h
-        mosaic.cpp
-        mosaic.ui
         tailor.h
         tailor.cpp
         tailor.ui
