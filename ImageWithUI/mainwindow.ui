@@ -13,6 +13,87 @@
   <property name="windowTitle">
    <string>数字图像处理系统</string>
   </property>
+  <property name="styleSheet">
+   <string notr="true">/* QPushButton 样式 */
+QPushButton {
+    background-color: #4CAF50; /* 按钮背景颜色 */
+    color: white; /* 文本颜色 */
+    border: 2px solid #4CAF50; /* 边框样式 */
+    border-radius: 5px; /* 圆角半径 */
+    padding: 5px 10px; /* 内边距 */
+}
+
+QPushButton:hover {
+    background-color: #45a049; /* 鼠标悬停时的背景颜色 */
+}
+
+/* QSpacerItem 样式 */
+QSpacerItem {
+    /* 通常无需样式，仅用于占位 */
+
+}
+
+/* QWidget 样式 */
+QWidget {
+    background-color: #f0f0f0; /* 背景颜色 */
+    color: #333; /* 文本颜色 */
+}
+
+/* QLineEdit 样式 */
+QLineEdit {
+    background-color: #ffffff; /* 设置背景颜色为白色 */
+    border: 1px solid #ccc; /* 边框样式 */
+    border-radius: 5px; /* 圆角半径 */
+    padding: 5px; /* 内边距 */
+    color: #333; /* 文本颜色 */
+}
+
+QLineEdit:focus {
+    border-color: #007BFF; /* 获取焦点时的边框颜色 */
+}
+
+
+/* QMenu 样式 */
+QMenu {
+    background-color: #f0f0f0; /* 背景颜色 */
+    border: 1px solid #ccc; /* 边框样式 */
+}
+
+QMenu::item {
+    padding: 5px 20px; /* 内边距 */
+}
+
+QMenu::item:selected {
+    background-color: #007BFF; /* 选中项的背景颜色 */
+    color: white; /* 选中项的文本颜色 */
+}
+
+/* QAction 样式 */
+QAction {
+    background-color: transparent; /* 背景颜色透明 */
+    color: #333; /* 文本颜色 */
+}
+
+QAction:hover {
+    background-color: #e0e0e0; /* 鼠标悬停时的背景颜色 */
+}
+
+QAction:pressed {
+    background-color: #d4d4d4; /* 按下时的背景颜色 */
+}
+
+/* QStatusBar 样式 */
+QStatusBar {
+    background-color: #f0f0f0; /* 背景颜色 */
+    color: #333; /* 文本颜色 */
+    border-top: 1px solid #ccc; /* 顶部边框样式 */
+}
+
+QStatusBar::item {
+    border: none; /* 无边框 */
+}
+</string>
+  </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QHBoxLayout" name="horizontalLayout_4">
     <item>
@@ -743,7 +824,6 @@
      <string>高级处理</string>
     </property>
     <addaction name="actionblend"/>
-    <addaction name="actionmask"/>
     <addaction name="actionmosaic"/>
     <addaction name="actionsobel"/>
     <addaction name="actionliquefaction"/>
@@ -758,6 +838,17 @@
    <addaction name="menu_unbase"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
+  <widget class="QToolBar" name="toolBar">
+   <property name="windowTitle">
+    <string>toolBar</string>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>TopToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+  </widget>
   <action name="openImage">
    <property name="text">
     <string>打开图片</string>

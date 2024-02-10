@@ -1,21 +1,25 @@
+#include "mainwindow.h"
 #include "face.h"
 #include "ui_face.h"
-#include <functional>
+
 
 
 Face::Face(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     : QWidget(parent), ui(new Ui::Face), mainWindow(mainWindow), myValue(myValue)
 {
     ui->setupUi(this);
-    newValue=myValue;
+
     setWindowTitle(QString("图像微调"));
     setWindowIcon(QIcon(":/icon/logo.png"));
-    m_bmpImage = QImage(newValue.imageData.data(), myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),QImage::Format_BGR888);
-    imageData=newValue.imageData;
+    imageData=mainWindow->imageData;
+     newValue=mainWindow->myValue;
+    QImage image(imageData.data(), newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(), QImage::Format_BGR888);
+
     // 进行垂直翻转
-    m_bmpImage = m_bmpImage.mirrored(false, true);
-    // 显示图像在imageLabel上
-    QPixmap pixmap = QPixmap::fromImage(m_bmpImage);
+    image = image.mirrored(false, true);
+
+    // 显示灰度图像在imageLabel上
+    QPixmap pixmap = QPixmap::fromImage(image);
     ui->imageLabel->setPixmap(pixmap);
 
     Function function;
@@ -59,6 +63,7 @@ Face::~Face()
 
 void Face::on_btn_ok_clicked()
 {
+    newValue.imageData=mainWindow->imageData;
     QString inputText= ui->lineEdit_radius->text(); // 获取输入的文本
     bool isNumeric;
     double_t value = inputText.toDouble(&isNumeric);
@@ -89,17 +94,11 @@ void Face::on_btn_ok_clicked()
 
         //_Face(newValue.imageData,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(),faceCenterX,faceCenterY,value,warpIntensity);
         ShowImage(newValue.imageData);
+        mainWindow->SaveImageDataToHistory(newValue.imageData);
 
     }
 
 }
-
-
-void Face::on_btn_ok_2_clicked()
-{
-    ResetImage();
-}
-
 
 void Face::on_btn_save_clicked()
 {
@@ -118,20 +117,7 @@ void Face::on_btn_save_clicked()
     qDebug()<<"succeed!";
 }
 
-void Face::ResetImage()
-{
-    newValue.imageData=myValue.imageData;
-    // 恢复原始图像
-    QImage originalImage(myValue.imageData.data(), myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(), QImage::Format_BGR888);
-    originalImage = originalImage.mirrored(false, true);
-    QPixmap originalPixmap = QPixmap::fromImage(originalImage);
-    ui->imageLabel->setPixmap(originalPixmap);
-    faceCenterX=0;
-    faceCenterY=0;
-    QString str1 = QString("%1, %2").arg(faceCenterX).arg(faceCenterY);
-    ui->label_first->setText(str1);
 
-}
 
 void Face::ShowImage(std::vector<uint8_t> &inImageData)
 {
@@ -169,11 +155,18 @@ void Face::_Face(std::vector<uint8_t> &imageData, int32_t width, int32_t height,
 
                 int targetPixelIndex = (newY * width + newX) * 3;
 
-                imageData[pixelIndex] = imageData[targetPixelIndex];
-                imageData[pixelIndex + 1] = imageData[targetPixelIndex + 1];
-                imageData[pixelIndex + 2] = imageData[targetPixelIndex + 2];
+                imageData[pixelIndex] = mainWindow->imageData[targetPixelIndex];
+                imageData[pixelIndex + 1] = mainWindow->imageData[targetPixelIndex + 1];
+                imageData[pixelIndex + 2] = mainWindow->imageData[targetPixelIndex + 2];
             }
         }
     }
+}
+
+
+void Face::on_btn_apply_clicked()
+{
+    qDebug()<<"apply";
+    mainWindow->ShowImage(newValue.imageData ,newValue,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight());
 }
 

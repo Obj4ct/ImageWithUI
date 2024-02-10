@@ -6,162 +6,365 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>506</width>
-    <height>736</height>
+    <width>843</width>
+    <height>739</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>Form</string>
   </property>
-  <widget class="QLabel" name="imageLabel">
-   <property name="geometry">
-    <rect>
-     <x>-3</x>
-     <y>-3</y>
-     <width>512</width>
-     <height>512</height>
-    </rect>
-   </property>
-   <property name="minimumSize">
-    <size>
-     <width>512</width>
-     <height>512</height>
-    </size>
-   </property>
-   <property name="maximumSize">
-    <size>
-     <width>512</width>
-     <height>512</height>
-    </size>
-   </property>
-   <property name="text">
-    <string/>
-   </property>
-  </widget>
-  <widget class="QLabel" name="label_2">
-   <property name="geometry">
-    <rect>
-     <x>160</x>
-     <y>520</y>
-     <width>211</width>
-     <height>41</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>请用鼠标单击选择两眼位置</string>
-   </property>
-  </widget>
-  <widget class="QPushButton" name="btn_save">
-   <property name="geometry">
-    <rect>
-     <x>340</x>
-     <y>690</y>
-     <width>92</width>
-     <height>29</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>保存图片</string>
-   </property>
-  </widget>
-  <widget class="QWidget" name="widget" native="true">
-   <property name="geometry">
-    <rect>
-     <x>69</x>
-     <y>550</y>
-     <width>401</width>
-     <height>71</height>
-    </rect>
-   </property>
-   <layout class="QHBoxLayout" name="horizontalLayout">
-    <item>
-     <widget class="QLabel" name="label">
-      <property name="text">
-       <string>第一个坐标:</string>
-      </property>
-     </widget>
-    </item>
-    <item>
-     <widget class="QLabel" name="label_first">
-      <property name="text">
-       <string/>
-      </property>
-     </widget>
-    </item>
-    <item>
-     <widget class="QLabel" name="label_3">
-      <property name="text">
-       <string>第二个坐标:</string>
-      </property>
-     </widget>
-    </item>
-    <item>
-     <widget class="QLabel" name="label_second">
-      <property name="text">
-       <string/>
-      </property>
-     </widget>
-    </item>
-   </layout>
-  </widget>
-  <widget class="QPushButton" name="btn_ok">
-   <property name="geometry">
-    <rect>
-     <x>70</x>
-     <y>690</y>
-     <width>92</width>
-     <height>29</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>确定</string>
-   </property>
-  </widget>
-  <widget class="QPushButton" name="btn_ok_2">
-   <property name="geometry">
-    <rect>
-     <x>210</x>
-     <y>690</y>
-     <width>92</width>
-     <height>29</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>重置图像</string>
-   </property>
-  </widget>
-  <widget class="QWidget" name="widget_2" native="true">
-   <property name="geometry">
-    <rect>
-     <x>80</x>
-     <y>630</y>
-     <width>331</width>
-     <height>51</height>
-    </rect>
-   </property>
-   <layout class="QHBoxLayout" name="horizontalLayout_2">
-    <item>
-     <widget class="QLabel" name="label_4">
-      <property name="text">
-       <string>范围</string>
-      </property>
-     </widget>
-    </item>
-    <item>
-     <widget class="QLineEdit" name="lineEdit_range"/>
-    </item>
-    <item>
-     <widget class="QLabel" name="label_5">
-      <property name="text">
-       <string>程度</string>
-      </property>
-     </widget>
-    </item>
-    <item>
-     <widget class="QLineEdit" name="lineEdit_increase"/>
-    </item>
-   </layout>
-  </widget>
+  <property name="styleSheet">
+   <string notr="true">/* QPushButton 样式 */
+QPushButton {
+    background-color: #4CAF50; /* 按钮背景颜色 */
+    color: white; /* 文本颜色 */
+    border: 2px solid #4CAF50; /* 边框样式 */
+    border-radius: 5px; /* 圆角半径 */
+    padding: 5px 10px; /* 内边距 */
+}
+
+QPushButton:hover {
+    background-color: #45a049; /* 鼠标悬停时的背景颜色 */
+}
+
+/* QSpacerItem 样式 */
+QSpacerItem {
+    /* 通常无需样式，仅用于占位 */
+
+}
+
+/* QWidget 样式 */
+QWidget {
+    background-color: #f0f0f0; /* 背景颜色 */
+    color: #333; /* 文本颜色 */
+}
+
+/* QLineEdit 样式 */
+QLineEdit {
+    background-color: #ffffff; /* 设置背景颜色为白色 */
+    border: 1px solid #ccc; /* 边框样式 */
+    border-radius: 5px; /* 圆角半径 */
+    padding: 5px; /* 内边距 */
+    color: #333; /* 文本颜色 */
+}
+
+QLineEdit:focus {
+    border-color: #007BFF; /* 获取焦点时的边框颜色 */
+}
+
+
+/* QMenu 样式 */
+QMenu {
+    background-color: #f0f0f0; /* 背景颜色 */
+    border: 1px solid #ccc; /* 边框样式 */
+}
+
+QMenu::item {
+    padding: 5px 20px; /* 内边距 */
+}
+
+QMenu::item:selected {
+    background-color: #007BFF; /* 选中项的背景颜色 */
+    color: white; /* 选中项的文本颜色 */
+}
+
+/* QAction 样式 */
+QAction {
+    background-color: transparent; /* 背景颜色透明 */
+    color: #333; /* 文本颜色 */
+}
+
+QAction:hover {
+    background-color: #e0e0e0; /* 鼠标悬停时的背景颜色 */
+}
+
+QAction:pressed {
+    background-color: #d4d4d4; /* 按下时的背景颜色 */
+}
+
+/* QStatusBar 样式 */
+QStatusBar {
+    background-color: #f0f0f0; /* 背景颜色 */
+    color: #333; /* 文本颜色 */
+    border-top: 1px solid #ccc; /* 顶部边框样式 */
+}
+
+QStatusBar::item {
+    border: none; /* 无边框 */
+}
+</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout_2">
+   <item>
+    <widget class="QLabel" name="imageLabel">
+     <property name="text">
+      <string/>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QWidget" name="widget_5" native="true">
+     <layout class="QVBoxLayout" name="verticalLayout">
+      <item>
+       <widget class="QWidget" name="widget_3" native="true">
+        <layout class="QHBoxLayout" name="horizontalLayout_3">
+         <item>
+          <spacer name="horizontalSpacer_2">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>289</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item>
+          <widget class="QLabel" name="label_2">
+           <property name="text">
+            <string>请用鼠标单击选择两眼位置</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="horizontalSpacer">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>288</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QWidget" name="widget" native="true">
+        <layout class="QHBoxLayout" name="horizontalLayout">
+         <item>
+          <spacer name="horizontalSpacer_3">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item>
+          <widget class="QLabel" name="label">
+           <property name="text">
+            <string>第一个坐标:</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="label_first">
+           <property name="text">
+            <string/>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="horizontalSpacer_4">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item>
+          <widget class="QLabel" name="label_3">
+           <property name="text">
+            <string>第二个坐标:</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="label_second">
+           <property name="text">
+            <string/>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="horizontalSpacer_5">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QWidget" name="widget_2" native="true">
+        <layout class="QHBoxLayout" name="horizontalLayout_2">
+         <item>
+          <spacer name="horizontalSpacer_6">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item>
+          <widget class="QLabel" name="label_4">
+           <property name="text">
+            <string>范围</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLineEdit" name="lineEdit_range"/>
+         </item>
+         <item>
+          <spacer name="horizontalSpacer_7">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item>
+          <widget class="QLabel" name="label_5">
+           <property name="text">
+            <string>程度</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLineEdit" name="lineEdit_increase"/>
+         </item>
+         <item>
+          <spacer name="horizontalSpacer_8">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QWidget" name="widget_4" native="true">
+        <layout class="QHBoxLayout" name="horizontalLayout_4">
+         <item>
+          <spacer name="horizontalSpacer_12">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btn_ok">
+           <property name="text">
+            <string>确定</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="horizontalSpacer_13">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btn_apply">
+           <property name="text">
+            <string>应用</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="horizontalSpacer_9">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>78</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btn_save">
+           <property name="text">
+            <string>保存图片</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="horizontalSpacer_10">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>77</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
  </widget>
  <resources/>
  <connections/>

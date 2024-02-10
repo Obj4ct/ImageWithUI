@@ -13,6 +13,52 @@
   <property name="windowTitle">
    <string>图层混合</string>
   </property>
+  <property name="styleSheet">
+   <string notr="true">/* QComboBox 样式 */
+QComboBox {
+    background-color: #ffffff; /* 背景颜色 */
+    border: 1px solid #ccc; /* 边框样式 */
+    border-radius: 5px; /* 圆角半径 */
+    padding: 5px; /* 内边距 */
+    color: #333; /* 文本颜色 */
+}
+
+QComboBox:hover {
+    border-color: #007BFF; /* 鼠标悬停时的边框颜色 */
+}
+
+
+
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 15px; /* 下拉箭头区域的宽度 */
+    border-left-width: 0px; /* 隐藏下拉区域的左边框 */
+}
+
+/* QSlider 样式 */
+QSlider {
+    background-color: #f0f0f0; /* 背景颜色 */
+    height: 10px; /* 高度 */
+    margin: 5px 0; /* 外边距 */
+}
+
+QSlider::groove {
+    background-color: #ccc; /* 槽的颜色 */
+    border: 1px solid #ccc; /* 槽的边框样式 */
+    border-radius: 5px; /* 圆角半径 */
+}
+
+QSlider::handle {
+    background-color: #4CAF50; /* 滑块颜色 */
+    border: 1px solid #4CAF50; /* 滑块边框样式 */
+    width: 10px; /* 宽度 */
+    height: 20px; /* 高度 */
+    margin: -5px 0; /* 外边距 */
+    border-radius: 5px; /* 圆角半径 */
+}
+</string>
+  </property>
   <widget class="QWidget" name="widget" native="true">
    <property name="geometry">
     <rect>

@@ -29,6 +29,7 @@ MainWindow::MainWindow(QWidget *parent)
 
 void MainWindow::ResetImage(MyValue &myValue)
 {
+
     imageData=myValue.imageData;
     // 恢复原始图像
     QImage originalImage(myValue.imageData.data(), myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(), QImage::Format_BGR888);
@@ -55,12 +56,10 @@ void MainWindow::ShowImage(std::vector<uint8_t> &inImageData,MyValue value,int32
 
 void MainWindow::ResetAll(MyValue &myValue)
 {
-    imageData=myValue.imageData;
-    //imageDataHistory.clear();
-    // 恢复原始图像
-    QImage originalImage(myValue.imageData.data(), myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(), QImage::Format_BGR888);
-    originalImage = originalImage.mirrored(false, true);
-    QPixmap originalPixmap = QPixmap::fromImage(originalImage);
+
+    QString filePath = QString::fromStdString(BMPPath);
+    QImage image(filePath);
+    QPixmap originalPixmap = QPixmap::fromImage(image);
     ui->imageLabel->setPixmap(originalPixmap);
 }
 ReturnValue MainWindow::CheckOK(QLineEdit * lineEdit)
@@ -177,7 +176,7 @@ void MainWindow::on_openImage_triggered()
     else{
         _SetVisible(true);
         // 读取BMP文件并且存入变量中
-        std::string BMPPath = path.toStdString();
+        BMPPath = path.toStdString();
         myValue = MYFunction::ReadBMPFile(BMPPath);
         imageSize=myValue.imageData.size();
         segmentSize = imageSize / num_threads;  // 均分处理
@@ -210,45 +209,42 @@ void MainWindow::on_openImage_triggered()
 void MainWindow::on_actionsave_triggered()
 {
     std::vector<uint8_t> saveImageData;
-    if (canSave&&!imageDataHistory.empty())
+
+    if (canSave && !imageDataHistory.empty())
     {
-        saveImageData=imageDataHistory.back();
-        QString filePath = QFileDialog::getSaveFileName(nullptr, "保存文件", "", "BMP文件(*.bmp)");
-        if (filePath.isEmpty()) {
-            qDebug() << "Save operation canceled.";
-            return;
-        }
-        savePath=filePath.toStdString();
-
-        QFileInfo fileInfo(filePath);
-        QString fileName = fileInfo.fileName();
-        std::string str=fileName.toStdString();
-        std::cout<<"filename is "<<str<<std::endl;
-        MYFunction::WriteBMPFile(str,saveImageData,myValue.bmp,myValue.bmpInfo);
-        qDebug()<<"succeed!";
+        // 获取最近保存的图像数据
+        saveImageData = imageDataHistory.back();
     }
-    else if(canSave&&imageDataHistory.empty()){
-        saveImageData=myValue.imageData;
-        QString filePath = QFileDialog::getSaveFileName(nullptr, "保存文件", "", "BMP文件(*.bmp)");
-        if (filePath.isEmpty()) {
-            qDebug() << "Save operation canceled.";
-            return;
-        }
-        savePath=filePath.toStdString();
-
-        QFileInfo fileInfo(filePath);
-        QString fileName = fileInfo.fileName();
-        std::string str=fileName.toStdString();
-        std::cout<<"filename is "<<str<<std::endl;
-        MYFunction::WriteBMPFile(str,saveImageData,myValue.bmp,myValue.bmpInfo);
-        qDebug()<<"succeed!";
-    }else{
-        function.CreateMessagebox("提示","没有任何文件");
-        qDebug()<<"file empty!";
+    else if (canSave && imageDataHistory.empty())
+    {
+        // 如果没有历史记录，保存原始图像数据
+        saveImageData = myValue.imageData;
+    }
+    else
+    {
+        function.CreateMessagebox("提示", "没有任何文件");
+        qDebug() << "文件为空！";
         return;
     }
 
+    QString filePath = QFileDialog::getSaveFileName(nullptr, "保存文件", "", "BMP文件(*.bmp)");
+    if (filePath.isEmpty()) {
+        qDebug() << "保存操作已取消。";
+        return;
+    }
+
+    savePath = filePath.toStdString();
+
+    QFileInfo fileInfo(filePath);
+    QString fileName = fileInfo.fileName();
+    std::string str = fileName.toStdString();
+    std::cout << "文件名为 " << str << std::endl;
+
+    // 使用 saveImageData 而不是 myValue.imageData
+    MYFunction::WriteBMPFile(str, saveImageData, myValue.bmp, myValue.bmpInfo);
+    qDebug() << "保存成功！";
 }
+
 //清理每段数据,防止数据冲突引发异常
 void MainWindow::ClearSegmentData()
 {
@@ -731,12 +727,6 @@ void MainWindow::on_btn_rotate_r_clicked()
 
 }
 
-void MainWindow::on_actionmask_triggered()
-{
-    qDebug() << "I am in a mask window!";
-    Mask *mask = new Mask(this,myValue);
-    mask->show();
-}
 
 
 void MainWindow::on_actionmedian_triggered()
@@ -763,14 +753,14 @@ void MainWindow::on_actionmedian_triggered()
 
 void MainWindow::on_actionmosaic_triggered()
 {
-    back:
+
     bool dialogClosed = false;
     while (!dialogClosed) {
         bool ok;
         double degree = QInputDialog::getDouble(this, tr("输入程度"), tr("程度:"), 0, 0, 100, 1, &ok);
         if(degree==0)
         {
-            goto back;
+            return;
         }
         if (ok) {
 

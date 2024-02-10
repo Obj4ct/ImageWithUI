@@ -35,9 +35,6 @@ set(PROJECT_SOURCES
         eye.h
         eye.cpp
         eye.ui
-        mask.cpp
-        mask.h
-        mask.ui
         tailor.h
         tailor.cpp
         tailor.ui

@@ -22,7 +22,8 @@ private slots:
     void on_btn_save_clicked();
     void on_btn_ok_clicked();
 
-    void on_btn_ok_2_clicked();
+
+    void on_btn_apply_clicked();
 
 protected:
     void mousePressEvent(QMouseEvent* event) override;
@@ -46,7 +47,6 @@ private:
     void Eye(std::vector<uint8_t> &imageData, int32_t width, int32_t height,
              int32_t centerX, int32_t centerY, int32_t radius, double intensity,size_t startRow,size_t endRow);
     void ShowImage(std::vector<uint8_t>&inImageData);
-    void ResetImage();
 };
 
 #endif // EYE_H

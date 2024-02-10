@@ -19,9 +19,10 @@ public:
 private slots:
     void on_comboBox_colorMap_currentIndexChanged(int index);
 
-    void on_btn_reset_clicked();
 
     void on_btn_save_clicked();
+
+    void on_btn_apply_clicked();
 
 private:
     Ui::ColorMap *ui;

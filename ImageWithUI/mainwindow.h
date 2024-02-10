@@ -5,7 +5,6 @@
 #include "Function.h"
 #include "blendwindow.h"
 #include "eye.h"
-#include "mask.h"
 #include "tailor.h"
 #include "interpolation.h"
 #include "face.h"
@@ -44,6 +43,7 @@ public:
     void ClearSegmentData();
     ~MainWindow();
 public:
+    std::string BMPPath;
     std::list<std::vector<uint8_t>> imageDataHistory;
     std::list<std::vector<uint8_t>> redoImageDataHistory;
     //分段处理数据
@@ -116,8 +116,6 @@ private slots:
     void on_actioncolorBalance_triggered();
 
     void on_actionblend_triggered();
-
-    void on_actionmask_triggered();
 
     void on_actionmosaic_triggered();
 

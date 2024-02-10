@@ -108,25 +108,6 @@ void eye::ShowImage(std::vector<uint8_t>&inImageData)
 
 }
 
-void eye::ResetImage()
-{
-    newValue.imageData=myValue.imageData;
-    // 恢复原始图像
-    QImage originalImage(myValue.imageData.data(), myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(), QImage::Format_BGR888);
-    originalImage = originalImage.mirrored(false, true);
-    QPixmap originalPixmap = QPixmap::fromImage(originalImage);
-    ui->imageLabel->setPixmap(originalPixmap);
-    firstX=0;
-    firstY=0;
-    secondX=0;
-    secondY=0;
-    QString str1 = QString("%1, %2").arg(firstX).arg(firstY);
-    ui->label_first->setText(str1);
-
-    QString str2 = QString("%1, %2").arg(secondX).arg(secondY);
-    ui->label_second->setText(str2);
-
-}
 eye::~eye()
 {
     delete ui;
@@ -155,6 +136,7 @@ void eye::on_btn_save_clicked()
 
 void eye::on_btn_ok_clicked()
 {
+    newValue.imageData=mainWindow->imageData;
     qDebug()<<"click ok";
     ReturnValue returnRange=mainWindow->CheckOK(ui->lineEdit_range);
     ReturnValue returnNum=mainWindow->CheckOK(ui->lineEdit_increase);
@@ -174,7 +156,7 @@ void eye::on_btn_ok_clicked()
         }
     }
     else{
-        int num_threads = 4;
+        int num_threads =mainWindow->num_threads;
         std::vector<std::thread> threads;
         std::mutex mtx; // 用于线程同步
 
@@ -196,12 +178,16 @@ void eye::on_btn_ok_clicked()
             thread.join();
         }
         ShowImage(newValue.imageData);
+        mainWindow->SaveImageDataToHistory(newValue.imageData);
     }
 }
 
 
-void eye::on_btn_ok_2_clicked()
+
+
+void eye::on_btn_apply_clicked()
 {
-    ResetImage();
+    qDebug()<<"apply";
+    mainWindow->ShowImage(newValue.imageData ,newValue,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight());
 }
 

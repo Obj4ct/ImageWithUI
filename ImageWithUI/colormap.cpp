@@ -47,13 +47,15 @@ ColorMap::ColorMap(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     ui->setupUi(this);
     setWindowTitle(QString("色彩映射"));
     setWindowIcon(QIcon(":/icon/logo.png"));
-    newValue=myValue;
-    m_bmpImage = QImage(newValue.imageData.data(), myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),QImage::Format_BGR888);
-    imageData=newValue.imageData;
+    imageData=mainWindow->imageData;
+    newValue=mainWindow->myValue;
+    QImage image(imageData.data(), newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(), QImage::Format_BGR888);
+
     // 进行垂直翻转
-    m_bmpImage = m_bmpImage.mirrored(false, true);
-    // 显示图像在imageLabel上
-    QPixmap pixmap = QPixmap::fromImage(m_bmpImage);
+    image = image.mirrored(false, true);
+
+    // 显示灰度图像在imageLabel上
+    QPixmap pixmap = QPixmap::fromImage(image);
     ui->imageLabel->setPixmap(pixmap);
 
     Function function;
@@ -102,24 +104,15 @@ void ColorMap::ShowImage(std::vector<uint8_t> &inImageData)
 
 }
 
-void ColorMap::ResetImage()
-{
-    newValue.imageData=myValue.imageData;
-    // 恢复原始图像
-    QImage originalImage(myValue.imageData.data(), myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(), QImage::Format_BGR888);
-    originalImage = originalImage.mirrored(false, true);
-    QPixmap originalPixmap = QPixmap::fromImage(originalImage);
-    ui->imageLabel->setPixmap(originalPixmap);
-}
 void ColorMap::on_comboBox_colorMap_currentIndexChanged(int index)
 {
-    newValue.imageData=myValue.imageData;
+    newValue.imageData=mainWindow->imageData;
     if (index == 0) {
         qDebug()<<"current index is 0";
     } else if (index == 1) {
 
         qDebug()<<"current index is 1";
-            auto func = std::bind(&Function::ConvertToGray, &function, std::ref(newValue.imageData), std::placeholders::_1, std::placeholders::_2);
+        auto func = std::bind(&Function::ConvertToGray, &function, std::ref(newValue.imageData), std::placeholders::_1, std::placeholders::_2);
 
         for (uint8_t i = 0; i < mainWindow->num_threads; i++)  // 创建多个线程
         {
@@ -136,77 +129,75 @@ void ColorMap::on_comboBox_colorMap_currentIndexChanged(int index)
 
         _ColorMap(newValue.imageData,colorMap1);
         ShowImage(newValue.imageData);
+                mainWindow->SaveImageDataToHistory(newValue.imageData);
         mainWindow->ClearSegmentData();
     } else if (index == 2) {
 
         qDebug()<<"current index is 2";
         auto func = std::bind(&Function::ConvertToGray, &function, std::ref(newValue.imageData), std::placeholders::_1, std::placeholders::_2);
 
-    for (uint8_t i = 0; i < mainWindow->num_threads; i++)  // 创建多个线程
-    {
-        size_t start = i * mainWindow->segmentSize;  // 计算当前线程负责的数据段的起始位置
-        size_t end = (i == mainWindow->num_threads - 1) ? myValue.imageData.size() : start + mainWindow->segmentSize;  // 结尾,同上
-        mainWindow->segmentStarts.push_back(start);
-        mainWindow->threads.emplace_back(func, start, end);
-    }
+        for (uint8_t i = 0; i < mainWindow->num_threads; i++)  // 创建多个线程
+        {
+            size_t start = i * mainWindow->segmentSize;  // 计算当前线程负责的数据段的起始位置
+            size_t end = (i == mainWindow->num_threads - 1) ? myValue.imageData.size() : start + mainWindow->segmentSize;  // 结尾,同上
+            mainWindow->segmentStarts.push_back(start);
+            mainWindow->threads.emplace_back(func, start, end);
+        }
 
-    for (auto &thread : mainWindow->threads) {
-        thread.join();
-    }
+        for (auto &thread : mainWindow->threads) {
+            thread.join();
+        }
 
 
-    _ColorMap(newValue.imageData,colorMap2);
-    ShowImage(newValue.imageData);
-    mainWindow->ClearSegmentData();
+        _ColorMap(newValue.imageData,colorMap2);
+        ShowImage(newValue.imageData);
+                mainWindow->SaveImageDataToHistory(newValue.imageData);
+        mainWindow->ClearSegmentData();
     } else if (index == 3) {
 
         qDebug()<<"current index is 3";
         auto func = std::bind(&Function::ConvertToGray, &function, std::ref(newValue.imageData), std::placeholders::_1, std::placeholders::_2);
 
-    for (uint8_t i = 0; i < mainWindow->num_threads; i++)  // 创建多个线程
-    {
-        size_t start = i * mainWindow->segmentSize;  // 计算当前线程负责的数据段的起始位置
-        size_t end = (i == mainWindow->num_threads - 1) ? myValue.imageData.size() : start + mainWindow->segmentSize;  // 结尾,同上
-        mainWindow->segmentStarts.push_back(start);
-        mainWindow->threads.emplace_back(func, start, end);
-    }
+        for (uint8_t i = 0; i < mainWindow->num_threads; i++)  // 创建多个线程
+        {
+            size_t start = i * mainWindow->segmentSize;  // 计算当前线程负责的数据段的起始位置
+            size_t end = (i == mainWindow->num_threads - 1) ? myValue.imageData.size() : start + mainWindow->segmentSize;  // 结尾,同上
+            mainWindow->segmentStarts.push_back(start);
+            mainWindow->threads.emplace_back(func, start, end);
+        }
 
-    for (auto &thread : mainWindow->threads) {
-        thread.join();
-    }
+        for (auto &thread : mainWindow->threads) {
+            thread.join();
+        }
 
 
-    _ColorMap(newValue.imageData,colorMap3);
-    ShowImage(newValue.imageData);
-    mainWindow->ClearSegmentData();
+        _ColorMap(newValue.imageData,colorMap3);
+        ShowImage(newValue.imageData);
+                mainWindow->SaveImageDataToHistory(newValue.imageData);
+        mainWindow->ClearSegmentData();
     } else if (index == 4) {
 
         qDebug()<<"current index is 4";
         auto func = std::bind(&Function::ConvertToGray, &function, std::ref(newValue.imageData), std::placeholders::_1, std::placeholders::_2);
 
-    for (uint8_t i = 0; i < mainWindow->num_threads; i++)  // 创建多个线程
-    {
-        size_t start = i * mainWindow->segmentSize;  // 计算当前线程负责的数据段的起始位置
-        size_t end = (i == mainWindow->num_threads - 1) ? myValue.imageData.size() : start + mainWindow->segmentSize;  // 结尾,同上
-        mainWindow->segmentStarts.push_back(start);
-        mainWindow->threads.emplace_back(func, start, end);
+        for (uint8_t i = 0; i < mainWindow->num_threads; i++)  // 创建多个线程
+        {
+            size_t start = i * mainWindow->segmentSize;  // 计算当前线程负责的数据段的起始位置
+            size_t end = (i == mainWindow->num_threads - 1) ? myValue.imageData.size() : start + mainWindow->segmentSize;  // 结尾,同上
+            mainWindow->segmentStarts.push_back(start);
+            mainWindow->threads.emplace_back(func, start, end);
+        }
+
+        for (auto &thread : mainWindow->threads) {
+            thread.join();
+        }
+
+
+        _ColorMap(newValue.imageData,colorMap4);
+        ShowImage(newValue.imageData);
+        mainWindow->SaveImageDataToHistory(newValue.imageData);
+        mainWindow->ClearSegmentData();
     }
-
-    for (auto &thread : mainWindow->threads) {
-        thread.join();
-    }
-
-
-    _ColorMap(newValue.imageData,colorMap4);
-    ShowImage(newValue.imageData);
-    mainWindow->ClearSegmentData();
-    }
-}
-
-
-void ColorMap::on_btn_reset_clicked()
-{
-    ResetImage();
 }
 
 
@@ -225,5 +216,12 @@ void ColorMap::on_btn_save_clicked()
     std::cout<<"filename is "<<str<<std::endl;
     MYFunction::WriteBMPFile(str,newValue.imageData,newValue.bmp,newValue.bmpInfo);
     qDebug()<<"succeed!";
+}
+
+
+void ColorMap::on_btn_apply_clicked()
+{
+    qDebug()<<"apply";
+    mainWindow->ShowImage(newValue.imageData ,newValue,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight());
 }
 
