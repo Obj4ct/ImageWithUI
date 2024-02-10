@@ -7,13 +7,16 @@ Tailor::Tailor(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     ui->setupUi(this);
     setWindowTitle(QString("图像裁剪"));
     setWindowIcon(QIcon(":/icon/logo.png"));
-    newValue=myValue;
-    m_bmpImage = QImage(newValue.imageData.data(), myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),QImage::Format_BGR888);
-    imageData=newValue.imageData;
+    //默认显示原始图像
+    imageData=mainWindow->imageData;
+    newValue=mainWindow->myValue;
+    QImage image(imageData.data(), newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(), QImage::Format_BGR888);
+
     // 进行垂直翻转
-    m_bmpImage = m_bmpImage.mirrored(false, true);
-    // 显示图像在imageLabel上
-    QPixmap pixmap = QPixmap::fromImage(m_bmpImage);
+    image = image.mirrored(false, true);
+
+    // 显示灰度图像在imageLabel上
+    QPixmap pixmap = QPixmap::fromImage(image);
     ui->imageLabel->setPixmap(pixmap);
 
     Function function;
@@ -67,17 +70,19 @@ bool Tailor::TailorImg(int32_t cropX, int32_t cropY, int32_t cropHeight, int32_t
             uint32_t originIndex = (y * originWidth + x) * 3;
             int index = ((y - cropY) * cropWidth + (x - cropX)) * 3;
 
-            // 请注意这里调整为 RGB 顺序
-            imageData[index] = myValue.imageData[originIndex];       // Blue
-            imageData[index + 1] = myValue.imageData[originIndex + 1]; // Green
-            imageData[index + 2] = myValue.imageData[originIndex + 2]; // Red
+
+            imageData[index] = mainWindow->imageData[originIndex];       // Blue
+            imageData[index + 1] = mainWindow->imageData[originIndex + 1]; // Green
+            imageData[index + 2] = mainWindow->imageData[originIndex + 2]; // Red
         }
     }
+    qDebug()<<"return 1";
     return true;
 }
 
 void Tailor::ShowImage(std::vector<uint8_t>& imageData, int32_t width, int32_t height)
 {
+
     // 创建新的窗口对象
     newWindow = new QMainWindow();
     // 创建一个 QLabel 来显示图像
@@ -96,6 +101,7 @@ void Tailor::ShowImage(std::vector<uint8_t>& imageData, int32_t width, int32_t h
 
     // 显示新窗口
     newWindow->show();
+
 }
 
 
@@ -124,9 +130,31 @@ void Tailor::on_btn_ok_clicked()
         if(!function.CreateMessagebox("提示","输入数字"))
             return;
     }else{
-        if(TailorImg(returnValueX.value, returnValueY.value, returnValueHeight.value, returnValueWidth.value, imageData,myValue.bmpInfo,myValue.bmp,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight()))
+        if(TailorImg(returnValueX.value, returnValueY.value, returnValueHeight.value, returnValueWidth.value, imageData,newValue.bmpInfo,newValue.bmp,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight()))
         {
             ShowImage(imageData,returnValueWidth.value,returnValueHeight.value);
+            imageData=mainWindow->imageData;
+            newValue=mainWindow->myValue;
+            QMessageBox::StandardButton reply;
+            reply = QMessageBox::question(this, "确认", "是否保存文件?",
+                                          QMessageBox::Yes | QMessageBox::No);
+
+            if (reply == QMessageBox::Yes) {
+                // 用户点击了"确定"按钮
+                MYFunction::SetBMPHeaderValues(newValue.bmp, newValue.bmpInfo,returnValueWidth.value, returnValueHeight.value, newValue.bmpInfo.GetBitsPerPixel());
+                QString filePath = QFileDialog::getSaveFileName(nullptr, "保存文件", "", "BMP文件(*.bmp)");
+                savePath=filePath.toStdString();
+                QFileInfo fileInfo(filePath);
+                QString fileName = fileInfo.fileName();
+                std::string str=fileName.toStdString();
+                MYFunction::WriteBMPFile(str, imageData, newValue.bmp, newValue.bmpInfo);
+
+            } else {
+                // 用户点击了"取消"按钮，不执行操作
+                qDebug() << "用户取消操作";
+                return;
+            }
+
         }
         else{
             function.CreateMessagebox("提示","超出原始图像范围");

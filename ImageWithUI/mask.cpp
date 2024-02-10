@@ -44,9 +44,9 @@ void Mask::ShowImage(std::vector<uint8_t> &inImageData)
 
 void Mask::ResetImage()
 {
-    newValue.imageData=myValue.imageData;
+    imageData=mainWindow->imageData;
     // 恢复原始图像
-    QImage originalImage(myValue.imageData.data(), myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(), QImage::Format_BGR888);
+    QImage originalImage(imageData.data(), newValue.bmpInfo.GetWidth(), newValue.bmpInfo.GetHeight(), QImage::Format_BGR888);
     originalImage = originalImage.mirrored(false, true);
     QPixmap originalPixmap = QPixmap::fromImage(originalImage);
     ui->imageLabel->setPixmap(originalPixmap);
