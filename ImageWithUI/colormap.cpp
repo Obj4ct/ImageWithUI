@@ -113,7 +113,6 @@ void ColorMap::on_comboBox_colorMap_currentIndexChanged(int index)
 
         qDebug()<<"current index is 1";
         auto func = std::bind(&Function::ConvertToGray, &function, std::ref(imageData), std::placeholders::_1, std::placeholders::_2);
-
         for (uint8_t i = 0; i < mainWindow->num_threads; i++)  // 创建多个线程
         {
             size_t start = i * mainWindow->segmentSize;  // 计算当前线程负责的数据段的起始位置
@@ -129,7 +128,7 @@ void ColorMap::on_comboBox_colorMap_currentIndexChanged(int index)
 
         _ColorMap(imageData,colorMap1);
         ShowImage(imageData);
-        mainWindow->SaveImageDataToHistory(imageData);
+
         mainWindow->ClearSegmentData();
     } else if (index == 2) {
 
@@ -151,7 +150,7 @@ void ColorMap::on_comboBox_colorMap_currentIndexChanged(int index)
 
         _ColorMap(imageData,colorMap2);
         ShowImage(imageData);
-        mainWindow->SaveImageDataToHistory(imageData);
+
         mainWindow->ClearSegmentData();
     } else if (index == 3) {
 
@@ -173,7 +172,7 @@ void ColorMap::on_comboBox_colorMap_currentIndexChanged(int index)
 
         _ColorMap(imageData,colorMap3);
         ShowImage(imageData);
-        mainWindow->SaveImageDataToHistory(imageData);
+
         mainWindow->ClearSegmentData();
     } else if (index == 4) {
 
@@ -195,7 +194,7 @@ void ColorMap::on_comboBox_colorMap_currentIndexChanged(int index)
 
         _ColorMap(imageData,colorMap4);
         ShowImage(imageData);
-        mainWindow->SaveImageDataToHistory(imageData);
+
         mainWindow->ClearSegmentData();
     }
 }

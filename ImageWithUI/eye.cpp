@@ -178,7 +178,7 @@ void eye::on_btn_ok_clicked()
             thread.join();
         }
         ShowImage(imageData);
-        mainWindow->SaveImageDataToHistory(imageData);
+
     }
 }
 

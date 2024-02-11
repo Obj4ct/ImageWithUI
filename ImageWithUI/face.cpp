@@ -95,7 +95,7 @@ void Face::on_btn_ok_clicked()
 
         //_Face(newValue.imageData,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(),faceCenterX,faceCenterY,value,warpIntensity);
         ShowImage(imageData);
-        mainWindow->SaveImageDataToHistory(imageData);
+
 
     }
 
