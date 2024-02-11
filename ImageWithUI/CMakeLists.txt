@@ -24,7 +24,6 @@ set(PROJECT_SOURCES
         BMPFile.cpp
         Debug.h
         Debug.cpp
-        #two diffrent header
         stdcpp.h
         QTHeader.h
         Function.h

@@ -115,7 +115,7 @@ void BlendWindow::BlendImages()
 
     ShowImage();
     threads.clear();
-    mainWindow->SaveImageDataToHistory(originalImageData_1);
+
 
 }
 
