@@ -816,7 +816,6 @@ QStatusBar::item {
     <addaction name="actioncomplementary"/>
     <addaction name="actionautoContrast"/>
     <addaction name="actioncolorBalance"/>
-    <addaction name="actiontailor"/>
     <addaction name="menu_2"/>
    </widget>
    <widget class="QMenu" name="menu_unbase">

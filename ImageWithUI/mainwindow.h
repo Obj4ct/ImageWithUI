@@ -5,7 +5,6 @@
 #include "Function.h"
 #include "blendwindow.h"
 #include "eye.h"
-#include "tailor.h"
 #include "interpolation.h"
 #include "face.h"
 #include "colormap.h"
@@ -133,7 +132,6 @@ private slots:
 
     void on_actionreset_triggered();
 
-    void on_actiontailor_triggered();
 
     void on_actionscale_triggered();
 

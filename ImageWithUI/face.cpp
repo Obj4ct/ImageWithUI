@@ -12,7 +12,8 @@ Face::Face(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     setWindowTitle(QString("图像微调"));
     setWindowIcon(QIcon(":/icon/logo.png"));
     imageData=mainWindow->imageData;
-     newValue=mainWindow->myValue;
+    newValue=myValue;
+
     QImage image(imageData.data(), newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(), QImage::Format_BGR888);
 
     // 进行垂直翻转
@@ -29,7 +30,7 @@ void Face::mousePressEvent(QMouseEvent* event)
     QPoint clickPos = event->pos();
     // 将窗口坐标转换为图像坐标
        int imageX = clickPos.x();
-       int imageY = myValue.bmpInfo.GetHeight() - clickPos.y();  // 图像上下翻转
+       int imageY = newValue.bmpInfo.GetHeight() - clickPos.y();  // 图像上下翻转
     if (clickCount == 0) {
 
         // 第一次点击，保存坐标到firstClick
@@ -63,7 +64,7 @@ Face::~Face()
 
 void Face::on_btn_ok_clicked()
 {
-    newValue.imageData=mainWindow->imageData;
+    imageData=mainWindow->imageData;
     QString inputText= ui->lineEdit_radius->text(); // 获取输入的文本
     bool isNumeric;
     double_t value = inputText.toDouble(&isNumeric);
@@ -89,12 +90,12 @@ void Face::on_btn_ok_clicked()
         }
     }
     else {
-        std::thread faceThread(std::bind(&Face::_Face, this, std::ref(newValue.imageData), newValue.bmpInfo.GetWidth(), newValue.bmpInfo.GetHeight(), faceCenterX, faceCenterY, value, warpIntensity));
+        std::thread faceThread(std::bind(&Face::_Face, this, std::ref(imageData), newValue.bmpInfo.GetWidth(), newValue.bmpInfo.GetHeight(), faceCenterX, faceCenterY, value, warpIntensity));
         faceThread.join();
 
         //_Face(newValue.imageData,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(),faceCenterX,faceCenterY,value,warpIntensity);
-        ShowImage(newValue.imageData);
-        mainWindow->SaveImageDataToHistory(newValue.imageData);
+        ShowImage(imageData);
+        mainWindow->SaveImageDataToHistory(imageData);
 
     }
 
@@ -155,9 +156,9 @@ void Face::_Face(std::vector<uint8_t> &imageData, int32_t width, int32_t height,
 
                 int targetPixelIndex = (newY * width + newX) * 3;
 
-                imageData[pixelIndex] = mainWindow->imageData[targetPixelIndex];
-                imageData[pixelIndex + 1] = mainWindow->imageData[targetPixelIndex + 1];
-                imageData[pixelIndex + 2] = mainWindow->imageData[targetPixelIndex + 2];
+                imageData[pixelIndex] = imageData[targetPixelIndex];
+                imageData[pixelIndex + 1] = imageData[targetPixelIndex + 1];
+                imageData[pixelIndex + 2] = imageData[targetPixelIndex + 2];
             }
         }
     }
@@ -167,6 +168,6 @@ void Face::_Face(std::vector<uint8_t> &imageData, int32_t width, int32_t height,
 void Face::on_btn_apply_clicked()
 {
     qDebug()<<"apply";
-    mainWindow->ShowImage(newValue.imageData ,newValue,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight());
+    mainWindow->ShowImage(imageData ,newValue,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight());
 }
 

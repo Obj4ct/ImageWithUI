@@ -36,9 +36,6 @@ set(PROJECT_SOURCES
         eye.h
         eye.cpp
         eye.ui
-        tailor.h
-        tailor.cpp
-        tailor.ui
         interpolation.h
         interpolation.cpp
         interpolation.ui

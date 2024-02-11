@@ -10,7 +10,7 @@ eye::eye(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     setWindowIcon(QIcon(":/icon/logo.png"));
     //默认显示原始图像
     imageData=mainWindow->imageData;
-     newValue=mainWindow->myValue;
+    newValue=myValue;
     QImage image(imageData.data(), newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(), QImage::Format_BGR888);
 
     // 进行垂直翻转
@@ -29,7 +29,7 @@ void eye::mousePressEvent(QMouseEvent* event)
     QPoint clickPos = event->pos();
     // 将窗口坐标转换为图像坐标
     int imageX = clickPos.x();
-    int imageY = myValue.bmpInfo.GetHeight() - clickPos.y();  // 图像上下翻转
+    int imageY = newValue.bmpInfo.GetHeight() - clickPos.y();  // 图像上下翻转
     if (clickCount == 0) {
 
         // 第一次点击，保存坐标到firstClick
@@ -136,7 +136,7 @@ void eye::on_btn_save_clicked()
 
 void eye::on_btn_ok_clicked()
 {
-    newValue.imageData=mainWindow->imageData;
+    imageData=mainWindow->imageData;
     qDebug()<<"click ok";
     ReturnValue returnRange=mainWindow->CheckOK(ui->lineEdit_range);
     ReturnValue returnNum=mainWindow->CheckOK(ui->lineEdit_increase);
@@ -162,14 +162,14 @@ void eye::on_btn_ok_clicked()
 
         // 分段处理图像数据
         std::vector<size_t> segmentStarts;
-        size_t segmentSize = myValue.bmpInfo.GetHeight() / num_threads;
+        size_t segmentSize = newValue.bmpInfo.GetHeight() / num_threads;
         for (int i = 0; i < num_threads; i++) {
             size_t start = i * segmentSize;
-            size_t end = (i == num_threads - 1) ? myValue.bmpInfo.GetHeight() : start + segmentSize;
+            size_t end = (i == num_threads - 1) ? newValue.bmpInfo.GetHeight() : start + segmentSize;
             segmentStarts.push_back(start);
             threads.emplace_back([&, start, end] {  // 使用 [&] 捕获列表
-                Eye(newValue.imageData, newValue.bmpInfo.GetWidth(), newValue.bmpInfo.GetHeight(), firstX, firstY, returnRange.value, returnNum.value, start, end);
-                Eye(newValue.imageData, newValue.bmpInfo.GetWidth(), newValue.bmpInfo.GetHeight(), secondX, secondY, returnRange.value, returnNum.value, start, end);
+                Eye(imageData, newValue.bmpInfo.GetWidth(), newValue.bmpInfo.GetHeight(), firstX, firstY, returnRange.value, returnNum.value, start, end);
+                Eye(imageData, newValue.bmpInfo.GetWidth(), newValue.bmpInfo.GetHeight(), secondX, secondY, returnRange.value, returnNum.value, start, end);
                 std::lock_guard<std::mutex> lock(mtx);
             });
         }
@@ -177,8 +177,8 @@ void eye::on_btn_ok_clicked()
         for (auto &thread : threads) {
             thread.join();
         }
-        ShowImage(newValue.imageData);
-        mainWindow->SaveImageDataToHistory(newValue.imageData);
+        ShowImage(imageData);
+        mainWindow->SaveImageDataToHistory(imageData);
     }
 }
 
@@ -188,6 +188,6 @@ void eye::on_btn_ok_clicked()
 void eye::on_btn_apply_clicked()
 {
     qDebug()<<"apply";
-    mainWindow->ShowImage(newValue.imageData ,newValue,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight());
+    mainWindow->ShowImage(imageData,newValue,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight());
 }
 

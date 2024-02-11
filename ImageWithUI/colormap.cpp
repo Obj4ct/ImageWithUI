@@ -48,7 +48,7 @@ ColorMap::ColorMap(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     setWindowTitle(QString("色彩映射"));
     setWindowIcon(QIcon(":/icon/logo.png"));
     imageData=mainWindow->imageData;
-    newValue=mainWindow->myValue;
+    newValue=myValue;
     QImage image(imageData.data(), newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(), QImage::Format_BGR888);
 
     // 进行垂直翻转
@@ -106,18 +106,18 @@ void ColorMap::ShowImage(std::vector<uint8_t> &inImageData)
 
 void ColorMap::on_comboBox_colorMap_currentIndexChanged(int index)
 {
-    newValue.imageData=mainWindow->imageData;
+    imageData=mainWindow->imageData;
     if (index == 0) {
         qDebug()<<"current index is 0";
     } else if (index == 1) {
 
         qDebug()<<"current index is 1";
-        auto func = std::bind(&Function::ConvertToGray, &function, std::ref(newValue.imageData), std::placeholders::_1, std::placeholders::_2);
+        auto func = std::bind(&Function::ConvertToGray, &function, std::ref(imageData), std::placeholders::_1, std::placeholders::_2);
 
         for (uint8_t i = 0; i < mainWindow->num_threads; i++)  // 创建多个线程
         {
             size_t start = i * mainWindow->segmentSize;  // 计算当前线程负责的数据段的起始位置
-            size_t end = (i == mainWindow->num_threads - 1) ? myValue.imageData.size() : start + mainWindow->segmentSize;  // 结尾,同上
+            size_t end = (i == mainWindow->num_threads - 1) ? newValue.imageData.size() : start + mainWindow->segmentSize;  // 结尾,同上
             mainWindow->segmentStarts.push_back(start);
             mainWindow->threads.emplace_back(func, start, end);
         }
@@ -127,19 +127,19 @@ void ColorMap::on_comboBox_colorMap_currentIndexChanged(int index)
         }
 
 
-        _ColorMap(newValue.imageData,colorMap1);
-        ShowImage(newValue.imageData);
-                mainWindow->SaveImageDataToHistory(newValue.imageData);
+        _ColorMap(imageData,colorMap1);
+        ShowImage(imageData);
+        mainWindow->SaveImageDataToHistory(imageData);
         mainWindow->ClearSegmentData();
     } else if (index == 2) {
 
         qDebug()<<"current index is 2";
-        auto func = std::bind(&Function::ConvertToGray, &function, std::ref(newValue.imageData), std::placeholders::_1, std::placeholders::_2);
+        auto func = std::bind(&Function::ConvertToGray, &function, std::ref(imageData), std::placeholders::_1, std::placeholders::_2);
 
         for (uint8_t i = 0; i < mainWindow->num_threads; i++)  // 创建多个线程
         {
             size_t start = i * mainWindow->segmentSize;  // 计算当前线程负责的数据段的起始位置
-            size_t end = (i == mainWindow->num_threads - 1) ? myValue.imageData.size() : start + mainWindow->segmentSize;  // 结尾,同上
+            size_t end = (i == mainWindow->num_threads - 1) ? newValue.imageData.size() : start + mainWindow->segmentSize;  // 结尾,同上
             mainWindow->segmentStarts.push_back(start);
             mainWindow->threads.emplace_back(func, start, end);
         }
@@ -149,19 +149,19 @@ void ColorMap::on_comboBox_colorMap_currentIndexChanged(int index)
         }
 
 
-        _ColorMap(newValue.imageData,colorMap2);
-        ShowImage(newValue.imageData);
-                mainWindow->SaveImageDataToHistory(newValue.imageData);
+        _ColorMap(imageData,colorMap2);
+        ShowImage(imageData);
+        mainWindow->SaveImageDataToHistory(imageData);
         mainWindow->ClearSegmentData();
     } else if (index == 3) {
 
         qDebug()<<"current index is 3";
-        auto func = std::bind(&Function::ConvertToGray, &function, std::ref(newValue.imageData), std::placeholders::_1, std::placeholders::_2);
+        auto func = std::bind(&Function::ConvertToGray, &function, std::ref(imageData), std::placeholders::_1, std::placeholders::_2);
 
         for (uint8_t i = 0; i < mainWindow->num_threads; i++)  // 创建多个线程
         {
             size_t start = i * mainWindow->segmentSize;  // 计算当前线程负责的数据段的起始位置
-            size_t end = (i == mainWindow->num_threads - 1) ? myValue.imageData.size() : start + mainWindow->segmentSize;  // 结尾,同上
+            size_t end = (i == mainWindow->num_threads - 1) ? newValue.imageData.size() : start + mainWindow->segmentSize;  // 结尾,同上
             mainWindow->segmentStarts.push_back(start);
             mainWindow->threads.emplace_back(func, start, end);
         }
@@ -171,19 +171,19 @@ void ColorMap::on_comboBox_colorMap_currentIndexChanged(int index)
         }
 
 
-        _ColorMap(newValue.imageData,colorMap3);
-        ShowImage(newValue.imageData);
-                mainWindow->SaveImageDataToHistory(newValue.imageData);
+        _ColorMap(imageData,colorMap3);
+        ShowImage(imageData);
+        mainWindow->SaveImageDataToHistory(imageData);
         mainWindow->ClearSegmentData();
     } else if (index == 4) {
 
         qDebug()<<"current index is 4";
-        auto func = std::bind(&Function::ConvertToGray, &function, std::ref(newValue.imageData), std::placeholders::_1, std::placeholders::_2);
+        auto func = std::bind(&Function::ConvertToGray, &function, std::ref(imageData), std::placeholders::_1, std::placeholders::_2);
 
         for (uint8_t i = 0; i < mainWindow->num_threads; i++)  // 创建多个线程
         {
             size_t start = i * mainWindow->segmentSize;  // 计算当前线程负责的数据段的起始位置
-            size_t end = (i == mainWindow->num_threads - 1) ? myValue.imageData.size() : start + mainWindow->segmentSize;  // 结尾,同上
+            size_t end = (i == mainWindow->num_threads - 1) ? newValue.imageData.size() : start + mainWindow->segmentSize;  // 结尾,同上
             mainWindow->segmentStarts.push_back(start);
             mainWindow->threads.emplace_back(func, start, end);
         }
@@ -193,9 +193,9 @@ void ColorMap::on_comboBox_colorMap_currentIndexChanged(int index)
         }
 
 
-        _ColorMap(newValue.imageData,colorMap4);
-        ShowImage(newValue.imageData);
-        mainWindow->SaveImageDataToHistory(newValue.imageData);
+        _ColorMap(imageData,colorMap4);
+        ShowImage(imageData);
+        mainWindow->SaveImageDataToHistory(imageData);
         mainWindow->ClearSegmentData();
     }
 }
@@ -222,6 +222,6 @@ void ColorMap::on_btn_save_clicked()
 void ColorMap::on_btn_apply_clicked()
 {
     qDebug()<<"apply";
-    mainWindow->ShowImage(newValue.imageData ,newValue,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight());
+    mainWindow->ShowImage(imageData ,newValue,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight());
 }
 

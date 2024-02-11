@@ -7,7 +7,7 @@ Interpolation::Interpolation(MainWindow* mainWindow, MyValue myValue, QWidget *p
     ui->setupUi(this);
 
     imageData=mainWindow->imageData;
-    newValue=mainWindow->myValue;
+    newValue=myValue;
     Function function;
 
 }

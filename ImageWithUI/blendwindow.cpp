@@ -21,7 +21,8 @@ BlendWindow::BlendWindow(MainWindow* mainWindow, MyValue myValue, QWidget *paren
 
     //默认显示原始图像
     originalImageData_1=mainWindow->imageData;
-    myValue_1=mainWindow->myValue;
+    myValue_1=myValue;
+
     QImage image(originalImageData_1.data(), myValue_1.bmpInfo.GetWidth(),myValue_1.bmpInfo.GetHeight(), QImage::Format_BGR888);
 
     // 进行垂直翻转
@@ -52,6 +53,8 @@ void BlendWindow::on_btn_open_clicked() {
     myValue_2 = MYFunction::ReadBMPFile(BMPPath);
 
     originalImageData_2 = myValue_2.imageData;
+
+
     bmpImage_2 = QImage(originalImageData_2.data(), myValue_2.bmpInfo.GetWidth(),
                         myValue_2.bmpInfo.GetHeight(), QImage::Format_BGR888);
 
@@ -76,7 +79,7 @@ void BlendWindow::BlendImages()
     int32_t width = myValue_1.bmpInfo.GetWidth();
     int32_t height = myValue_1.bmpInfo.GetHeight();
     BlendMode blendMode = currentBlendMode;
-    originalImageData_1=mainWindow->imageData;
+    originalImageData_1=myValue_1.imageData;
     originalImageData_2=myValue_2.imageData;
     if(myValue_2.imageData.size()==0)
     {
@@ -93,7 +96,7 @@ void BlendWindow::BlendImages()
 
     }
     std::vector<std::thread> threads(mainWindow->num_threads);
-    int segmentSize = static_cast<int>(myValue.imageData.size() / 3 / mainWindow->num_threads);
+    int segmentSize = static_cast<int>(myValue_1.imageData.size() / 3 / mainWindow->num_threads);
 
     auto func = std::bind(&BlendWindow::Effect, this, std::ref(originalImageData_1),std::ref(originalImageData_2),  std::placeholders::_1, std::placeholders::_2,  std::placeholders::_3, std::placeholders::_4, std::placeholders::_5);
 
