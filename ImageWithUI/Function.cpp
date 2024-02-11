@@ -343,6 +343,7 @@ void Function::Fisheye(const std::vector<uint8_t> &imageData,std::promise<std::v
                 // 进行非线性变换
                 float mappedRadius = normalizedRadius * normalizedRadius;
 
+
                 // 极坐标变换
                 int32_t newX = static_cast<int32_t>(centerX + maxRadius * mappedRadius * std::cos(angle));
                 int32_t newY = static_cast<int32_t>(centerY + maxRadius * mappedRadius * std::sin(angle));

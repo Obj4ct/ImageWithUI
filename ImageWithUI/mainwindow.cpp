@@ -119,18 +119,29 @@ void MainWindow::UndoImageProcessing()
 {
     if (!imageDataHistory.empty())
     {
-        std::vector<uint8_t> previousImageData = imageDataHistory.back();
-        imageDataHistory.pop_back();
-
-        // 恢复图像数据
-        imageData = previousImageData;
-
+        std::vector<uint8_t> imageDataToRedo = imageDataHistory.back();
         // 保存当前图像数据到重做链表
-        redoImageDataHistory.push_back(previousImageData);
+        redoImageDataHistory.push_back(imageDataToRedo);
+        imageDataHistory.pop_back();
+        if(!imageDataHistory.empty())
+        {
+            std::vector<uint8_t> currentImageData=imageDataHistory.back();
 
-        // 更新图像显示
-        ShowImage(imageData, myValue, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
-        qDebug() << "Undo operation";
+            // 恢复图像数据
+            imageData = currentImageData;
+
+
+            // 更新图像显示
+            ShowImage(imageData, myValue, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+            qDebug() << "Undo operation";
+        }
+        else{
+            qDebug()<<"empty";
+            // 更新图像显示
+            ShowImage(myValue.imageData, myValue, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+            imageData=myValue.imageData;
+
+        }
     }
     else
     {
@@ -142,13 +153,13 @@ void MainWindow::RedoImageProcessing()
     if (!redoImageDataHistory.empty())
     {
         std::vector<uint8_t> nextImageData = redoImageDataHistory.back();
+        imageDataHistory.push_back(nextImageData);
         redoImageDataHistory.pop_back();
 
         // 恢复图像数据
         imageData = nextImageData;
 
         // 保存当前图像数据到撤销链表
-        imageDataHistory.push_back(nextImageData);
 
         // 更新图像显示
         ShowImage(imageData, myValue, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
@@ -211,22 +222,24 @@ void MainWindow::on_openImage_triggered()
 void MainWindow::on_actionsave_triggered()
 {
     std::vector<uint8_t> saveImageData;
-
-    if (canSave && !imageDataHistory.empty())
-    {
-        // 获取最近保存的图像数据
-        saveImageData = imageDataHistory.back();
-    }
-    else if (canSave && imageDataHistory.empty())
-    {
-        // 如果没有历史记录，保存原始图像数据
-        saveImageData = myValue.imageData;
-    }
-    else
+    //不能保存文件时
+    if(!canSave)
     {
         function.CreateMessagebox("提示", "没有任何文件");
         qDebug() << "文件为空！";
         return;
+    }
+    //可以保存文件并且链表不为空
+    else if (canSave && !imageDataHistory.empty())
+    {
+        // 获取最近保存的图像数据
+        saveImageData = imageDataHistory.back();
+    }
+    else if (imageDataHistory.empty())
+    {
+
+        // 如果没有历史记录，保存原始图像数据
+        saveImageData = myValue.imageData;
     }
 
     QString filePath = QFileDialog::getSaveFileName(nullptr, "保存文件", "", "BMP文件(*.bmp)");
@@ -259,9 +272,6 @@ void MainWindow::on_actiongray_triggered()
     if (!imageDataHistory.empty()) {
         tempImageData = imageDataHistory.back();  // 复制当前图像数据
     }
-
-
-
     // 使用 std::bind 将成员函数包装成可调用对象
     auto func = std::bind(&Function::ConvertToGray, &function, std::ref(tempImageData), std::placeholders::_1, std::placeholders::_2);
 
@@ -550,6 +560,7 @@ void MainWindow::on_actionface_triggered()
 
 void MainWindow::on_actionfishEye_triggered()
 {
+
     std::vector<uint8_t> tempImageData=imageData;
     if(!imageDataHistory.empty())
     {
@@ -575,6 +586,7 @@ void MainWindow::on_actionfishEye_triggered()
     ShowImage(result, myValue,myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
 
 
+
 }
 
 
@@ -584,7 +596,7 @@ void MainWindow::on_actiongauss_triggered()
     bool dialogClosed = false;
     while (!dialogClosed) {
         bool ok;
-        double degree = QInputDialog::getDouble(this, tr("输入程度"), tr("程度:"), 0, 0, 100, 1, &ok);
+        double degree = QInputDialog::getDouble(this, tr("输入程度"), tr("程度:"), 0, 0, 10, 1, &ok);
 
         if (ok) {
 
@@ -761,11 +773,7 @@ void MainWindow::on_actionmosaic_triggered()
     bool dialogClosed = false;
     while (!dialogClosed) {
         bool ok;
-        double degree = QInputDialog::getDouble(this, tr("输入程度"), tr("程度:"), 0, 0, 100, 1, &ok);
-        if(degree==0)
-        {
-            return;
-        }
+        double degree = QInputDialog::getDouble(this, tr("输入程度"), tr("程度:"), 0, 1, 100, 1, &ok);
         if (ok) {
 
             qDebug() << "用户输入的程度:" << degree;
@@ -1060,7 +1068,7 @@ void MainWindow::on_actionlarge_near_triggered()
 
         qDebug() << "用户输入的高度倍数:" << height;
         qDebug() << "用户输入的宽度倍数:" << width;
-Interpolation inter(this,myValue);
+        Interpolation inter(this,myValue);
         inter.ShowLargeNear(height,width);
 
 
@@ -1084,7 +1092,7 @@ void MainWindow::on_actionsmall_near_triggered()
 
         qDebug() << "用户输入的高度倍数:" << height;
         qDebug() << "用户输入的宽度倍数:" << width;
-Interpolation inter(this,myValue);
+        Interpolation inter(this,myValue);
         inter.ShowSmallNear(height,width);
 
 
@@ -1107,7 +1115,7 @@ void MainWindow::on_actionlarge_bilinear_triggered()
 
         qDebug() << "用户输入的高度倍数:" << height;
         qDebug() << "用户输入的宽度倍数:" << width;
-Interpolation inter(this,myValue);
+        Interpolation inter(this,myValue);
         inter.ShowLargeBilinear(height,width);
 
 
@@ -1130,7 +1138,7 @@ void MainWindow::on_actionsmall_bilinear_triggered()
 
         qDebug() << "用户输入的高度倍数:" << height;
         qDebug() << "用户输入的宽度倍数:" << width;
-Interpolation inter(this,myValue);
+        Interpolation inter(this,myValue);
         inter.ShowSmallBilinear(height,width);
 
 
@@ -1153,7 +1161,7 @@ void MainWindow::on_actionlarge_bicubic_triggered()
 
         qDebug() << "用户输入的高度倍数:" << height;
         qDebug() << "用户输入的宽度倍数:" << width;
-Interpolation inter(this,myValue);
+        Interpolation inter(this,myValue);
         inter.ShowLargeBicubic(height,width);
 
 
@@ -1176,7 +1184,7 @@ void MainWindow::on_actionsmall_bicubic_triggered()
 
         qDebug() << "用户输入的高度倍数:" << height;
         qDebug() << "用户输入的宽度倍数:" << width;
-Interpolation inter(this,myValue);
+        Interpolation inter(this,myValue);
         inter.ShowSmallBicubic(height,width);
 
 

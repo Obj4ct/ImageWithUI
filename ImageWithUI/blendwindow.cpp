@@ -79,7 +79,8 @@ void BlendWindow::BlendImages()
     int32_t width = myValue_1.bmpInfo.GetWidth();
     int32_t height = myValue_1.bmpInfo.GetHeight();
     BlendMode blendMode = currentBlendMode;
-    originalImageData_1=myValue_1.imageData;
+
+    originalImageData_1=mainWindow->imageData;
     originalImageData_2=myValue_2.imageData;
     if(myValue_2.imageData.size()==0)
     {
@@ -121,6 +122,7 @@ void BlendWindow::BlendImages()
 void BlendWindow::ShowImage()
 {
     blendedImage = QImage(originalImageData_1.data(), myValue_1.bmpInfo.GetWidth(), myValue_1.bmpInfo.GetHeight(),QImage::Format_BGR888);
+
     blendedImageData=myValue_1.imageData;
     // 进行垂直翻转
     blendedImage = blendedImage.mirrored(false, true);

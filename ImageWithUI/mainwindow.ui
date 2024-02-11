@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1335</width>
-    <height>905</height>
+    <width>1338</width>
+    <height>839</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -35,14 +35,14 @@ QSpacerItem {
 
 /* QWidget 样式 */
 QWidget {
-    background-color: #f0f0f0; /* 背景颜色 */
+    background-color: rgb(203, 223, 255);/* 背景颜色 */
     color: #333; /* 文本颜色 */
 }
 
 /* QLineEdit 样式 */
 QLineEdit {
     background-color: #ffffff; /* 设置背景颜色为白色 */
-    border: 1px solid #ccc; /* 边框样式 */
+    border: 3px solid #ccc; /* 边框样式 */
     border-radius: 5px; /* 圆角半径 */
     padding: 5px; /* 内边距 */
     color: #333; /* 文本颜色 */
@@ -55,7 +55,8 @@ QLineEdit:focus {
 
 /* QMenu 样式 */
 QMenu {
-    background-color: #f0f0f0; /* 背景颜色 */
+     background-color: #f0f0f0; /* 背景颜色 */
+
     border: 1px solid #ccc; /* 边框样式 */
 }
 
@@ -84,7 +85,7 @@ QAction:pressed {
 
 /* QStatusBar 样式 */
 QStatusBar {
-    background-color: #f0f0f0; /* 背景颜色 */
+    background-color: rgb(203, 223, 255);/* 背景颜色 */
     color: #333; /* 文本颜色 */
     border-top: 1px solid #ccc; /* 顶部边框样式 */
 }
@@ -95,6 +96,9 @@ QStatusBar::item {
 </string>
   </property>
   <widget class="QWidget" name="centralwidget">
+   <property name="styleSheet">
+    <string notr="true"/>
+   </property>
    <layout class="QHBoxLayout" name="horizontalLayout_4">
     <item>
      <widget class="QLabel" name="imageLabel">
@@ -356,19 +360,6 @@ QStatusBar::item {
           </item>
          </layout>
         </widget>
-       </item>
-       <item>
-        <spacer name="horizontalSpacer">
-         <property name="orientation">
-          <enum>Qt::Horizontal</enum>
-         </property>
-         <property name="sizeHint" stdset="0">
-          <size>
-           <width>40</width>
-           <height>20</height>
-          </size>
-         </property>
-        </spacer>
        </item>
        <item>
         <widget class="QWidget" name="widget_19" native="true">
@@ -751,7 +742,7 @@ QStatusBar::item {
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1335</width>
+     <width>1338</width>
      <height>25</height>
     </rect>
    </property>

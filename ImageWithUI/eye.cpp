@@ -113,30 +113,14 @@ eye::~eye()
     delete ui;
 }
 
-void eye::on_btn_save_clicked()
-{
-    QString filePath = QFileDialog::getSaveFileName(nullptr, "保存文件", "", "BMP文件(*.bmp)");
-    if (filePath.isEmpty()) {
-        qDebug() << "Save operation canceled.";
-        return;
-    }
-    savePath=filePath.toStdString();
 
-    QFileInfo fileInfo(filePath);
-    QString fileName = fileInfo.fileName();
-    std::string str=fileName.toStdString();
-    std::cout<<"filename is "<<str<<std::endl;
-    MYFunction::WriteBMPFile(str,newValue.imageData,newValue.bmp,newValue.bmpInfo);
-    qDebug()<<"succeed!";
-
-}
 
 
 
 
 void eye::on_btn_ok_clicked()
 {
-    imageData=mainWindow->imageData;
+    //imageData=mainWindow->imageData;
     qDebug()<<"click ok";
     ReturnValue returnRange=mainWindow->CheckOK(ui->lineEdit_range);
     ReturnValue returnNum=mainWindow->CheckOK(ui->lineEdit_increase);
