@@ -327,7 +327,12 @@ void Interpolation::ShowLargeNear(int height,int width)
 void Interpolation::ShowSmallNear(int height,int width)
 {
     std::vector<uint8_t> nearestImageData=imageData;
-
+    if((newValue.bmpInfo.GetWidth()%width)!=0||(newValue.bmpInfo.GetHeight()%height)!=0)
+    {
+        qDebug()<<"not a integer";
+        function.CreateMessagebox("提示","输出图像长宽非整数!!");
+        return;
+    }
     std::vector<uint8_t> smallImageData=SmallImage_Nearest(nearestImageData,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(),newValue.bmpInfo.GetWidth()/width,newValue.bmpInfo.GetHeight()/height);
     ShowImage(smallImageData, newValue.bmpInfo.GetWidth() / width, newValue.bmpInfo.GetHeight() / height);
     qDebug()<<"ok";
@@ -358,7 +363,12 @@ void Interpolation::ShowSmallNear(int height,int width)
 void Interpolation::ShowSmallBilinear(int height,int width)
 {
     std::vector<uint8_t> bilinearImageData=imageData;
-
+    if((newValue.bmpInfo.GetWidth()%width)!=0||(newValue.bmpInfo.GetHeight()%height)!=0)
+    {
+        qDebug()<<"not a integer";
+        function.CreateMessagebox("提示","输出图像长宽非整数!!");
+        return;
+    }
     std::vector<uint8_t> smallImageData=LargeImage_Bilinear(bilinearImageData,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(),newValue.bmpInfo.GetWidth()/width,newValue.bmpInfo.GetHeight()/height);
     ShowImage(smallImageData, newValue.bmpInfo.GetWidth() / width, newValue.bmpInfo.GetHeight() / height);
     QMessageBox::StandardButton reply;
@@ -414,7 +424,12 @@ void Interpolation::ShowLargeBilinear(int height,int width)
 void Interpolation::ShowSmallBicubic(int height,int width)
 {
     std::vector<uint8_t> biCubicImageData=imageData;
-
+    if((newValue.bmpInfo.GetWidth()%width)!=0||(newValue.bmpInfo.GetHeight()%height)!=0)
+    {
+        qDebug()<<"not a integer";
+        function.CreateMessagebox("提示","输出图像长宽非整数!!");
+        return;
+    }
     std::vector<uint8_t> smallImageData=SmallImage_BiCubic(biCubicImageData,newValue.bmpInfo.GetWidth(),newValue.bmpInfo.GetHeight(),newValue.bmpInfo.GetWidth()/width,newValue.bmpInfo.GetHeight()/height);
     ShowImage(smallImageData, newValue.bmpInfo.GetWidth() / width, newValue.bmpInfo.GetHeight() / height);
     QMessageBox::StandardButton reply;
