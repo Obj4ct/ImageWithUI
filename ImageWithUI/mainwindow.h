@@ -14,11 +14,7 @@ struct ReturnValue{
     bool isNumeric;
     double_t value;
 };
-enum OperationType
-{
-    UNDO,
-    REDO
-};
+
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -35,16 +31,12 @@ public:
     void ShowImage(std::vector<uint8_t> &inImageData,MyValue value,int32_t width,int32_t height);
     void ResetAll(MyValue &myValue);
     ReturnValue CheckOK(QLineEdit* lineEdit);
-    OperationType SaveImageDataToHistory(std::vector<uint8_t>& imageData);
-    void UndoImageProcessing();
-    void RedoImageProcessing();
+
     //清理每段数据,防止数据冲突引发异常
     void ClearSegmentData();
     ~MainWindow();
 public:
     std::string BMPPath;
-    std::list<std::vector<uint8_t>> imageDataHistory;
-    std::list<std::vector<uint8_t>> redoImageDataHistory;
     //分段处理数据
     int num_threads;
     size_t imageSize;
@@ -70,7 +62,7 @@ private slots:
     void on_actionsave_triggered();
 
 
-    void on_btn_resetAll_clicked();
+
 
 
     void on_btn_brightness_clicked();
@@ -95,8 +87,6 @@ private slots:
     void on_btn_sharpen_clicked();
 
     void on_btn_threshold_ok_clicked();
-
-    void on_btn_undo_clicked();
 
     void on_actionmedian_triggered();
 
@@ -152,6 +142,7 @@ private slots:
 private:
     Ui::MainWindow *ui;
     BlendWindow * blendWindow;
+
     bool canSave=false;
     void closeEvent(QCloseEvent *event) override;
     void _SetVisible(bool set);
