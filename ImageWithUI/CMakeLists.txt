@@ -37,7 +37,7 @@ set(PROJECT_SOURCES
         eye.ui
         interpolation.h
         interpolation.cpp
-        interpolation.ui
+
         face.h
         face.cpp
         face.ui

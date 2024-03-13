@@ -493,17 +493,17 @@ void Function::MakeShadow(std::vector<uint8_t> &imageData, std::vector<uint8_t> 
 
 void Function::HighLight(std::vector<uint8_t> &imageData, std::vector<uint8_t> &highLightImageData, uint32_t pixel)
 {
-    // 确保 highLightImageData 的大小与 imageData 一致
-    if (highLightImageData.size() != imageData.size()) {
-        // 处理大小不一致的情况，这里简单示范直接将 highLightImageData 大小设置为 imageData 大小
-        highLightImageData.resize(imageData.size());
-    }
+    const int reductionAmount = 50;
 
     for (size_t i = 0; i < imageData.size(); ++i) {
-        // 对所有像素进行处理，不仅仅是大于 pixel 的像素
-        int newValue = imageData[i] - 100;
-        // 确保颜色值不会小于0
-        highLightImageData[i] = (newValue >= 0) ? static_cast<uint8_t>(newValue) : 0;
+        if (imageData[i] > pixel) {
+            // 降低像素值，确保不小于0
+            int newValue = static_cast<int>(imageData[i]) - reductionAmount;
+            highLightImageData[i] = static_cast<uint8_t>(std::max(newValue, 0));
+        } else {
+            // 对于低于阈值的值，保持像素值不变
+            highLightImageData[i] = imageData[i];
+        }
     }
 }
 

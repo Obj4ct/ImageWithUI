@@ -92,7 +92,7 @@ QSlider::handle {
             <item>
              <widget class="QLabel" name="label">
               <property name="text">
-               <string>选择色彩映射:</string>
+               <string>选择色彩映射模式:</string>
               </property>
              </widget>
             </item>

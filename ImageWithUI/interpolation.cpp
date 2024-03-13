@@ -202,22 +202,18 @@ std::vector<uint8_t> Interpolation::SmallImage_Bilinear(const std::vector<uint8_
             auto srcX = x * scaleX;
             auto srcY = y * scaleY;
             // 计算最近的像素点坐标
-            //            auto x1 = static_cast<int32_t>(srcX);
-            //            auto x2 = static_cast<int32_t>(x1 + 1);
-            //            auto y1 = static_cast<int32_t>(srcY);
-            //            auto y2 = static_cast<int32_t>(y1 + 1);
             auto x1 = std::max(0, std::min(static_cast<int32_t>(srcX), width - 1));
             auto x2 = std::max(0, std::min(static_cast<int32_t>(x1 + 1), width - 1));
             auto y1 = std::max(0, std::min(static_cast<int32_t>(srcY), height - 1));
             auto y2 = std::max(0, std::min(static_cast<int32_t>(y1 + 1), height - 1));
-            // 权重? 计算目标像素的权重 w1、w2、w3 和 w4，这些权重表示了目标像素与最近的四个原始像素之间的关系。
+            // 权重 计算目标像素的权重 w1、w2、w3 和 w4，这些权重表示了目标像素与最近的四个原始像素之间的关系。
             auto tx = srcX - x1;
             auto ty = srcY - y1;
             auto w1 = (1.0 - tx) * (1.0 - ty);
             auto w2 = tx * (1.0 - ty);
             auto w3 = (1.0 - tx) * ty;
             auto w4 = tx * ty;
-            // 新像素值?
+            // 新像素值
             int32_t destIndex = (y * newWidth + x) * 3;
             int32_t srcIndex1 = (y1 * width + x1) * 3;
             int32_t srcIndex2 = (y1 * width + x2) * 3;
@@ -257,7 +253,7 @@ std::vector<uint8_t> Interpolation::LargeImage_Bilinear(const std::vector<uint8_
             auto y1 = std::max(0, std::min(static_cast<int32_t>(srcY), height - 1));
             auto y2 = std::max(0, std::min(static_cast<int32_t>(y1 + 1), height - 1));
 
-            // 权重?
+            // 权重
             auto tx = srcX - x1;
             auto ty = srcY - y1;
             auto w1 = (1.0 - tx) * (1.0 - ty);

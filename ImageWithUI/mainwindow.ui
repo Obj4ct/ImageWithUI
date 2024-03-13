@@ -390,19 +390,6 @@ QStatusBar::item {
               <widget class="QWidget" name="widget_12" native="true">
                <layout class="QHBoxLayout" name="horizontalLayout_18">
                 <item>
-                 <spacer name="horizontalSpacer_14">
-                  <property name="orientation">
-                   <enum>Qt::Horizontal</enum>
-                  </property>
-                  <property name="sizeHint" stdset="0">
-                   <size>
-                    <width>152</width>
-                    <height>20</height>
-                   </size>
-                  </property>
-                 </spacer>
-                </item>
-                <item>
                  <widget class="QLabel" name="label_29">
                   <property name="text">
                    <string>阴影化</string>
@@ -428,19 +415,6 @@ QStatusBar::item {
              <item>
               <widget class="QWidget" name="widget_21" native="true">
                <layout class="QHBoxLayout" name="horizontalLayout_9">
-                <item>
-                 <spacer name="horizontalSpacer_11">
-                  <property name="orientation">
-                   <enum>Qt::Horizontal</enum>
-                  </property>
-                  <property name="sizeHint" stdset="0">
-                   <size>
-                    <width>40</width>
-                    <height>20</height>
-                   </size>
-                  </property>
-                 </spacer>
-                </item>
                 <item>
                  <widget class="QLabel" name="label_30">
                   <property name="text">
@@ -490,19 +464,6 @@ QStatusBar::item {
               <widget class="QWidget" name="widget_4" native="true">
                <layout class="QHBoxLayout" name="horizontalLayout_2">
                 <item>
-                 <spacer name="horizontalSpacer_8">
-                  <property name="orientation">
-                   <enum>Qt::Horizontal</enum>
-                  </property>
-                  <property name="sizeHint" stdset="0">
-                   <size>
-                    <width>40</width>
-                    <height>20</height>
-                   </size>
-                  </property>
-                 </spacer>
-                </item>
-                <item>
                  <widget class="QLineEdit" name="lineEdit_brightness"/>
                 </item>
                 <item>
@@ -519,19 +480,6 @@ QStatusBar::item {
               <widget class="QWidget" name="widget_5" native="true">
                <layout class="QHBoxLayout" name="horizontalLayout">
                 <item>
-                 <spacer name="horizontalSpacer_9">
-                  <property name="orientation">
-                   <enum>Qt::Horizontal</enum>
-                  </property>
-                  <property name="sizeHint" stdset="0">
-                   <size>
-                    <width>40</width>
-                    <height>20</height>
-                   </size>
-                  </property>
-                 </spacer>
-                </item>
-                <item>
                  <widget class="QLineEdit" name="lineEdit_contrast"/>
                 </item>
                 <item>
@@ -547,19 +495,6 @@ QStatusBar::item {
              <item>
               <widget class="QWidget" name="widget_6" native="true">
                <layout class="QHBoxLayout" name="horizontalLayout_3">
-                <item>
-                 <spacer name="horizontalSpacer_10">
-                  <property name="orientation">
-                   <enum>Qt::Horizontal</enum>
-                  </property>
-                  <property name="sizeHint" stdset="0">
-                   <size>
-                    <width>40</width>
-                    <height>20</height>
-                   </size>
-                  </property>
-                 </spacer>
-                </item>
                 <item>
                  <widget class="QLineEdit" name="lineEdit_saturation">
                   <property name="text">
@@ -642,19 +577,6 @@ QStatusBar::item {
                  <widget class="QWidget" name="widget_17" native="true">
                   <layout class="QHBoxLayout" name="horizontalLayout_7">
                    <item>
-                    <spacer name="horizontalSpacer_12">
-                     <property name="orientation">
-                      <enum>Qt::Horizontal</enum>
-                     </property>
-                     <property name="sizeHint" stdset="0">
-                      <size>
-                       <width>40</width>
-                       <height>20</height>
-                      </size>
-                     </property>
-                    </spacer>
-                   </item>
-                   <item>
                     <widget class="QLabel" name="label_20">
                      <property name="text">
                       <string>顺时针旋转</string>
@@ -677,19 +599,6 @@ QStatusBar::item {
                 <item>
                  <widget class="QWidget" name="widget_18" native="true">
                   <layout class="QHBoxLayout" name="horizontalLayout_8">
-                   <item>
-                    <spacer name="horizontalSpacer_13">
-                     <property name="orientation">
-                      <enum>Qt::Horizontal</enum>
-                     </property>
-                     <property name="sizeHint" stdset="0">
-                      <size>
-                       <width>40</width>
-                       <height>20</height>
-                      </size>
-                     </property>
-                    </spacer>
-                   </item>
                    <item>
                     <widget class="QLabel" name="label_21">
                      <property name="text">

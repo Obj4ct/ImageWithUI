@@ -236,7 +236,7 @@ QStatusBar::item {
          <item>
           <widget class="QLabel" name="label_4">
            <property name="text">
-            <string>范围</string>
+            <string>眼部半径</string>
            </property>
           </widget>
          </item>
@@ -259,7 +259,7 @@ QStatusBar::item {
          <item>
           <widget class="QLabel" name="label_5">
            <property name="text">
-            <string>程度</string>
+            <string>眼部变化程度</string>
            </property>
           </widget>
          </item>
