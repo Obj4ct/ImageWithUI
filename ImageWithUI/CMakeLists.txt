@@ -46,6 +46,7 @@ set(PROJECT_SOURCES
         colormap.cpp
         colormap.ui
 
+
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)

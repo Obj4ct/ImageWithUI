@@ -26,8 +26,59 @@ MainWindow::MainWindow(QWidget *parent)
     _SetShortCut();
     _SetVisible(false);
 
-}
 
+}
+void MainWindow::mouseDoubleClickEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton) {
+        // 获取事件发生的位置
+        QPoint pos = event->pos();
+        // 判断事件是否发生在imageLabel上
+        if (ui->imageLabel->rect().contains(pos)) {
+            // 文件默认路径
+            QString defaultPath = QDir::homePath();
+            // 设置过滤
+            QString filter = "BMP文件(*.bmp)";
+            QString path = QFileDialog::getOpenFileName(this, "选择BMP文件", defaultPath, filter);
+            if (path.isEmpty()) {
+                qDebug() << "未选择文件";
+                return;
+            }
+            else{
+                _SetVisible(true);
+                // 读取BMP文件并且存入变量中
+                BMPPath = path.toStdString();
+                myValue = MYFunction::ReadBMPFile(BMPPath);
+                imageSize=myValue.imageData.size();
+                segmentSize = imageSize / num_threads;  // 均分处理
+                qDebug()<<"image size is:"<<imageSize;
+                qDebug()<<"segment size is:"<<segmentSize;
+
+                //input debug info
+                //ImgInfo(myValue.bmp,myValue.bmpInfo);
+                // 将图像数据转换为QImage
+                //BGR排序
+
+
+
+                m_bmpImage = QImage(myValue.imageData.data(), myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),QImage::Format_BGR888);
+                m_bmpImage.mirror(false,true);
+
+
+                //        Debug::PrintImagePixelsToFile(m_bmpImage, "output.txt");
+                //        qDebug()<<"write ok!";
+
+                imageData=myValue.imageData;
+                // 显示图像在imageLabel上
+                QPixmap pixmap = QPixmap::fromImage(m_bmpImage);
+                ui->imageLabel->setPixmap(pixmap);
+                SaveImageDataToHistory(imageData);
+                canSave=true;
+
+            }
+        }
+    }
+}
 void MainWindow::ResetImage(MyValue &myValue)
 {
 
@@ -159,8 +210,6 @@ void MainWindow::RedoImageProcessing()
 
         // 恢复图像数据
         imageData = nextImageData;
-
-        // 保存当前图像数据到撤销链表
 
         // 更新图像显示
         ShowImage(imageData, myValue, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
@@ -633,58 +682,6 @@ void MainWindow::on_actiongauss_triggered()
 }
 
 
-void MainWindow::on_btn_highContrast_ok_clicked()
-{
-    qDebug()<<"hello";
-    //正确输入数字
-    ReturnValue returnValue=CheckOK(ui->lineEdit_highContrast);
-
-    if(returnValue.isNull==true)
-    {
-        if(!function.CreateMessagebox("提示","请输入"))
-            return;
-    }else if(returnValue.isNumeric==false){
-        if(!function.CreateMessagebox("提示","输入数字"))
-            return;
-    }else{
-
-        std::vector<uint8_t> tempImageData=imageData;
-        if(!imageDataHistory.empty())
-        {
-            tempImageData = imageDataHistory.back(); // 复制当前图像数据
-        }
-
-
-
-        std::promise<std::vector<uint8_t>> gaussPromise;
-        std::promise<std::vector<uint8_t>> highContrastPromise;
-
-        std::future<std::vector<uint8_t>> gaussFuture = gaussPromise.get_future();
-        std::future<std::vector<uint8_t>> highContrastFuture = highContrastPromise.get_future();
-
-        // 使用 std::bind 调用成员函数
-        auto gaussFunc = std::bind(&Function::Gauss, &function, std::ref(tempImageData), std::ref(gaussPromise), std::placeholders::_1, std::placeholders::_2,std::placeholders::_3);
-
-        auto highContrastFunc = std::bind(&Function::HighContrast, &function, std::ref(tempImageData), std::ref(highContrastPromise), std::placeholders::_1);
-
-
-
-        std::thread gaussThread(gaussFunc,myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),returnValue.value);
-
-        // 等待异步任务完成并获取值
-        std::vector<uint8_t> gaussValue = gaussFuture.get();
-        gaussThread.join();
-
-        std::thread highContrastThread(highContrastFunc, std::ref(gaussValue));
-        std::vector<uint8_t> value = highContrastFuture.get();
-        highContrastThread.join();
-        SaveImageDataToHistory(value); // 保存当前图像数据到链表
-        ShowImage(value, myValue,myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
-    }
-
-}
-
-
 void MainWindow::on_btn_rotate_ok_clicked()
 {
     //正确输入数字
@@ -1011,6 +1008,7 @@ void MainWindow::on_actionredo_triggered()
 void MainWindow::_SetVisible(bool set)
 {
     qDebug() << "Setting visibility to:" << set;
+    ui->toolBar->setVisible(set);
     ui->menu_edit->menuAction()->setVisible(set);
     ui->menu_blur->menuAction()->setVisible(set);
     ui->menu_base->menuAction()->setVisible(set);
@@ -1195,3 +1193,52 @@ void MainWindow::on_actionsmall_bicubic_triggered()
 
     }
 }
+
+void MainWindow::on_actionhighContrast_triggered()
+{
+    bool dialogClosed = false;
+    while (!dialogClosed) {
+        bool ok;
+        double degree = QInputDialog::getDouble(this, tr("输入程度"), tr("程度:"), 0, 1, 100, 1, &ok);
+        if (ok) {
+
+            qDebug() << "用户输入的程度:" << degree;
+            std::vector<uint8_t> tempImageData=imageData;
+            if(!imageDataHistory.empty())
+            {
+                tempImageData = imageDataHistory.back(); // 复制当前图像数据
+            }
+
+            std::promise<std::vector<uint8_t>> gaussPromise;
+            std::promise<std::vector<uint8_t>> highContrastPromise;
+
+            std::future<std::vector<uint8_t>> gaussFuture = gaussPromise.get_future();
+            std::future<std::vector<uint8_t>> highContrastFuture = highContrastPromise.get_future();
+
+            // 使用 std::bind 调用成员函数
+            auto gaussFunc = std::bind(&Function::Gauss, &function, std::ref(tempImageData), std::ref(gaussPromise), std::placeholders::_1, std::placeholders::_2,std::placeholders::_3);
+
+            auto highContrastFunc = std::bind(&Function::HighContrast, &function, std::ref(tempImageData), std::ref(highContrastPromise), std::placeholders::_1);
+
+
+
+            std::thread gaussThread(gaussFunc,myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight(),degree);
+
+            // 等待异步任务完成并获取值
+            std::vector<uint8_t> gaussValue = gaussFuture.get();
+            gaussThread.join();
+
+            std::thread highContrastThread(highContrastFunc, std::ref(gaussValue));
+            std::vector<uint8_t> value = highContrastFuture.get();
+            highContrastThread.join();
+            SaveImageDataToHistory(value); // 保存当前图像数据到链表
+            ShowImage(value, myValue,myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+        } else {
+
+            qDebug() << "用户取消输入";
+            dialogClosed = true; // 设置标志以退出循环
+            return;
+        }
+    }
+}
+

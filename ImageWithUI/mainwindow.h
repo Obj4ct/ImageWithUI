@@ -65,6 +65,7 @@ public:
     double sigma;
     double angle;
 private slots:
+
     //click menubar to open image
     void on_openImage_triggered();
     void on_actionsave_triggered();
@@ -78,9 +79,6 @@ private slots:
     void on_btn_contrast_clicked();
 
     void on_btn_saturation_clicked();
-
-
-    void on_btn_highContrast_ok_clicked();
 
     void on_btn_rotate_ok_clicked();
 
@@ -148,6 +146,10 @@ private slots:
     void on_actionlarge_bicubic_triggered();
 
     void on_actionsmall_bicubic_triggered();
+    void on_actionhighContrast_triggered();
+
+protected:
+    void mouseDoubleClickEvent(QMouseEvent *event) override;
 
 private:
     Ui::MainWindow *ui;
