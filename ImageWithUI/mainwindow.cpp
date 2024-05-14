@@ -431,6 +431,14 @@ void MainWindow::on_btn_brightness_clicked()
 
         std::vector<uint8_t> tempImageData=imageData;
         qDebug()<<returnValue.value;
+        if(returnValue.value < -150 || returnValue.value > 150)
+        {
+            std::cout << "out of range,brightnessValue is between -150 to 150, please try again!" << std::endl;
+            if(!function.CreateMessagebox("提示","超出范围,范围是[-150,150]"))
+            {
+                return;
+            }
+        }
         if(!imageDataHistory.empty())
         {
             tempImageData = imageDataHistory.back(); // 复制当前图像数据
@@ -461,6 +469,15 @@ void MainWindow::on_btn_contrast_clicked()
     }else{
 
         std::vector<uint8_t> tempImageData=imageData;
+        qDebug()<<returnValue.value;
+        if(returnValue.value < -50 || returnValue.value > 100)
+        {
+            std::cout << "out of range,brightnessValue is between -50 to 100, please try again!" << std::endl;
+            if(!function.CreateMessagebox("提示","超出范围,范围是[-50,100]"))
+            {
+                return;
+            }
+        }
         if(!imageDataHistory.empty())
         {
             tempImageData = imageDataHistory.back(); // 复制当前图像数据

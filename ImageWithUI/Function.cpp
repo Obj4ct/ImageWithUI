@@ -115,7 +115,7 @@ void Function::AverageBlur(std::vector<uint8_t> &imageData, uint32_t width, uint
 
 void Function::Brightness(std::vector<uint8_t> &brightnessImageData, double_t brightnessValue)
 {
-    if (brightnessValue >= -150 && brightnessValue <= 50) {
+
         for (unsigned char &i: brightnessImageData) {
             double_t newValue = static_cast<double_t>(i) + brightnessValue;
             if (newValue < 0) {
@@ -125,19 +125,13 @@ void Function::Brightness(std::vector<uint8_t> &brightnessImageData, double_t br
             }
             i = static_cast<uint8_t>(newValue);
         }
-    } else {
-        std::cout << "out of range,brightnessValue is between -150 to 150, please try again!" << std::endl;
-        if(!CreateMessagebox("提示","超出范围,范围是[-150,150]"))
-        {
-            return;
-        }
-    }
+
 
 }
 
 void Function::Contrast(std::vector<uint8_t> &contrastImageData, double_t contrastValue)
 {
-    if (contrastValue >= -50 && contrastValue <= 100) {
+
         double_t factor = (100.0 + contrastValue) / 100.0;
         for (size_t i = 0; i < contrastImageData.size(); i += 3) {
 
@@ -151,13 +145,6 @@ void Function::Contrast(std::vector<uint8_t> &contrastImageData, double_t contra
                                                             128)));
         }
 
-    } else {
-        std::cout << "out of range,brightnessValue is between -150 to 150, please try again!" << std::endl;
-        if(!CreateMessagebox("提示","超出范围,范围是[-50,100]"))
-        {
-            return;
-        }
-    }
 }
 
 void Function::Saturation(std::vector<uint8_t> &saturationImageData, int32_t width, int32_t height, double_t saturationValue)

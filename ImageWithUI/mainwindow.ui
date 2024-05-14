@@ -387,7 +387,7 @@ QStatusBar::item {
              <item>
               <widget class="QLabel" name="label">
                <property name="text">
-                <string>亮度调整(-150到50)</string>
+                <string>亮度调整(-150到150)</string>
                </property>
               </widget>
              </item>
