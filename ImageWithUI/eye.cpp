@@ -69,20 +69,31 @@ void eye::Eye(std::vector<uint8_t> &imageData, int32_t width, int32_t height, in
                 double warpAmount = intensity * std::sin(distance / radius * 3.14159265);
                 double newX = x + warpAmount;
                 double newY = y + warpAmount;
-
+                //---------------------//
+                //x0 和 y0 是 newX 和 newY 的整数部分，表示目标像素坐标的左上角像素位置。
                 int x0 = static_cast<int>(newX);
                 int y0 = static_cast<int>(newY);
+                //x1 和 y1 是 x0 和 y0 分别加 1 后的值，表示目标像素坐标的右下角像素位置。这里使用 std::min 函数确保不超出图像边界。
                 int x1 = std::min(x0 + 1, width - 1);
                 int y1 = std::min(y0 + 1, height - 1);
+                //dx 和 dy 是 newX - x0 和 newY - y0，表示目标像素坐标的浮点偏移量。
                 double dx = newX - x0;
                 double dy = newY - y0;
-
+                //这样，x0 和 y0 表示左上角像素，x1 和 y1 表示右下角像素，而 dx 和 dy 表示在这个像素坐标中的相对位置。这些信息将用于进行双线性插值，以获取目标像素的颜色值。
+                //--------------------//
                 int targetPixelIndex00 = (y0 * width + x0) * 3;
                 int targetPixelIndex01 = (y0 * width + x1) * 3;
                 int targetPixelIndex10 = (y1 * width + x0) * 3;
                 int targetPixelIndex11 = (y1 * width + x1) * 3;
 
+
                 for (int c = 0; c < 3; c++) {
+                    //计算了目标像素的颜色值。在这里，targetPixelIndex00、targetPixelIndex01、targetPixelIndex10 和 targetPixelIndex11 分别是目标像素周围四个相邻像素的索引。
+                    //imageData[targetPixelIndex00 + c] 表示左上角像素在当前颜色通道上的值乘以 (1 - dx) * (1 - dy)。
+                    //imageData[targetPixelIndex01 + c] 表示右上角像素在当前颜色通道上的值乘以 dx * (1 - dy)。
+                    //imageData[targetPixelIndex10 + c] 表示左下角像素在当前颜色通道上的值乘以 (1 - dx) * dy。
+                    //imageData[targetPixelIndex11 + c] 表示右下角像素在当前颜色通道上的值乘以 dx * dy。
+                    //这些值通过线性插值相加，然后被转换为无符号8位整数，并存储在 imageData[pixelIndex + c] 中，完成了对目标像素颜色的插值。
                     double interpolatedValue = imageData[targetPixelIndex00 + c] * (1 - dx) * (1 - dy) +
                             imageData[targetPixelIndex01 + c] * dx * (1 - dy) +
                             imageData[targetPixelIndex10 + c] * (1 - dx) * dy +

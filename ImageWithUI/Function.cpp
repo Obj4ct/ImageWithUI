@@ -115,7 +115,7 @@ void Function::AverageBlur(std::vector<uint8_t> &imageData, uint32_t width, uint
 
 void Function::Brightness(std::vector<uint8_t> &brightnessImageData, double_t brightnessValue)
 {
-    if (brightnessValue >= -150 && brightnessValue <= 150) {
+    if (brightnessValue >= -150 && brightnessValue <= 50) {
         for (unsigned char &i: brightnessImageData) {
             double_t newValue = static_cast<double_t>(i) + brightnessValue;
             if (newValue < 0) {
@@ -131,8 +131,8 @@ void Function::Brightness(std::vector<uint8_t> &brightnessImageData, double_t br
         {
             return;
         }
-
     }
+
 }
 
 void Function::Contrast(std::vector<uint8_t> &contrastImageData, double_t contrastValue)
@@ -426,10 +426,12 @@ void Function::RotateImage(std::vector<uint8_t> &imageData, int32_t width, int32
 
        for (int y = 0; y < height; ++y) {
            for (int x = 0; x < width; ++x) {
+               //使用了二维旋转矩阵的数学公式，对图像中的每个像素进行了顺时针旋转。
                double_t rotatedX = std::cos(radians) * (x - centerX) - std::sin(radians) * (y - centerY) + centerX;
                double_t rotatedY = std::sin(radians) * (x - centerX) + std::cos(radians) * (y - centerY) + centerY;
 
                if (rotatedX >= 0 && rotatedX < width && rotatedY >= 0 && rotatedY < height) {
+                   //对于每个旋转后的坐标 (rotatedX, rotatedY)，通过最近邻插值法确定其在原图像中的对应坐标，并将像素值赋给旋转后的图像。
                    int originalIndex =
                            static_cast<int>(std::round(rotatedY)) * width * 3 + static_cast<int>(std::round(rotatedX)) * 3;
                    int newIndex = y * width * 3 + x * 3;
@@ -510,7 +512,7 @@ void Function::HighLight(std::vector<uint8_t> &imageData, std::vector<uint8_t> &
 void Function::Sharpen(const std::vector<uint8_t> &imageData, std::promise<std::vector<uint8_t>> &result,const std::vector<uint8_t> &highContrastImageData)
 {
     std::vector<uint8_t> sharpenImageData(imageData.size());
-
+    //遍历每一个像素，然后将高反差图像的像素值加到原始图像上，这种方式会突出图像中的明亮和暗部差异，从而增强图像的锐度。
     for (size_t i = 0; i < imageData.size(); i++) {
         int addValue = static_cast<int>(imageData[i]) + static_cast<int>(highContrastImageData[i]);
         sharpenImageData[i] = static_cast<uint8_t>(std::max(std::min(addValue - 170, 255), 0));

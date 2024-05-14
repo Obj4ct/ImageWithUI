@@ -43,12 +43,14 @@ std::vector<uint8_t> Interpolation::LargeImage_Nearest(const std::vector<uint8_t
     std::vector<uint8_t> resizedImage(newHeight * newWidth * 3);
 
     // 放大因子
+    //计算缩小因子 scaleX 和 scaleY，scaleX 和 scaleY 是水平和垂直方向的缩放因子。
     double scaleX = static_cast<double>(newWidth) / width;
     double scaleY = static_cast<double>(newHeight) / height;
 
     for (int32_t y = 0; y < newHeight; y++) {
         for (int32_t x = 0; x < newWidth; x++) {
             // 原图坐标
+            //x 和 y 是新图像中的像素坐标。srcX 和 srcY 是通过缩放因子计算得到的原始图像中最近邻的像素坐标。
             auto srcX = static_cast<int32_t>(x / scaleX);
             auto srcY = static_cast<int32_t>(y / scaleY);
             int32_t srcIndex = (srcY * width + srcX) * 3;
@@ -130,7 +132,8 @@ LargeImage_BiCubic(const std::vector<uint8_t> &imageData, int32_t width, int32_t
                         interpolatedValue += weights[j][i] * imageData[(yj * width + xi) * 3 + channel];
                     }
                 }
-
+                //1.由于像素值通常在 0 到 255 之间，所以使用 std::max(0.0f, std::min(255.0f, interpolatedValue)) 将插值后的值截取到这个范围内。
+                //2.将截取后的插值像素值转换为 uint8_t 类型，并存储在 resizedImage 中的相应位置。
                 interpolatedValue = std::max(0.0f, std::min(255.0f, interpolatedValue));
                 resizedImage[(y * newWidth + x) * 3 + channel] = static_cast<uint8_t>(interpolatedValue);
             }
@@ -147,7 +150,7 @@ SmallImage_BiCubic(const std::vector<uint8_t> &imageData, int32_t width, int32_t
         for (int x = 0; x < newWidth; ++x) {
             auto srcX = static_cast<float>(x) * width / newWidth;
             auto srcY = static_cast<float>(y) * height / newHeight;
-
+            //接下来需要对 (srcX, srcY) 进行边界检查，确保它在原图像的有效范围内。这是为了防止插值过程中访问到图像边界外的无效像素。
             srcX = std::max(0.0f, std::min(srcX, static_cast<float>(width - 1)));
             srcY = std::max(0.0f, std::min(srcY, static_cast<float>(height - 1)));
 
@@ -214,6 +217,7 @@ std::vector<uint8_t> Interpolation::SmallImage_Bilinear(const std::vector<uint8_
             auto w3 = (1.0 - tx) * ty;
             auto w4 = tx * ty;
             // 新像素值
+            //双线性插值考虑了目标像素与最近的四个原始像素之间的权重关系，计算了四个权重 w1、w2、w3 和 w4。
             int32_t destIndex = (y * newWidth + x) * 3;
             int32_t srcIndex1 = (y1 * width + x1) * 3;
             int32_t srcIndex2 = (y1 * width + x2) * 3;
@@ -261,6 +265,7 @@ std::vector<uint8_t> Interpolation::LargeImage_Bilinear(const std::vector<uint8_
             auto w3 = (1.0 - tx) * ty;
             auto w4 = tx * ty;
             // 新像素值
+            //双线性插值考虑了目标像素与最近的四个原始像素之间的权重关系，计算了四个权重 w1、w2、w3 和 w4。
             int32_t destIndex = (y * newWidth + x) * 3;
             int32_t srcIndex1 = (y1 * width + x1) * 3;
             int32_t srcIndex2 = (y1 * width + x2) * 3;
