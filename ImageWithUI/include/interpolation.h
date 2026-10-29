@@ -17,6 +17,7 @@ class Interpolation : public QWidget
 
 public:
     explicit Interpolation(MainWindow* mainWindow, MyValue myValue, QWidget *parent = nullptr);
+    ~Interpolation();
     void ShowLargeNear(int height,int width);
     void ShowSmallNear(int height,int width);
     void ShowSmallBilinear(int height,int width);
@@ -26,7 +27,7 @@ public:
 private:
     Ui::Interpolation *ui;
     MainWindow* mainWindow;
-    QMainWindow* newWindow;
+    QMainWindow* newWindow = nullptr;
     Function function;
     MyValue myValue;
     MyValue newValue;
@@ -59,6 +60,8 @@ private:
     LargeImage_Nearest(const std::vector<uint8_t> &imageData, int32_t width, int32_t height, int32_t newWidth, int32_t newHeight);
 
     void ShowImage(const std::vector<uint8_t> &imageData,int width,int height);
+    // 统一的"是否保存"流程
+    bool AskAndSave(const std::vector<uint8_t> &result, int32_t newWidth, int32_t newHeight);
 };
 
 #endif // INTERPOLATION_H

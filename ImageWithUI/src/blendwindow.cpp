@@ -50,7 +50,12 @@ void BlendWindow::on_btn_open_clicked() {
     }
 
     std::string BMPPath = path.toStdString();
-    myValue_2 = MYFunction::ReadBMPFile(BMPPath);
+    QString errMsg;
+    if (!MYFunction::ReadBMPFile(BMPPath, myValue_2, errMsg)) {
+        Function function;
+        function.CreateMessagebox("打开失败", errMsg);
+        return;
+    }
 
     originalImageData_2 = myValue_2.imageData;
 
@@ -70,7 +75,8 @@ void BlendWindow::on_btn_open_clicked() {
 void BlendWindow::on_btn_apply_clicked()
 {
     qDebug()<<"apply";
-    mainWindow->ShowImage(originalImageData_1,myValue_1,myValue_1.bmpInfo.GetWidth(),myValue_1.bmpInfo.GetHeight());
+    // 写回主窗口并记录历史(这样才能撤销)
+    mainWindow->ApplyResult(originalImageData_1);
 }
 
 void BlendWindow::BlendImages()
@@ -88,7 +94,9 @@ void BlendWindow::BlendImages()
         function.CreateMessagebox("提示","请选择图片!!");
         return;
     }
-    else if(myValue_1.imageData.size()!=myValue_2.imageData.size())
+    else if(myValue_1.imageData.size()!=myValue_2.imageData.size()
+            || myValue_1.bmpInfo.GetWidth()!=myValue_2.bmpInfo.GetWidth()
+            || myValue_1.bmpInfo.GetHeight()!=myValue_2.bmpInfo.GetHeight())
     {
         qDebug()<<myValue_2.imageData.size();
         Function function;
@@ -158,11 +166,12 @@ void BlendWindow::SwitchBlendMode(uint8_t &destR, uint8_t &destG, uint8_t &destB
         destB = static_cast<uint8_t>((destB * srcB) / 255);
         break;
     }
-        // 滤色 ps中滤色的作用结果和正片叠底刚好相反，它是将 两个颜色的互补色 的像素值相乘，然后除以255得到的最终色的像素值。通常执行滤色模式后的颜色都较浅。
+        // 滤色 ps中滤色的作用结果和正片叠底刚好相反，它是将两个颜色的互补色的像素值相乘，
+    // 然后用 255 减去该结果得到的最终色的像素值。
     case BLEND_SCREEN: {
-        destR = static_cast<uint8_t>((255 - destR) * (255 - srcR) / 255);
-        destG = static_cast<uint8_t>((255 - destG) * (255 - srcG) / 255);
-        destB = static_cast<uint8_t>((255 - destB) * (255 - srcB) / 255);
+        destR = static_cast<uint8_t>(255 - (255 - destR) * (255 - srcR) / 255);
+        destG = static_cast<uint8_t>(255 - (255 - destG) * (255 - srcG) / 255);
+        destB = static_cast<uint8_t>(255 - (255 - destB) * (255 - srcB) / 255);
         break;
     }
         //“叠加”模式把图像的“基色”颜色与“混合色”颜色相混合产生一种中间色。

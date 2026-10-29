@@ -1,8 +1,9 @@
 #ifndef BMPFILE_H
 #define BMPFILE_H
 #include <QDebug>
+#include <QString>
+#include <QFile>
 #include "stdcpp.h"
-extern std::string savePath;
 #pragma pack(push, 1)
 class BMP
 {
@@ -79,11 +80,10 @@ private:
     // 下面这两个参数分别是 32 位的整数，表示图像的水平和垂直像素密度，以像素每米为单位
     int32_t xPixelsPerMeter;
     int32_t yPixelsPerMeter;
-    // 下面这两个参数是 32 位的整数，通常不太影响非索引颜色的 BMP 图像。它们在索引颜色的 BMP
+    // 下面两个参数是 32 位的整数，通常不太影响非索引颜色的 BMP 图像。它们在索引颜色的 BMP
     // 图像中用于指定调色板中的颜色数量和重要颜色数量。
     uint32_t colorsUsed;
     uint32_t colorsImportant;
-
 
 
 
@@ -192,9 +192,11 @@ public:
 class MYFunction
 {
 public:
-    static MyValue ReadBMPFile(const std::string &fileName);
-    //save image for debug
-    static void WriteBMPFile(const std::string &fileName, const std::vector<uint8_t> &imageData, BMP &bmp, BMPInfo &bmpInfo);
+    // 读取 BMP。失败时返回 false 并把原因写入 errMsg(不再直接 exit 掉整个程序)。
+    // 仅支持 24 位未压缩(BGR888) BMP；自顶向下存储(height<0)的文件会被自动转为自底向上。
+    static bool ReadBMPFile(const std::string &fileName, MyValue &outValue, QString &errMsg);
+    // 保存 BMP，filePath 为完整输出路径
+    static bool WriteBMPFile(const std::string &filePath, const std::vector<uint8_t> &imageData, BMP &bmp, BMPInfo &bmpInfo);
     static void SetBMPHeaderValues(BMP &bmp, BMPInfo &bmpInfo, int width, int height, uint16_t bitsPerPixel);
     static void WriteToBMPInfo(std::vector<uint8_t> &imageData, int32_t cropHeight, int32_t cropWidth, BMPInfo &newBmpInfo, BMP &bmp);
 };

@@ -1,0 +1,38 @@
+# ---- build output ----
+build/
+build-*/
+out/
+*.obj
+*.exe
+*.dll
+*.lib
+*.pdb
+*.ilk
+*.exp
+*.log
+
+# ---- CMake / Qt Creator ----
+CMakeLists.txt.user
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.user
+*.autosave
+
+# ---- Visual Studio ----
+.vs/
+*.sln.docstates
+*.suo
+*.sdf
+*.opensdf
+*.vcxproj.user
+ipch/
+x64/
+Win32/
+Debug/
+Release/
+
+# ---- local workspace metadata / 中间产物 ----
+.workbuddy/
+_trash/

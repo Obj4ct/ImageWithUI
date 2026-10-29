@@ -10,14 +10,23 @@
 #include "colormap.h"
 
 struct ReturnValue{
-    bool isNull;
-    bool isNumeric;
-    double_t value;
+    bool isNull = true;
+    bool isNumeric = false;
+    double_t value = 0.0;
 };
 enum OperationType
 {
     UNDO,
     REDO
+};
+
+// 算子执行上下文：统一以【像素】为单位描述尺寸与分段
+struct OpContext {
+    int32_t width = 0;
+    int32_t height = 0;
+    size_t pixelCount = 0;    // 总像素数
+    size_t segmentSize = 0;   // 每个线程负责的像素数
+    int numThreads = 1;
 };
 
 QT_BEGIN_NAMESPACE
@@ -30,6 +39,7 @@ class MainWindow : public QMainWindow
 
 public:
     MainWindow(QWidget *parent = nullptr);
+    ~MainWindow();
     //reset image
     void ResetImage(MyValue &myValue);
     void ShowImage(std::vector<uint8_t> &inImageData,MyValue value,int32_t width,int32_t height);
@@ -40,16 +50,29 @@ public:
     void RedoImageProcessing();
     //清理每段数据,防止数据冲突引发异常
     void ClearSegmentData();
-    ~MainWindow();
+
+    // ---- 给子窗口使用的接口 ----
+    // 子窗口算子结果写回主窗口：更新数据 + 记录历史 + 刷新显示
+    void ApplyResult(std::vector<uint8_t> &result);
+    // 当前正在显示的像素数据
+    const std::vector<uint8_t> &CurrentImageData() const { return imageData; }
+    // 是否正在处理中(处理中应禁止再次触发算子)
+    bool IsBusy() const { return m_busy; }
+    // 更新状态栏文字
+    void UpdateStatus(const QString &text);
+    // 供外部(命令行)载入图片
+    bool OpenImage(const QString &path) { return LoadImage(path); }
+
 public:
     std::string BMPPath;
     std::list<std::vector<uint8_t>> imageDataHistory;
     std::list<std::vector<uint8_t>> redoImageDataHistory;
     //分段处理数据
-    int num_threads;
-    size_t imageSize;
+    int num_threads = 1;
+    size_t imageSize = 0;      // 像素数据字节数
+    size_t pixelCount = 0;     // 总像素数
     std::vector<std::thread> threads;              // 存储线程对象，每个线程对象将处理图像数据的不同部分
-    size_t segmentSize; // 均分处理
+    size_t segmentSize = 0; // 每线程负责的【像素】数
     std::vector<size_t> segmentStarts; // 用来存储每个数据段的起始位置
     //QImage
     QImage m_bmpImage;
@@ -153,11 +176,27 @@ protected:
 
 private:
     Ui::MainWindow *ui;
-    BlendWindow * blendWindow;
-    bool canSave=false;
+    BlendWindow * blendWindow = nullptr;
+    bool canSave = false;
     void closeEvent(QCloseEvent *event) override;
     void _SetVisible(bool set);
     void _SetShortCut();
 
+    // ---- 算子调度与状态 ----
+    bool m_busy = false;          // 是否有算子正在后台执行
+    bool m_fitToWindow = true;    // 图像是否自适应窗口显示
+    int  m_historyLimit = 40;     // 撤销历史最多保留的步数(控制内存)
+
+    // 在后台线程执行算子；结果返回后自动写历史并刷新显示
+    void ApplyOperator(const QString &title,
+                       std::function<void(std::vector<uint8_t> &, const OpContext &)> op);
+    // 把算子按线程分段执行(以像素为单位，保证 BGR 通道不被拆散)
+    void RunSegmented(const OpContext &ctx,
+                      const std::function<void(size_t, size_t)> &fn);
+    void SetBusy(bool busy);
+    // 打开文件后的统一初始化
+    bool LoadImage(const QString &path);
+    // 刷新状态栏右侧信息
+    void UpdateStatusInfo();
 };
 #endif // MAINWINDOW_H
