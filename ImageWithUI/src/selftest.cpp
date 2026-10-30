@@ -48,6 +48,18 @@ Reporter &out()
     return r;
 }
 
+// 统计"内容像素"数量(非纯黑像素)，用于判断图像是否被裁掉
+static size_t countContent(const std::vector<uint8_t> &data)
+{
+    size_t n = 0;
+    for (size_t i = 0; i + 2 < data.size(); i += 3) {
+        if (data[i] != 0 || data[i + 1] != 0 || data[i + 2] != 0) {
+            ++n;
+        }
+    }
+    return n;
+}
+
 int g_pass = 0;
 int g_fail = 0;
 
@@ -276,14 +288,71 @@ int Run(const QString &imagePath)
         check("马赛克", data, bytes, true, &base.imageData);
     }
     {
+        // 90 度整数倍：必须精确无损(转 90 再转 270 应与原图逐字节相同)
         auto data = copyOf();
-        fn.RotateImage(data, w, h, 30.0);
-        check("顺时针旋转", data, bytes, true, &base.imageData);
+        int32_t rw = w, rh = h;
+        ContentQuad quad;
+        quad.setRect(rw, rh);
+        fn.RotateImage(data, rw, rh, 90.0, quad);
+        const bool sizeSwapped = (rw == h && rh == w);
+        fn.RotateImage(data, rw, rh, 270.0, quad);
+        const bool lossless = (data == base.imageData) && (rw == w && rh == h);
+        if (sizeSwapped && lossless) {
+            ++g_pass;
+            out() << "[PASS] 旋转 90 度 : 尺寸互换且逐像素无损\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 旋转 90 度 : 尺寸互换=" << (sizeSwapped ? "Y" : "N")
+                  << " 无损=" << (lossless ? "Y" : "N") << "\n";
+        }
+        out().flush();
     }
     {
         auto data = copyOf();
-        fn.RotateReverse(data, w, h, 30.0);
-        check("逆时针旋转", data, bytes, true, &base.imageData);
+        int32_t rw = w, rh = h;
+        ContentQuad quad;
+        quad.setRect(rw, rh);
+        fn.RotateReverse(data, rw, rh, 30.0, quad);
+        const bool ok = (data.size() == static_cast<size_t>(rw) * rh * 3) && !data.empty();
+        if (ok) {
+            ++g_pass;
+            out() << "[PASS] 逆时针旋转 : 输出 " << rw << "x" << rh << "\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 逆时针旋转 : 尺寸异常\n";
+        }
+        out().flush();
+    }
+    {
+        // 回归测试：连续旋转 12 次(共 360 度)，内容不能被逐渐裁掉
+        // (旧实现每次都会把超出画布的部分变成黑色，反复旋转后图像会退化成圆形)
+        auto data = copyOf();
+        int32_t rw = w, rh = h;
+        ContentQuad quad;
+        quad.setRect(rw, rh);
+        for (int i = 0; i < 12; ++i) {
+            fn.RotateImage(data, rw, rh, 30.0, quad);
+        }
+        {
+            // 落盘一份旋转结果，便于人工核对
+            BMP rb = base.bmp;
+            BMPInfo ri = base.bmpInfo;
+            MYFunction::SetBMPHeaderValues(rb, ri, rw, rh, ri.GetBitsPerPixel());
+            MYFunction::WriteBMPFile((QDir::tempPath() + "/imagewithui_rot30.bmp").toStdString(), data, rb, ri);
+        }
+        const double ratio = static_cast<double>(countContent(data)) /
+                             static_cast<double>(std::max<size_t>(1, countContent(base.imageData)));
+        const double areaRatio = (static_cast<double>(rw) * rh) / (static_cast<double>(w) * h);
+        if (ratio > 0.85 && areaRatio < 4.0) {
+            ++g_pass;
+            out() << "[PASS] 连续旋转 12 次 : 内容保留率 " << int(ratio * 100)
+                  << "%, 画布面积 " << int(areaRatio * 100) << "%\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 连续旋转 12 次 : 内容保留率 " << int(ratio * 100)
+                  << "%, 画布面积 " << int(areaRatio * 100) << "% (应 >85% 且 <400%)\n";
+        }
+        out().flush();
     }
     {
         auto data = copyOf();

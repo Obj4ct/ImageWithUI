@@ -27,6 +27,16 @@ struct OpContext {
     size_t pixelCount = 0;    // 总像素数
     size_t segmentSize = 0;   // 每个线程负责的像素数
     int numThreads = 1;
+    ContentQuad quad;         // 内容区域(旋转会更新它)
+};
+
+// 历史快照：必须连同尺寸一起保存，
+// 因为旋转等算子会改变画布宽高，只存像素会导致撤销/保存时尺寸对不上
+struct ImageSnapshot {
+    std::vector<uint8_t> data;
+    int32_t width = 0;
+    int32_t height = 0;
+    ContentQuad quad;         // 内容区域(撤销/重做要一起恢复)
 };
 
 QT_BEGIN_NAMESPACE
@@ -42,10 +52,10 @@ public:
     ~MainWindow();
     //reset image
     void ResetImage(MyValue &myValue);
-    void ShowImage(std::vector<uint8_t> &inImageData,MyValue value,int32_t width,int32_t height);
+    void ShowImage(const std::vector<uint8_t> &inImageData,MyValue value,int32_t width,int32_t height);
     void ResetAll(MyValue &myValue);
     ReturnValue CheckOK(QLineEdit* lineEdit);
-    OperationType SaveImageDataToHistory(std::vector<uint8_t>& imageData);
+    OperationType SaveImageDataToHistory(const ImageSnapshot &snap);
     void UndoImageProcessing();
     void RedoImageProcessing();
     //清理每段数据,防止数据冲突引发异常
@@ -65,8 +75,8 @@ public:
 
 public:
     std::string BMPPath;
-    std::list<std::vector<uint8_t>> imageDataHistory;
-    std::list<std::vector<uint8_t>> redoImageDataHistory;
+    std::list<ImageSnapshot> imageDataHistory;
+    std::list<ImageSnapshot> redoImageDataHistory;
     //分段处理数据
     int num_threads = 1;
     size_t imageSize = 0;      // 像素数据字节数
@@ -186,16 +196,21 @@ private:
     bool m_busy = false;          // 是否有算子正在后台执行
     bool m_fitToWindow = true;    // 图像是否自适应窗口显示
     int  m_historyLimit = 40;     // 撤销历史最多保留的步数(控制内存)
+    int32_t m_originalWidth = 0;  // 原始图像尺寸(重置时用)
+    int32_t m_originalHeight = 0;
+    ContentQuad m_contentQuad;    // 当前内容区域(旋转时用于确定新画布)
 
-    // 在后台线程执行算子；结果返回后自动写历史并刷新显示
+    // 在后台线程执行算子；算子可通过 ctx 修改宽高(旋转等会改变画布尺寸)
     void ApplyOperator(const QString &title,
-                       std::function<void(std::vector<uint8_t> &, const OpContext &)> op);
+                       std::function<void(std::vector<uint8_t> &, OpContext &)> op);
     // 把算子按线程分段执行(以像素为单位，保证 BGR 通道不被拆散)
     void RunSegmented(const OpContext &ctx,
                       const std::function<void(size_t, size_t)> &fn);
     void SetBusy(bool busy);
     // 打开文件后的统一初始化
     bool LoadImage(const QString &path);
+    // 应用一个快照：写历史 + 同步尺寸 + 刷新显示
+    void ApplySnapshot(const ImageSnapshot &snap);
     // 刷新状态栏右侧信息
     void UpdateStatusInfo();
 };

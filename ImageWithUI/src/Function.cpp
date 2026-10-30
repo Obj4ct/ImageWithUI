@@ -464,49 +464,144 @@ void Function::HighContrast(const std::vector<uint8_t> &imageData, std::promise<
     result.set_value(highContrastImageData);
 }
 
-void Function::RotateImage(std::vector<uint8_t> &imageData, int32_t width, int32_t height, double_t angle)
+void Function::RotateImage(std::vector<uint8_t> &imageData, int32_t &width, int32_t &height,
+                           double_t angle, ContentQuad &quad)
 {
-    if (width <= 0 || height <= 0) {
+    if (width <= 0 || height <= 0 || imageData.empty()) {
         return;
     }
-    const double_t radians = angle * M_PI / 180.0;
-    const double_t cosA = std::cos(radians);
-    const double_t sinA = std::sin(radians);
 
-    const int32_t centerX = width / 2;
-    const int32_t centerY = height / 2;
+    // 归一化角度到 [0, 360)
+    double_t a = std::fmod(angle, 360.0);
+    if (a < 0.0) {
+        a += 360.0;
+    }
 
-    // 输出仍是 BMP 的自底向上布局：视觉行 v 对应内存行 (height-1-v)
-    std::vector<uint8_t> rotatedImageData(imageData.size(), 0);
-
-    for (int v = 0; v < height; ++v) {
-        for (int x = 0; x < width; ++x) {
-            // 在视觉坐标系(自顶向下)里做旋转
-            const double_t rotatedX = cosA * (x - centerX) - sinA * (v - centerY) + centerX;
-            const double_t rotatedY = sinA * (x - centerX) + cosA * (v - centerY) + centerY;
-
-            if (rotatedX >= 0 && rotatedX < width && rotatedY >= 0 && rotatedY < height) {
-                const int sx = static_cast<int>(std::round(rotatedX));
-                const int sy = static_cast<int>(std::round(rotatedY));
-                // 源像素同样按自底向上换算
-                const size_t srcIndex = (static_cast<size_t>(height - 1 - sy) * width + sx) * 3;
-                const size_t dstIndex = (static_cast<size_t>(height - 1 - v) * width + x) * 3;
-                if (srcIndex + 2 < imageData.size() && dstIndex + 2 < rotatedImageData.size()) {
-                    rotatedImageData[dstIndex]     = imageData[srcIndex];
-                    rotatedImageData[dstIndex + 1] = imageData[srcIndex + 1];
-                    rotatedImageData[dstIndex + 2] = imageData[srcIndex + 2];
+    // ---- 精确无损路径：内容铺满画布(轴对齐) + 90 度整数倍 ----
+    const bool axisAligned = quad.isCanvasRect(width, height);
+    const double_t nearestQuarter = std::round(a / 90.0) * 90.0;
+    if (axisAligned && std::abs(a - nearestQuarter) < 1e-6) {
+        const int quarter = ((static_cast<int>(std::lround(a / 90.0)) % 4) + 4) % 4;
+        if (quarter != 0) {
+            const int32_t newW = (quarter % 2 == 0) ? width : height;
+            const int32_t newH = (quarter % 2 == 0) ? height : width;
+            std::vector<uint8_t> rotated(static_cast<size_t>(newW) * newH * 3, 0);
+            // 内存行 r 对应视觉行 (height-1-r)；顺时针 90° 的映射为 dst=(width-1-c, r)
+            for (int32_t r = 0; r < height; ++r) {
+                for (int32_t c = 0; c < width; ++c) {
+                    int32_t nr = 0;
+                    int32_t nc = 0;
+                    switch (quarter) {
+                    case 1:  nr = width - 1 - c;  nc = r;             break; // 顺时针 90°
+                    case 2:  nr = height - 1 - r; nc = width - 1 - c; break; // 180°
+                    default: nr = c;             nc = height - 1 - r; break; // 逆时针 90°
+                    }
+                    const size_t src = (static_cast<size_t>(r) * width + c) * 3;
+                    const size_t dst = (static_cast<size_t>(nr) * newW + nc) * 3;
+                    rotated[dst] = imageData[src];
+                    rotated[dst + 1] = imageData[src + 1];
+                    rotated[dst + 2] = imageData[src + 2];
                 }
+            }
+            imageData.swap(rotated);
+            width = newW;
+            height = newH;
+            quad.setRect(newW, newH);
+        }
+        return;
+    }
+
+    // ---- 通用路径：按内容外接矩形重建画布 + 双线性采样 ----
+    // 视觉坐标 y 向下；内存为 BMP 自底向上(第 0 行是画面最底行)
+    const double_t rad = a * M_PI / 180.0;
+    const double_t cosA = std::cos(rad);
+    const double_t sinA = std::sin(rad);
+    const double_t cx = width / 2.0;    // 旧画布中心(= 内容中心)
+    const double_t cy = height / 2.0;
+
+    // 内容四边形绕中心旋转(屏幕坐标顺时针)
+    double_t qx[4];
+    double_t qy[4];
+    double_t minX = 1e30, maxX = -1e30, minY = 1e30, maxY = -1e30;
+    for (int i = 0; i < 4; ++i) {
+        const double_t px = quad.x[i] - cx;
+        const double_t py = quad.y[i] - cy;
+        qx[i] = cosA * px - sinA * py;
+        qy[i] = sinA * px + cosA * py;
+        minX = std::min(minX, qx[i]);
+        maxX = std::max(maxX, qx[i]);
+        minY = std::min(minY, qy[i]);
+        maxY = std::max(maxY, qy[i]);
+    }
+
+    // 新画布 = 内容外接矩形(向上取整，内容居中，不多不少)
+    const int32_t newW = std::max(1, static_cast<int32_t>(std::ceil(maxX - minX)));
+    const int32_t newH = std::max(1, static_cast<int32_t>(std::ceil(maxY - minY)));
+    const double_t halfNewW = newW / 2.0;
+    const double_t halfNewH = newH / 2.0;
+
+    std::vector<uint8_t> rotated(static_cast<size_t>(newW) * newH * 3, 0);
+
+    for (int32_t v = 0; v < newH; ++v) {
+        for (int32_t x = 0; x < newW; ++x) {
+            // 目标像素(视觉坐标)相对新画布中心
+            const double_t dx = (x + 0.5) - halfNewW;
+            const double_t dy = (v + 0.5) - halfNewH;
+            // 反向旋转回源图(绝对视觉坐标)
+            const double_t X = cosA * dx + sinA * dy + cx;
+            const double_t Y = -sinA * dx + cosA * dy + cy;
+
+            // 落在内容之外(旧画布的黑角) -> 保持黑色，不参与内容统计
+            if (!quad.contains(X, Y)) {
+                continue;
+            }
+
+            // 视觉坐标 -> 内存连续坐标(像素中心正好落在整数上)
+            const double_t mc = X - 0.5;             // 列
+            const double_t mr = (height - 0.5) - Y;  // 行(自底向上)
+
+            const int32_t c0 = static_cast<int32_t>(std::floor(mc));
+            const int32_t r0 = static_cast<int32_t>(std::floor(mr));
+            const double_t fx = mc - c0;
+            const double_t fy = mr - r0;
+
+            const int32_t cr = std::max(0, std::min(c0, width - 1));
+            const int32_t c1 = std::max(0, std::min(c0 + 1, width - 1));
+            const int32_t rr = std::max(0, std::min(r0, height - 1));
+            const int32_t r1 = std::max(0, std::min(r0 + 1, height - 1));
+
+            const size_t i00 = (static_cast<size_t>(rr) * width + cr) * 3;
+            const size_t i01 = (static_cast<size_t>(rr) * width + c1) * 3;
+            const size_t i10 = (static_cast<size_t>(r1) * width + cr) * 3;
+            const size_t i11 = (static_cast<size_t>(r1) * width + c1) * 3;
+
+            const size_t dst = (static_cast<size_t>(newH - 1 - v) * newW + x) * 3;
+            for (int ch = 0; ch < 3; ++ch) {
+                const double_t value =
+                        imageData[i00 + ch] * (1 - fx) * (1 - fy) +
+                        imageData[i01 + ch] * fx * (1 - fy) +
+                        imageData[i10 + ch] * (1 - fx) * fy +
+                        imageData[i11 + ch] * fx * fy;
+                rotated[dst + ch] = static_cast<uint8_t>(std::max(0.0, std::min(255.0, value)));
             }
         }
     }
 
-    imageData = rotatedImageData;
+    imageData.swap(rotated);
+    width = newW;
+    height = newH;
+    // 更新内容四边形(相对新画布中心 -> 绝对坐标)
+    for (int i = 0; i < 4; ++i) {
+        quad.x[i] = qx[i] + halfNewW;
+        quad.y[i] = qy[i] + halfNewH;
+    }
 }
 
-void Function::RotateReverse(std::vector<uint8_t> &imageData, int32_t width, int32_t height, double_t angle)
+void Function::RotateReverse(std::vector<uint8_t> &imageData, int32_t &width, int32_t &height,
+                              double_t angle, ContentQuad &quad)
 {
     const double_t clockwiseAngle = 360.0 - angle;
-    RotateImage(imageData, width, height, clockwiseAngle);
+    RotateImage(imageData, width, height, clockwiseAngle, quad);
 }
 
 uint8_t Function::CalculateMedian(std::vector<uint8_t>& window)

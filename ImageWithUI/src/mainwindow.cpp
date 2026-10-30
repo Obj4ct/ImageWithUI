@@ -97,7 +97,7 @@ void MainWindow::ResetImage(MyValue &myValue)
     ui->imageLabel->setPixmap(QPixmap::fromImage(originalImage));
 }
 
-void MainWindow::ShowImage(std::vector<uint8_t> &inImageData, MyValue value, int32_t width, int32_t height)
+void MainWindow::ShowImage(const std::vector<uint8_t> &inImageData, MyValue value, int32_t width, int32_t height)
 {
     imageData = inImageData;
     myValue = value;
@@ -122,6 +122,12 @@ void MainWindow::ShowImage(std::vector<uint8_t> &inImageData, MyValue value, int
 void MainWindow::ResetAll(MyValue &myValue)
 {
     imageData = myValue.imageData;
+    // 恢复原始尺寸(旋转等算子可能改过画布大小)
+    if (m_originalWidth > 0 && m_originalHeight > 0) {
+        myValue.bmpInfo.SetWidth(m_originalWidth);
+        myValue.bmpInfo.SetHeight(m_originalHeight);
+        m_contentQuad.setRect(m_originalWidth, m_originalHeight);
+    }
     const QImage img = Function::ToDisplayImage(imageData,
                                                 myValue.bmpInfo.GetWidth(),
                                                 myValue.bmpInfo.GetHeight());
@@ -171,12 +177,13 @@ MainWindow::~MainWindow()
 }
 
 // 撤销操作，从链表中获取上一步的图像数据进行恢复
-OperationType MainWindow::SaveImageDataToHistory(std::vector<uint8_t> &data)
+OperationType MainWindow::SaveImageDataToHistory(const ImageSnapshot &snap)
 {
     // 保存当前图像数据到链表
     if (!imageDataHistory.empty()) {
-        if (data != imageDataHistory.back()) {
-            imageDataHistory.push_back(data);
+        const ImageSnapshot &back = imageDataHistory.back();
+        if (snap.data != back.data || snap.width != back.width || snap.height != back.height) {
+            imageDataHistory.push_back(snap);
             // 控制历史长度，避免大图下内存无限增长
             while (static_cast<int>(imageDataHistory.size()) > m_historyLimit) {
                 imageDataHistory.pop_front();
@@ -184,11 +191,28 @@ OperationType MainWindow::SaveImageDataToHistory(std::vector<uint8_t> &data)
             return UNDO;
         }
     } else {
-        imageDataHistory.push_back(data);
+        imageDataHistory.push_back(snap);
         return UNDO;
     }
 
     return REDO; // 返回重做类型
+}
+
+// 应用一个快照：写历史 + 同步尺寸 + 刷新显示
+void MainWindow::ApplySnapshot(const ImageSnapshot &snap)
+{
+    if (snap.data.empty()) {
+        return;
+    }
+    SaveImageDataToHistory(snap);
+    m_contentQuad = snap.quad;
+    // 尺寸可能已被算子改变(例如旋转)，同步到文件头信息
+    myValue.bmpInfo.SetWidth(snap.width);
+    myValue.bmpInfo.SetHeight(snap.height);
+    myValue.bmpInfo.SetImageSize(static_cast<uint32_t>(snap.width) * static_cast<uint32_t>(snap.height) * 3);
+    myValue.bmp.SetFileSize(sizeof(BMP) + sizeof(BMPInfo) +
+                            static_cast<uint32_t>(snap.width) * static_cast<uint32_t>(snap.height) * 3);
+    ShowImage(snap.data, myValue, snap.width, snap.height);
 }
 
 
@@ -203,9 +227,12 @@ void MainWindow::UndoImageProcessing()
     redoImageDataHistory.push_back(imageDataHistory.back());
     imageDataHistory.pop_back();
 
-    std::vector<uint8_t> currentImageData = imageDataHistory.back();
-    imageData = currentImageData;
-    ShowImage(imageData, myValue, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+    const ImageSnapshot &snap = imageDataHistory.back();
+    imageData = snap.data;
+    m_contentQuad = snap.quad;
+    myValue.bmpInfo.SetWidth(snap.width);
+    myValue.bmpInfo.SetHeight(snap.height);
+    ShowImage(imageData, myValue, snap.width, snap.height);
     qDebug() << "Undo operation";
     UpdateStatus("已撤销");
 }
@@ -217,13 +244,16 @@ void MainWindow::RedoImageProcessing()
         UpdateStatus("没有可重做的操作");
         return;
     }
-    std::vector<uint8_t> nextImageData = redoImageDataHistory.back();
-    imageDataHistory.push_back(nextImageData);
+    const ImageSnapshot snap = redoImageDataHistory.back();
+    imageDataHistory.push_back(snap);
     redoImageDataHistory.pop_back();
 
     // 恢复图像数据
-    imageData = nextImageData;
-    ShowImage(imageData, myValue, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+    imageData = snap.data;
+    m_contentQuad = snap.quad;
+    myValue.bmpInfo.SetWidth(snap.width);
+    myValue.bmpInfo.SetHeight(snap.height);
+    ShowImage(imageData, myValue, snap.width, snap.height);
     qDebug() << "Redo operation";
     UpdateStatus("已重做");
 }
@@ -253,7 +283,17 @@ bool MainWindow::LoadImage(const QString &path)
 
     imageDataHistory.clear();
     redoImageDataHistory.clear();
-    SaveImageDataToHistory(imageData);
+    {
+        ImageSnapshot snap;
+        snap.data = imageData;
+        snap.width = myValue.bmpInfo.GetWidth();
+        snap.height = myValue.bmpInfo.GetHeight();
+        snap.quad.setRect(snap.width, snap.height);
+        m_originalWidth = snap.width;
+        m_originalHeight = snap.height;
+        m_contentQuad = snap.quad;
+        SaveImageDataToHistory(snap);
+    }
 
     m_bmpImage = Function::ToDisplayImage(imageData,
                                           myValue.bmpInfo.GetWidth(),
@@ -392,7 +432,7 @@ void MainWindow::UpdateStatusInfo()
 
 // 在后台线程执行算子；完成后自动写历史并刷新显示
 void MainWindow::ApplyOperator(const QString &title,
-                               std::function<void(std::vector<uint8_t> &, const OpContext &)> op)
+                               std::function<void(std::vector<uint8_t> &, OpContext &)> op)
 {
     if (m_busy) {
         UpdateStatus("上一个操作还在处理中，请稍候");
@@ -410,18 +450,18 @@ void MainWindow::ApplyOperator(const QString &title,
     ctx.numThreads = num_threads;
     ctx.segmentSize = ctx.pixelCount / static_cast<size_t>(std::max(1, num_threads));
     if (ctx.segmentSize == 0) ctx.segmentSize = 1;
+    ctx.quad = m_contentQuad;
 
     const std::vector<uint8_t> source = imageData;   // 在 UI 线程取快照，避免数据竞争
     SetBusy(true);
     UpdateStatus(title + " 处理中…");
 
-    auto result = std::make_shared<std::vector<uint8_t>>();
+    auto result = std::make_shared<ImageSnapshot>();
     auto *watcher = new QFutureWatcher<void>(this);
     connect(watcher, &QFutureWatcher<void>::finished, this, [this, watcher, result, title]() {
         watcher->deleteLater();
-        if (result && !result->empty()) {
-            SaveImageDataToHistory(*result);
-            ShowImage(*result, myValue, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+        if (result && !result->data.empty()) {
+            ApplySnapshot(*result);
             UpdateStatus(title + " 完成");
         } else {
             UpdateStatus(title + " 未产生结果");
@@ -431,8 +471,11 @@ void MainWindow::ApplyOperator(const QString &title,
     });
     watcher->setFuture(QtConcurrent::run([source, op, ctx, result]() mutable {
         std::vector<uint8_t> work = source;
-        op(work, ctx);
-        *result = std::move(work);
+        op(work, ctx);              // 算子可以通过 ctx 修改画布宽高与内容区域(例如旋转)
+        result->data = std::move(work);
+        result->width = ctx.width;
+        result->height = ctx.height;
+        result->quad = ctx.quad;
     }));
 }
 
@@ -442,8 +485,11 @@ void MainWindow::ApplyResult(std::vector<uint8_t> &result)
     if (result.empty()) {
         return;
     }
-    SaveImageDataToHistory(result);
-    ShowImage(result, myValue, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+    ImageSnapshot snap;
+    snap.data = result;
+    snap.width = myValue.bmpInfo.GetWidth();
+    snap.height = myValue.bmpInfo.GetHeight();
+    ApplySnapshot(snap);
     UpdateStatus("已应用子窗口结果");
 }
 
@@ -643,9 +689,10 @@ void MainWindow::on_btn_rotate_ok_clicked()
         return;
     }
     const double_t angle = returnValue.value;
-    ApplyOperator("顺时针旋转", [angle](std::vector<uint8_t> &d, const OpContext &ctx) {
+    ApplyOperator("顺时针旋转", [angle](std::vector<uint8_t> &d, OpContext &ctx) {
         Function f;
-        f.RotateImage(d, ctx.width, ctx.height, angle);
+        // 旋转会改变画布尺寸与内容区域，通过 ctx 回传
+        f.RotateImage(d, ctx.width, ctx.height, angle, ctx.quad);
     });
 }
 
@@ -661,9 +708,9 @@ void MainWindow::on_btn_rotate_r_clicked()
         return;
     }
     const double_t angle = returnValue.value;
-    ApplyOperator("逆时针旋转", [angle](std::vector<uint8_t> &d, const OpContext &ctx) {
+    ApplyOperator("逆时针旋转", [angle](std::vector<uint8_t> &d, OpContext &ctx) {
         Function f;
-        f.RotateReverse(d, ctx.width, ctx.height, angle);
+        f.RotateReverse(d, ctx.width, ctx.height, angle, ctx.quad);
     });
 }
 

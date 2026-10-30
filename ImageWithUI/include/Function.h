@@ -14,6 +14,52 @@
 //   所有支持并行处理的算子，其 start/end 均为【像素序号】(不是字节偏移)，
 //   由调用方按像素数均分，保证每个像素的 B/G/R 三个通道不会被拆散。
 
+// 内容区域(凸四边形)：记录"真实图像内容"在画布中的位置(4 个顶点，视觉坐标，y 向下)。
+// 旋转时按内容的外接矩形来确定新画布：
+//   - 画布不会因为黑角被当成内容而无限膨胀
+//   - 反复旋转也不会把内容一点点裁掉(旧实现会逐渐变成圆形)
+struct ContentQuad {
+    double x[4] = {0, 0, 0, 0};
+    double y[4] = {0, 0, 0, 0};
+
+    // 内容铺满整个画布
+    void setRect(int32_t width, int32_t height) {
+        x[0] = 0.0;    y[0] = 0.0;
+        x[1] = width;  y[1] = 0.0;
+        x[2] = width;  y[2] = height;
+        x[3] = 0.0;    y[3] = height;
+    }
+
+    // 内容是否恰好等于画布(轴对齐)，此时可走无损的 90 度整数倍旋转
+    bool isCanvasRect(int32_t width, int32_t height) const {
+        const double eps = 1e-6;
+        return std::abs(x[0]) < eps && std::abs(y[0]) < eps &&
+               std::abs(x[1] - static_cast<double>(width)) < eps && std::abs(y[1]) < eps &&
+               std::abs(x[2] - static_cast<double>(width)) < eps &&
+               std::abs(y[2] - static_cast<double>(height)) < eps &&
+               std::abs(x[3]) < eps && std::abs(y[3] - static_cast<double>(height)) < eps;
+    }
+
+    // 点是否落在四边形内部(凸多边形同向叉积判定)
+    bool contains(double px, double py) const {
+        int sign = 0;
+        for (int i = 0; i < 4; ++i) {
+            const int j = (i + 1) % 4;
+            const double cross = (x[j] - x[i]) * (py - y[i]) - (y[j] - y[i]) * (px - x[i]);
+            if (std::abs(cross) < 1e-9) {
+                continue;
+            }
+            const int s = (cross > 0.0) ? 1 : -1;
+            if (sign == 0) {
+                sign = s;
+            } else if (s != sign) {
+                return false;
+            }
+        }
+        return true;
+    }
+};
+
 class Function
 {
 public:
@@ -63,10 +109,16 @@ public:
     void HighContrast(const std::vector<uint8_t> &imageData, std::promise<std::vector<uint8_t>> &result, const std::vector<uint8_t> &blurImageData);
 
     //图像旋转
-    //顺时针旋转
-    void RotateImage(std::vector<uint8_t> &imageData, int32_t width, int32_t height, double_t angle);
+    //绕图像中心旋转：
+    //  - 内容与画布重合且角度是 90 度整数倍：精确无损旋转(不插值)，宽高互换
+    //  - 其它情况：按内容外接矩形重建画布 + 双线性采样，内容完整不丢失
+    //width/height 为引用，出参会被更新为旋转后的实际尺寸
+    //quad 为内容区域，旋转后会同步更新
+    void RotateImage(std::vector<uint8_t> &imageData, int32_t &width, int32_t &height,
+                     double_t angle, ContentQuad &quad);
     //逆时针旋转
-    void RotateReverse(std::vector<uint8_t> &imageData, int32_t width, int32_t height, double_t angle);
+    void RotateReverse(std::vector<uint8_t> &imageData, int32_t &width, int32_t &height,
+                       double_t angle, ContentQuad &quad);
     //中值模糊
     uint8_t CalculateMedian(std::vector<uint8_t>& window);
     void MedianBlur(std::vector<uint8_t>& imageData, uint32_t width, uint32_t height);
