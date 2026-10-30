@@ -19,6 +19,7 @@
 #include <QAction>
 #include <QPainter>
 #include <QClipboard>
+#include <QColorDialog>
 #include <QFontMetrics>
 #include <QInputDialog>
 
@@ -1142,6 +1143,32 @@ void MainWindow::SetupSelectionTool()
                                   [this]() { CopySelection(); });
     QAction *pasteAction = addItem(QString("粘贴到选区"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_V),
                                    [this]() { PasteIntoSelection(); });
+    QAction *fillAction = addItem(QString("填充选区…"), QKeySequence(), [this]() {
+        if (!HasSelection()) {
+            UpdateStatus("请先建立选区");
+            return;
+        }
+        const QColor color = QColorDialog::getColor(Qt::white, this, QString("填充选区"));
+        if (color.isValid()) {
+            FillSelection(color);
+        }
+    });
+    QAction *strokeAction = addItem(QString("描边选区…"), QKeySequence(), [this]() {
+        if (!HasSelection()) {
+            UpdateStatus("请先建立选区");
+            return;
+        }
+        const QColor color = QColorDialog::getColor(Qt::white, this, QString("描边颜色"));
+        if (!color.isValid()) {
+            return;
+        }
+        bool ok = false;
+        const int width = QInputDialog::getInt(this, QString("描边选区"),
+                                               QString("宽度(像素 1 ~ 50)："), 2, 1, 50, 1, &ok);
+        if (ok) {
+            StrokeSelection(color, width);
+        }
+    });
     QAction *cropAction = addItem(QString("裁剪到选区"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_X),
                                   [this]() { CropToSelection(); });
     QAction *eraseAction = addItem(QString("清除选区内容"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Delete),
@@ -1193,11 +1220,13 @@ void MainWindow::SetupSelectionTool()
 
     // 没有选区时禁用需要选区的操作
     connect(m_selectionMenu, &QMenu::aboutToShow, this,
-            [this, copyAction, pasteAction, cropAction, eraseAction, featherAction,
-             growAction, shrinkAction, smoothAction]() {
+            [this, copyAction, pasteAction, fillAction, strokeAction, cropAction, eraseAction,
+             featherAction, growAction, shrinkAction, smoothAction]() {
         const bool has = HasSelection();
         copyAction->setEnabled(has);
         pasteAction->setEnabled(has);
+        fillAction->setEnabled(has);
+        strokeAction->setEnabled(has);
         cropAction->setEnabled(has);
         eraseAction->setEnabled(has);
         featherAction->setEnabled(has);
@@ -1874,6 +1903,96 @@ void MainWindow::ClearSelectionContent()
             }
         }
     }, nullptr, [this]() { UpdateStatus("已清除选区内容"); }, false);
+}
+
+void MainWindow::FillSelection(const QColor &color)
+{
+    if (m_busy) {
+        UpdateStatus("上一个操作还在处理中，请稍候");
+        return;
+    }
+    if (imageData.empty() || myValue.bmpInfo.GetWidth() <= 0) {
+        UpdateStatus("请先打开一张图像");
+        return;
+    }
+    if (!HasSelection()) {
+        UpdateStatus("请先建立选区");
+        return;
+    }
+    const SelectionMask mask = m_mask;
+    const int cr = color.red();
+    const int cg = color.green();
+    const int cb = color.blue();
+    ApplyOperator("填充选区", [mask, cr, cg, cb](std::vector<uint8_t> &d, OpContext &ctx) {
+        if (mask.isEmpty() || mask.width != ctx.width || mask.height != ctx.height) {
+            return;
+        }
+        for (int32_t y = 0; y < ctx.height; ++y) {
+            const uint8_t *mrow = mask.data.data() + static_cast<size_t>(y) * static_cast<size_t>(ctx.width);
+            const size_t rowBase = static_cast<size_t>(ctx.height - 1 - y) * static_cast<size_t>(ctx.width);
+            for (int32_t x = 0; x < ctx.width; ++x) {
+                const int a = mrow[x];
+                if (a == 0) {
+                    continue;
+                }
+                uint8_t *p = d.data() + (rowBase + static_cast<size_t>(x)) * 3;
+                p[0] = static_cast<uint8_t>((cb * a + static_cast<int>(p[0]) * (255 - a)) / 255);
+                p[1] = static_cast<uint8_t>((cg * a + static_cast<int>(p[1]) * (255 - a)) / 255);
+                p[2] = static_cast<uint8_t>((cr * a + static_cast<int>(p[2]) * (255 - a)) / 255);
+            }
+        }
+    }, nullptr, [this, color]() {
+        UpdateStatus(QString("已用 %1 填充选区").arg(color.name()));
+    }, false);
+}
+
+void MainWindow::StrokeSelection(const QColor &color, int width)
+{
+    if (m_busy) {
+        UpdateStatus("上一个操作还在处理中，请稍候");
+        return;
+    }
+    if (imageData.empty() || myValue.bmpInfo.GetWidth() <= 0) {
+        UpdateStatus("请先打开一张图像");
+        return;
+    }
+    if (!HasSelection()) {
+        UpdateStatus("请先建立选区");
+        return;
+    }
+    const int thick = qBound(1, width, 100);
+    const SelectionMask mask = m_mask;
+    const int cr = color.red();
+    const int cg = color.green();
+    const int cb = color.blue();
+    // 向内描边：把掩码收缩 thick 像素，原掩码减去收缩后剩下的就是边界带
+    ApplyOperator("描边选区", [mask, thick, cr, cg, cb](std::vector<uint8_t> &d, OpContext &ctx) {
+        if (mask.isEmpty() || mask.width != ctx.width || mask.height != ctx.height) {
+            return;
+        }
+        SelectionMask eroded = mask;
+        BoxBlurMask(eroded.data, ctx.width, ctx.height, thick);
+        for (uint8_t &v : eroded.data) {
+            v = (v == 255) ? 255 : 0;
+        }
+        for (int32_t y = 0; y < ctx.height; ++y) {
+            const uint8_t *mrow = mask.data.data() + static_cast<size_t>(y) * static_cast<size_t>(ctx.width);
+            const uint8_t *erow = eroded.data.data() + static_cast<size_t>(y) * static_cast<size_t>(ctx.width);
+            const size_t rowBase = static_cast<size_t>(ctx.height - 1 - y) * static_cast<size_t>(ctx.width);
+            for (int32_t x = 0; x < ctx.width; ++x) {
+                const int a = mrow[x];
+                if (a == 0 || erow[x] == 255) {
+                    continue;   // 选区外、或已经深入选区内部
+                }
+                uint8_t *p = d.data() + (rowBase + static_cast<size_t>(x)) * 3;
+                p[0] = static_cast<uint8_t>((cb * a + static_cast<int>(p[0]) * (255 - a)) / 255);
+                p[1] = static_cast<uint8_t>((cg * a + static_cast<int>(p[1]) * (255 - a)) / 255);
+                p[2] = static_cast<uint8_t>((cr * a + static_cast<int>(p[2]) * (255 - a)) / 255);
+            }
+        }
+    }, nullptr, [this, color, thick]() {
+        UpdateStatus(QString("已用 %1 描边 %2 px").arg(color.name()).arg(thick));
+    }, false);
 }
 
 void MainWindow::SetupLayerPanel()

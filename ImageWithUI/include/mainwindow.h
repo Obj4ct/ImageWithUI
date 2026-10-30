@@ -187,6 +187,10 @@ public:
     void CopySelection();
     void CropToSelection();
     void ClearSelectionContent();
+    // 用纯色填充选区(按掩码覆盖度混合)
+    void FillSelection(const QColor &color);
+    // 沿选区边界向内描边 width 像素
+    void StrokeSelection(const QColor &color, int width);
 
     // ---- 图层(自底向上，索引 0 为最底层) ----
     int LayerCount() const { return static_cast<int>(m_layers.size()); }

@@ -1875,6 +1875,102 @@ int Run(const QString &imagePath)
         out().flush();
     }
 
+    // ---------- 20. 选区填充 / 描边 ----------
+    {
+        const QString paintPath = QDir::tempPath() + "/imagewithui_selftest_paint.png";
+        {
+            QImage img(80, 60, QImage::Format_RGB32);
+            img.fill(qRgb(255, 255, 255));
+            img.save(paintPath, "PNG");
+        }
+
+        QString failReason;
+        auto pixelAt = [](MainWindow &win, int x, int y, int out[3]) -> bool {
+            const std::vector<uint8_t> &px = win.CurrentImageData();
+            const int32_t w = win.myValue.bmpInfo.GetWidth();
+            const int32_t h = win.myValue.bmpInfo.GetHeight();
+            if (w <= 0 || h <= 0 || x < 0 || y < 0 || x >= w || y >= h) {
+                return false;
+            }
+            const size_t i = (static_cast<size_t>(h - 1 - y) * static_cast<size_t>(w)
+                              + static_cast<size_t>(x)) * 3;
+            if (i + 2 >= px.size()) {
+                return false;
+            }
+            out[0] = px[i];
+            out[1] = px[i + 1];
+            out[2] = px[i + 2];
+            return true;
+        };
+
+        // (1) 填充：选区内变纯色，选区外保持白色
+        {
+            MainWindow win;
+            if (!win.OpenImage(paintPath)) {
+                failReason = "无法打开测试图";
+            } else {
+                win.SetSelection(QRect(20, 20, 20, 20));
+                win.FillSelection(QColor(255, 0, 0));
+                QEventLoop loop;
+                QTimer::singleShot(1200, &loop, &QEventLoop::quit);
+                loop.exec();
+
+                int inside[3] = {0, 0, 0};
+                int outside[3] = {0, 0, 0};
+                if (!pixelAt(win, 30, 30, inside) || !pixelAt(win, 5, 5, outside)) {
+                    failReason = "像素索引越界";
+                } else if (inside[0] != 0 || inside[1] != 0 || inside[2] != 255) {
+                    failReason = "填充后选区内不是红色";
+                } else if (outside[0] != 255 || outside[1] != 255 || outside[2] != 255) {
+                    failReason = "填充时改动了选区外的像素";
+                }
+            }
+        }
+
+        // (2) 描边：只有边界 2 px 变色，中心保持白色
+        if (failReason.isEmpty()) {
+            MainWindow win;
+            if (!win.OpenImage(paintPath)) {
+                failReason = "无法打开测试图";
+            } else {
+                win.SetSelection(QRect(20, 20, 20, 20));
+                win.StrokeSelection(QColor(0, 128, 0), 2);
+                QEventLoop loop;
+                QTimer::singleShot(1200, &loop, &QEventLoop::quit);
+                loop.exec();
+
+                int edge1[3] = {0, 0, 0};
+                int edge2[3] = {0, 0, 0};
+                int inner[3] = {0, 0, 0};
+                int center[3] = {0, 0, 0};
+                int outside[3] = {0, 0, 0};
+                if (!pixelAt(win, 20, 30, edge1) || !pixelAt(win, 21, 30, edge2) ||
+                    !pixelAt(win, 22, 30, inner) || !pixelAt(win, 30, 30, center) ||
+                    !pixelAt(win, 18, 30, outside)) {
+                    failReason = "像素索引越界";
+                } else if (edge1[0] != 0 || edge1[1] != 128 || edge1[2] != 0 ||
+                           edge2[0] != 0 || edge2[1] != 128 || edge2[2] != 0) {
+                    failReason = "描边边界 2 px 内没有全部着色";
+                } else if (inner[0] != 255 || inner[1] != 255 || inner[2] != 255 ||
+                           center[0] != 255 || center[1] != 255 || center[2] != 255) {
+                    failReason = "描边渗入了选区内部";
+                } else if (outside[0] != 255 || outside[1] != 255 || outside[2] != 255) {
+                    failReason = "描边越出了选区边界";
+                }
+            }
+        }
+        QFile::remove(paintPath);
+
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 选区填充/描边 : 填充只作用于选区，描边 2 px 向内且不越界\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 选区填充/描边 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
     out() << "------------------------------------------------\n";
     out() << "通过 " << g_pass << " 项，失败 " << g_fail << " 项\n";
     out().flush();
