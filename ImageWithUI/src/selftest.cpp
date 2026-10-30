@@ -1708,6 +1708,94 @@ int Run(const QString &imagePath)
         out().flush();
     }
 
+    // ---------- 18. 移动选区内容 / 粘贴图像到选区 ----------
+    {
+        const QString movePath = QDir::tempPath() + "/imagewithui_selftest_move.png";
+        {
+            QImage img(80, 60, QImage::Format_RGB32);
+            img.fill(qRgb(40, 120, 200));   // 内存里是 BGR(200,120,40)
+            img.save(movePath, "PNG");
+        }
+
+        QString failReason;
+        auto pixelAt = [](MainWindow &win, int x, int y, int out[3]) -> bool {
+            const std::vector<uint8_t> &px = win.CurrentImageData();
+            const int32_t w = win.myValue.bmpInfo.GetWidth();
+            const int32_t h = win.myValue.bmpInfo.GetHeight();
+            if (w <= 0 || h <= 0 || x < 0 || y < 0 || x >= w || y >= h) {
+                return false;
+            }
+            const size_t i = (static_cast<size_t>(h - 1 - y) * static_cast<size_t>(w)
+                              + static_cast<size_t>(x)) * 3;
+            if (i + 2 >= px.size()) {
+                return false;
+            }
+            out[0] = px[i];
+            out[1] = px[i + 1];
+            out[2] = px[i + 2];
+            return true;
+        };
+        const int kOrig[3] = {200, 120, 40};
+
+        // (1) 移动选区内容：原位置刷白、新位置得到原像素、选区随之平移
+        {
+            MainWindow win;
+            if (!win.OpenImage(movePath)) {
+                failReason = "无法打开测试图";
+            } else {
+                win.SetSelection(QRect(20, 20, 10, 10));
+                win.MoveSelectionContent(20, 10);
+                int oldPos[3] = {0, 0, 0};
+                int newPos[3] = {0, 0, 0};
+                int outside[3] = {0, 0, 0};
+                if (!pixelAt(win, 25, 25, oldPos) || !pixelAt(win, 45, 35, newPos) ||
+                    !pixelAt(win, 60, 50, outside)) {
+                    failReason = "像素索引越界";
+                } else if (oldPos[0] != 255 || oldPos[1] != 255 || oldPos[2] != 255) {
+                    failReason = "移动后原位置没有被刷白";
+                } else if (newPos[0] != kOrig[0] || newPos[1] != kOrig[1] || newPos[2] != kOrig[2]) {
+                    failReason = "移动后新位置没有拿到原像素";
+                } else if (outside[0] != kOrig[0] || outside[1] != kOrig[1] || outside[2] != kOrig[2]) {
+                    failReason = "移动时误改了选区外的像素";
+                } else if (win.SelectionRect() != QRect(40, 30, 10, 10)) {
+                    failReason = "移动后选区没有跟着平移";
+                }
+            }
+        }
+
+        // (2) 粘贴图像到选区：等比缩放铺满，选区外保持原样
+        if (failReason.isEmpty()) {
+            MainWindow win;
+            if (!win.OpenImage(movePath)) {
+                failReason = "无法打开测试图";
+            } else {
+                QImage red(10, 10, QImage::Format_RGB32);
+                red.fill(qRgb(255, 0, 0));
+                win.SetSelection(QRect(10, 10, 20, 20));
+                win.PasteImageIntoSelection(red);
+                int pasted[3] = {0, 0, 0};
+                int outside[3] = {0, 0, 0};
+                if (!pixelAt(win, 20, 20, pasted) || !pixelAt(win, 5, 5, outside)) {
+                    failReason = "像素索引越界";
+                } else if (pasted[0] != 0 || pasted[1] != 0 || pasted[2] != 255) {
+                    failReason = "粘贴后选区内不是红色";
+                } else if (outside[0] != kOrig[0] || outside[1] != kOrig[1] || outside[2] != kOrig[2]) {
+                    failReason = "粘贴时改动了选区外的像素";
+                }
+            }
+        }
+        QFile::remove(movePath);
+
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 移动/粘贴像素 : 移动后原位留白新位还原，粘贴只作用于选区\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 移动/粘贴像素 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
     out() << "------------------------------------------------\n";
     out() << "通过 " << g_pass << " 项，失败 " << g_fail << " 项\n";
     out().flush();

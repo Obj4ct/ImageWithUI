@@ -264,6 +264,34 @@ void BoxBlurMask(std::vector<uint8_t> &data, int32_t w, int32_t h, int32_t r)
     }
 }
 
+// 平移掩码：超出画布的部分丢弃(不做环绕)
+SelectionMask TranslateMask(const SelectionMask &mask, int dx, int dy)
+{
+    SelectionMask out;
+    if (mask.isEmpty()) {
+        return out;
+    }
+    const int32_t w = mask.width;
+    const int32_t h = mask.height;
+    out.width = w;
+    out.height = h;
+    out.data.assign(static_cast<size_t>(w) * static_cast<size_t>(h), 0);
+    for (int32_t y = 0; y < h; ++y) {
+        const int32_t sy = y - dy;
+        if (sy < 0 || sy >= h) {
+            continue;
+        }
+        const uint8_t *src = mask.data.data() + static_cast<size_t>(sy) * static_cast<size_t>(w);
+        uint8_t *dst = out.data.data() + static_cast<size_t>(y) * static_cast<size_t>(w);
+        const int32_t x0 = std::max(0, -dx);
+        const int32_t x1 = std::min(w, w - dx);
+        for (int32_t x = x0; x < x1; ++x) {
+            dst[x + dx] = src[x];
+        }
+    }
+    return out;
+}
+
 // 两份图层栈是否完全一致(用于历史去重)
 bool SameLayerStack(const std::vector<Layer> &a, const std::vector<Layer> &b)
 {
@@ -362,8 +390,8 @@ public:
 
     // 用户拖拽建立选区后回调(add = 按住 Shift，表示并入已有选区)
     std::function<void(const QRect &, bool)> onSelectionChanged;
-    // 用户拖动整体移动选区后回调(参数为图像像素位移)
-    std::function<void(int, int)> onSelectionMoved;
+    // 用户拖动整体移动选区后回调(图像像素位移；content=true 表示同时搬动像素)
+    std::function<void(int, int, bool)> onSelectionMoved;
     // 套索松开后回调(add = Shift 加选，subtract = Alt 减选)
     std::function<void(const QPolygon &, bool, bool)> onLassoFinished;
 
@@ -473,6 +501,19 @@ protected:
         if (dr.isEmpty() || !dr.adjusted(-2, -2, 2, 2).contains(event->pos())) {
             return;   // 点在图像外的画布空区域：不建立选区
         }
+        const bool insideSel = !m_sel.isEmpty() && toWidget(m_sel).contains(event->pos());
+        // Ctrl + 在选区内按下：同时搬动选区内像素(任何工具下都可用)
+        if (insideSel && (event->modifiers() & Qt::ControlModifier)) {
+            m_drag = Moving;
+            m_pressPos = event->pos();
+            m_startSel = m_sel;
+            m_addMode = false;
+            m_subtractMode = false;
+            m_moveContent = true;
+            setCursor(Qt::SizeAllCursor);
+            return;
+        }
+        m_moveContent = false;
         if (m_tool == 1) {   // 自由套索：按下开始记录轨迹
             m_drag = Creating;
             m_points.clear();
@@ -570,7 +611,7 @@ protected:
             const int dx = m_sel.x() - m_startSel.x();
             const int dy = m_sel.y() - m_startSel.y();
             if ((dx != 0 || dy != 0) && onSelectionMoved) {
-                onSelectionMoved(dx, dy);
+                onSelectionMoved(dx, dy, m_moveContent);
             }
             return;
         }
@@ -644,6 +685,7 @@ private:
     QPolygon m_points;           // 套索轨迹(图像像素坐标)
     bool m_addMode = false;      // 本次拖拽是否为加选(Shift)
     bool m_subtractMode = false; // 本次套索是否为减选(Alt)
+    bool m_moveContent = false;  // 本次拖动是否同时搬动选区内像素(Ctrl)
     QPoint m_pressPos;           // 移动起点(控件坐标)
     QPoint m_anchor;             // 建立选区锚点(图像坐标)
     QRect m_startSel;            // 移动前的选区
@@ -860,9 +902,13 @@ void MainWindow::SetupSelectionTool()
                          .arg(count)
                          .arg(add ? QString("，已加选") : QString()));
     };
-    m_overlay->onSelectionMoved = [this](int dx, int dy) {
-        TranslateSelection(dx, dy);
-        UpdateStatus(QString("选区已移动 (%1, %2)").arg(dx).arg(dy));
+    m_overlay->onSelectionMoved = [this](int dx, int dy, bool content) {
+        if (content) {
+            MoveSelectionContent(dx, dy);
+        } else {
+            TranslateSelection(dx, dy);
+            UpdateStatus(QString("选区已移动 (%1, %2)").arg(dx).arg(dy));
+        }
     };
     m_overlay->onLassoFinished = [this](const QPolygon &poly, bool add, bool subtract) {
         SetSelectionPolygon(poly, add, subtract);
@@ -875,7 +921,7 @@ void MainWindow::SetupSelectionTool()
 
     m_selectionToolAction = new QAction(QString("矩形选框"), this);
     m_selectionToolAction->setCheckable(true);
-    m_selectionToolAction->setToolTip(QString("选中后在图像上按住左键拖动建立矩形选区；Shift 加选；在选区内拖动可整体移动"));
+    m_selectionToolAction->setToolTip(QString("选中后在图像上按住左键拖动建立矩形选区；Shift 加选；在选区内拖动可移动选区，按住 Ctrl 拖动则同时移动选区内像素"));
     toolGroup->addAction(m_selectionToolAction);
 
     m_lassoToolAction = new QAction(QString("自由套索"), this);
@@ -925,6 +971,8 @@ void MainWindow::SetupSelectionTool()
     // 快捷键带 Shift，避免抢走输入框里的 Ctrl+A / Ctrl+C
     QAction *copyAction = addItem(QString("复制选区"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_C),
                                   [this]() { CopySelection(); });
+    QAction *pasteAction = addItem(QString("粘贴到选区"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_V),
+                                   [this]() { PasteIntoSelection(); });
     QAction *cropAction = addItem(QString("裁剪到选区"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_X),
                                   [this]() { CropToSelection(); });
     QAction *eraseAction = addItem(QString("清除选区内容"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Delete),
@@ -976,10 +1024,11 @@ void MainWindow::SetupSelectionTool()
 
     // 没有选区时禁用需要选区的操作
     connect(m_selectionMenu, &QMenu::aboutToShow, this,
-            [this, copyAction, cropAction, eraseAction, featherAction,
+            [this, copyAction, pasteAction, cropAction, eraseAction, featherAction,
              growAction, shrinkAction, smoothAction]() {
         const bool has = HasSelection();
         copyAction->setEnabled(has);
+        pasteAction->setEnabled(has);
         cropAction->setEnabled(has);
         eraseAction->setEnabled(has);
         featherAction->setEnabled(has);
@@ -1378,31 +1427,153 @@ void MainWindow::TranslateSelection(int dx, int dy)
     if (m_mask.isEmpty() || (dx == 0 && dy == 0)) {
         return;
     }
-    const int32_t w = m_mask.width;
-    const int32_t h = m_mask.height;
-    SelectionMask moved;
-    moved.width = w;
-    moved.height = h;
-    moved.data.assign(static_cast<size_t>(w) * static_cast<size_t>(h), 0);
-    for (int32_t y = 0; y < h; ++y) {
-        const int32_t sy = y - dy;
-        if (sy < 0 || sy >= h) {
-            continue;
-        }
-        const uint8_t *src = m_mask.data.data() + static_cast<size_t>(sy) * static_cast<size_t>(w);
-        uint8_t *dst = moved.data.data() + static_cast<size_t>(y) * static_cast<size_t>(w);
-        const int32_t x0 = std::max(0, -dx);
-        const int32_t x1 = std::min(w, w - dx);
-        for (int32_t x = x0; x < x1; ++x) {
-            dst[x + dx] = src[x];
-        }
-    }
-    m_mask = std::move(moved);
+    m_mask = TranslateMask(m_mask, dx, dy);
     m_selection = MaskBoundingRect();
     if (m_selection.isEmpty()) {
         m_mask.clear();
     }
     UpdateSelectionOverlay();
+}
+
+void MainWindow::MoveSelectionContent(int dx, int dy)
+{
+    const int32_t w = myValue.bmpInfo.GetWidth();
+    const int32_t h = myValue.bmpInfo.GetHeight();
+    if (m_busy) {
+        UpdateStatus("上一个操作还在处理中，请稍候");
+        return;
+    }
+    if (imageData.empty() || w <= 0 || h <= 0) {
+        UpdateStatus("请先打开一张图像");
+        return;
+    }
+    if (!HasSelection() || m_mask.width != w || m_mask.height != h) {
+        UpdateStatus("请先建立选区");
+        return;
+    }
+    if (dx == 0 && dy == 0) {
+        return;
+    }
+
+    const std::vector<uint8_t> orig = imageData;   // 内容来源永远是搬动前的像素
+    std::vector<uint8_t> result = orig;
+    SelectionMask moved = TranslateMask(m_mask, dx, dy);
+
+    // 1) 原选区按覆盖度刷白：相当于把这段内容"剪走"
+    for (int32_t y = 0; y < h; ++y) {
+        const uint8_t *mrow = m_mask.data.data() + static_cast<size_t>(y) * static_cast<size_t>(w);
+        const size_t rowBase = static_cast<size_t>(h - 1 - y) * static_cast<size_t>(w);
+        for (int32_t x = 0; x < w; ++x) {
+            const int a = mrow[x];
+            if (a == 0) {
+                continue;
+            }
+            uint8_t *p = result.data() + (rowBase + static_cast<size_t>(x)) * 3;
+            for (int c = 0; c < 3; ++c) {
+                p[c] = static_cast<uint8_t>((255 * a + static_cast<int>(p[c]) * (255 - a)) / 255);
+            }
+        }
+    }
+    // 2) 把内容按新掩码覆盖度贴到新位置(重叠区域读的是搬动前的像素)
+    for (int32_t y = 0; y < h; ++y) {
+        const uint8_t *mrow = moved.data.data() + static_cast<size_t>(y) * static_cast<size_t>(w);
+        const size_t rowBase = static_cast<size_t>(h - 1 - y) * static_cast<size_t>(w);
+        const int32_t sy = y - dy;
+        for (int32_t x = 0; x < w; ++x) {
+            const int a = mrow[x];
+            if (a == 0) {
+                continue;
+            }
+            const int32_t sx = x - dx;
+            uint8_t *dst = result.data() + (rowBase + static_cast<size_t>(x)) * 3;
+            if (sx < 0 || sx >= w || sy < 0 || sy >= h) {
+                dst[0] = dst[1] = dst[2] = 255;   // 移出画布的部分留白
+                continue;
+            }
+            const uint8_t *src = orig.data() +
+                                 (static_cast<size_t>(h - 1 - sy) * static_cast<size_t>(w) +
+                                  static_cast<size_t>(sx)) * 3;
+            for (int c = 0; c < 3; ++c) {
+                dst[c] = static_cast<uint8_t>((a * static_cast<int>(src[c]) +
+                                               (255 - a) * static_cast<int>(dst[c])) / 255);
+            }
+        }
+    }
+
+    m_mask = std::move(moved);
+    m_selection = MaskBoundingRect();
+    ApplySnapshot(MakeSnapshot(std::move(result), w, h, m_contentQuad));
+    UpdateStatus(QString("已移动选区内容 (%1, %2)").arg(dx).arg(dy));
+}
+
+void MainWindow::PasteIntoSelection()
+{
+    const QImage clip = QApplication::clipboard()->image();
+    if (clip.isNull()) {
+        UpdateStatus("剪贴板里没有图像，无法粘贴");
+        return;
+    }
+    PasteImageIntoSelection(clip);
+}
+
+void MainWindow::PasteImageIntoSelection(const QImage &image)
+{
+    if (m_busy) {
+        UpdateStatus("上一个操作还在处理中，请稍候");
+        return;
+    }
+    const int32_t w = myValue.bmpInfo.GetWidth();
+    const int32_t h = myValue.bmpInfo.GetHeight();
+    if (imageData.empty() || w <= 0 || h <= 0) {
+        UpdateStatus("请先打开一张图像");
+        return;
+    }
+    if (image.isNull()) {
+        UpdateStatus("没有可粘贴的图像");
+        return;
+    }
+    if (!HasSelection() || m_selection.isEmpty()) {
+        UpdateStatus("请先建立选区，再粘贴");
+        return;
+    }
+
+    const QRect sel = m_selection.intersected(QRect(0, 0, w, h));
+    if (sel.isEmpty()) {
+        UpdateStatus("选区超出画布范围，无法粘贴");
+        return;
+    }
+    // 等比缩放到选区包围盒内并居中，避免拉伸变形
+    const QImage src = image.convertToFormat(QImage::Format_RGB32);
+    const QImage scaled = src.scaled(sel.size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    if (scaled.isNull()) {
+        UpdateStatus("粘贴失败：图像缩放异常");
+        return;
+    }
+    const int ox = sel.x() + (sel.width() - scaled.width()) / 2;
+    const int oy = sel.y() + (sel.height() - scaled.height()) / 2;
+
+    std::vector<uint8_t> result = imageData;
+    for (int y = 0; y < scaled.height(); ++y) {
+        const int vy = oy + y;
+        if (vy < 0 || vy >= h) {
+            continue;
+        }
+        const QRgb *line = reinterpret_cast<const QRgb *>(scaled.constScanLine(y));
+        const size_t rowBase = static_cast<size_t>(h - 1 - vy) * static_cast<size_t>(w);
+        for (int x = 0; x < scaled.width(); ++x) {
+            const int vx = ox + x;
+            if (vx < 0 || vx >= w) {
+                continue;
+            }
+            uint8_t *p = result.data() + (rowBase + static_cast<size_t>(vx)) * 3;
+            p[0] = static_cast<uint8_t>(qBlue(line[x]));
+            p[1] = static_cast<uint8_t>(qGreen(line[x]));
+            p[2] = static_cast<uint8_t>(qRed(line[x]));
+        }
+    }
+    ApplyResult(result);   // 内部会把选区外的像素还原，羽化边缘自然过渡
+    UpdateStatus(QString("已粘贴图像到选区（%1 × %2 px）")
+                     .arg(scaled.width()).arg(scaled.height()));
 }
 
 void MainWindow::ClearSelection()

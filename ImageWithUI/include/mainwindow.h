@@ -174,6 +174,12 @@ public:
     void ShrinkSelection(int radius);       // 收缩选区(向内收 radius 像素)
     void SmoothSelection(int radius);       // 边界平滑(取半径内平均覆盖度后二值化)
     void TranslateSelection(int dx, int dy);
+    // 把选区内像素整体搬到新位置(原位置按覆盖度刷白)，作为一步历史提交
+    void MoveSelectionContent(int dx, int dy);
+    // 把剪贴板图像粘贴到选区(等比缩放到包围盒内并居中)
+    void PasteIntoSelection();
+    // 同上，但图像由调用方提供(自检复用)
+    void PasteImageIntoSelection(const QImage &image);
     void ClearSelection();
     void CopySelection();
     void CropToSelection();
