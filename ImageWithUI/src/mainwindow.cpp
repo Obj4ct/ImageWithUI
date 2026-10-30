@@ -90,6 +90,37 @@ OpFn MakeSharpenOp(double amount)
     };
 }
 
+// 大图预览用：按整数步长做最近邻缩小(保持 BGR、逐行紧凑布局)
+std::vector<uint8_t> DownsampleBgr(const std::vector<uint8_t> &src, int32_t w, int32_t h, int step,
+                                   int32_t &outW, int32_t &outH)
+{
+    outW = w / step;
+    outH = h / step;
+    if (outW <= 0 || outH <= 0 || src.size() < static_cast<size_t>(w) * static_cast<size_t>(h) * 3) {
+        outW = 0;
+        outH = 0;
+        return {};
+    }
+    const size_t srcRow = static_cast<size_t>(w) * 3;
+    const size_t dstRow = static_cast<size_t>(outW) * 3;
+    std::vector<uint8_t> out(static_cast<size_t>(outW) * static_cast<size_t>(outH) * 3, 0);
+    for (int32_t y = 0; y < outH; ++y) {
+        const uint8_t *s = src.data() + static_cast<size_t>(y) * static_cast<size_t>(step) * srcRow;
+        uint8_t *d = out.data() + static_cast<size_t>(y) * dstRow;
+        for (int32_t x = 0; x < outW; ++x) {
+            const uint8_t *p = s + static_cast<size_t>(x) * static_cast<size_t>(step) * 3;
+            d[0] = p[0];
+            d[1] = p[1];
+            d[2] = p[2];
+            d += 3;
+        }
+    }
+    return out;
+}
+
+// 预览超过这个像素数就先缩小再算，避免大图拖动参数卡顿
+constexpr size_t kPreviewMaxPixels = 2000000;
+
 }   // namespace
 
 MainWindow::MainWindow(QWidget *parent)
@@ -214,7 +245,12 @@ void MainWindow::SetDisplayPixmap(const std::vector<uint8_t> &data, int32_t widt
     if (image.isNull()) {
         return;
     }
-    QPixmap pixmap = QPixmap::fromImage(image);
+    ApplyDisplayPixmap(QPixmap::fromImage(image));
+}
+
+// 统一的"贴到 imageLabel"入口：适应窗口时按窗口尺寸缩放
+void MainWindow::ApplyDisplayPixmap(QPixmap pixmap)
+{
     if (m_fitToWindow) {
         const QSize target = ui->imageLabel->size();
         if (target.isValid() && !target.isEmpty()) {
@@ -340,10 +376,27 @@ void MainWindow::RunPreview()
     const OpFn op = field.makeOp(value);
     const int index = m_pendingFieldIndex;
 
-    // 每次都从已提交的像素出发，反复修改参数不会层层叠加
-    const std::vector<uint8_t> source = imageData;
     const int32_t width = myValue.bmpInfo.GetWidth();
     const int32_t height = myValue.bmpInfo.GetHeight();
+
+    // 大图：按整数步长最近邻缩小后在缩略图上算预览，拖动参数不会卡顿；
+    // 这种结果只用于显示，点"应用"时会用全分辨率重新计算
+    int step = 1;
+    while (static_cast<size_t>(width / step) * static_cast<size_t>(height / step) > kPreviewMaxPixels) {
+        ++step;
+    }
+    const bool downsampled = step > 1;
+    int32_t workW = width;
+    int32_t workH = height;
+    std::vector<uint8_t> source = imageData;
+    if (downsampled) {
+        source = DownsampleBgr(imageData, width, height, step, workW, workH);
+        if (source.empty()) {
+            CancelPreview();
+            return;
+        }
+    }
+
     const ContentQuad quad = m_contentQuad;
     const int gen = ++m_previewGeneration;
     m_previewRunning = true;
@@ -351,19 +404,36 @@ void MainWindow::RunPreview()
     auto result = std::make_shared<ImageSnapshot>();
     auto *watcher = new QFutureWatcher<void>(this);
     connect(watcher, &QFutureWatcher<void>::finished, this,
-            [this, watcher, result, gen, value, index]() {
+            [this, watcher, result, gen, value, index, downsampled, workW, workH, width, height]() {
         watcher->deleteLater();
         m_previewRunning = false;
         // 世代号已过期 → 这条结果对应的是旧输入，直接丢弃
-        if (gen == m_previewGeneration && !result->data.empty()) {
-            m_previewResult = std::move(*result);
+        const bool usable = gen == m_previewGeneration && !result->data.empty() &&
+                            (!downsampled || (result->width == workW && result->height == workH));
+        if (usable) {
             m_previewValue = value;
             m_previewFieldIndex = index;
             m_previewActive = true;
-            SetDisplayPixmap(m_previewResult.data, m_previewResult.width, m_previewResult.height);
-            UpdateStatus(QString("预览中：%1 = %2")
+            m_previewDownsampled = downsampled;
+            if (downsampled) {
+                // 低分辨率结果只用来显示，不能提交
+                m_previewResult = ImageSnapshot();
+                m_previewImage = Function::ToDisplayImage(result->data, result->width, result->height);
+                QPixmap pixmap = QPixmap::fromImage(m_previewImage);
+                if (!m_fitToWindow) {
+                    pixmap = pixmap.scaled(QSize(width, height),
+                                           Qt::IgnoreAspectRatio, Qt::FastTransformation);
+                }
+                ApplyDisplayPixmap(pixmap);
+            } else {
+                m_previewImage = QImage();
+                m_previewResult = std::move(*result);
+                SetDisplayPixmap(m_previewResult.data, m_previewResult.width, m_previewResult.height);
+            }
+            UpdateStatus(QString("预览中：%1 = %2%3")
                              .arg(m_previewFields[static_cast<size_t>(index)].title)
-                             .arg(value));
+                             .arg(value)
+                             .arg(downsampled ? "（低分辨率快速预览）" : ""));
         }
         if (m_previewQueued) {
             m_previewQueued = false;
@@ -371,11 +441,11 @@ void MainWindow::RunPreview()
         }
     });
 
-    watcher->setFuture(QtConcurrent::run([source, op, width, height, quad, result]() mutable {
-        std::vector<uint8_t> work = source;
+    watcher->setFuture(QtConcurrent::run([source, op, workW, workH, quad, result]() mutable {
+        std::vector<uint8_t> work = std::move(source);
         OpContext ctx;
-        ctx.width = width;
-        ctx.height = height;
+        ctx.width = workW;
+        ctx.height = workH;
         ctx.pixelCount = work.size() / 3;
         ctx.numThreads = 1;
         ctx.segmentSize = ctx.pixelCount;
@@ -404,6 +474,8 @@ void MainWindow::CancelPreview()
     m_previewFieldIndex = -1;
     m_previewValue = 0.0;
     m_previewResult = ImageSnapshot();
+    m_previewImage = QImage();
+    m_previewDownsampled = false;
     RefreshDisplay();
 }
 
@@ -411,11 +483,12 @@ void MainWindow::CancelPreview()
 bool MainWindow::CommitPreview(const QString &title, QLineEdit *edit, double value)
 {
     const int index = PreviewFieldIndex(edit);
-    const bool match = m_previewActive && m_previewFieldIndex == index &&
-                       m_previewValue == value && !m_previewResult.data.empty();
+    const bool match = m_previewActive && m_previewFieldIndex == index && m_previewValue == value;
+    // 低分辨率预览不能提交(结果会比全分辨率差)，交给调用方重新按全分辨率计算
+    const bool canCommit = match && !m_previewDownsampled && !m_previewResult.data.empty();
     const bool wasPreviewing = m_previewActive;
     // 无论是否命中，先清掉预览状态：不一致时由调用方走正常算子流程
-    const ImageSnapshot snap = match ? m_previewResult : ImageSnapshot();
+    const ImageSnapshot snap = canCommit ? m_previewResult : ImageSnapshot();
     ++m_previewGeneration;
     m_previewQueued = false;
     m_pendingFieldIndex = -1;
@@ -424,8 +497,10 @@ bool MainWindow::CommitPreview(const QString &title, QLineEdit *edit, double val
     m_previewFieldIndex = -1;
     m_previewValue = 0.0;
     m_previewResult = ImageSnapshot();
+    m_previewImage = QImage();
+    m_previewDownsampled = false;
 
-    if (!match) {
+    if (!canCommit) {
         if (wasPreviewing) {
             RefreshDisplay();   // 有未提交的预览，先回滚
         }

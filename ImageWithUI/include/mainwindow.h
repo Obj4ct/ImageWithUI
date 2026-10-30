@@ -269,6 +269,7 @@ private:
     void ApplySnapshot(const ImageSnapshot &snap, bool keepRotateBase = false);
     // 只刷新画面(不修改已提交的像素数据)，供预览/取消预览使用
     void SetDisplayPixmap(const std::vector<uint8_t> &data, int32_t width, int32_t height);
+    void ApplyDisplayPixmap(QPixmap pixmap);
     void RefreshDisplay();
 
     // ---- 参数实时预览 ----
@@ -290,6 +291,8 @@ private:
     bool m_previewQueued = false;   // 执行期间又有新输入，完成后重算
     bool m_previewActive = false;   // 当前画面是预览结果(尚未提交)
     ImageSnapshot m_previewResult;  // 最近一次有效的预览结果
+    QImage m_previewImage;          // 大图低分辨率预览图(仅用于显示，不参与提交)
+    bool m_previewDownsampled = false;  // 本次预览是否在缩小图上计算
     double m_previewValue = 0.0;    // 该结果对应的输入值
     int m_previewFieldIndex = -1;   // 该结果来自哪个输入项
     // 刷新状态栏右侧信息

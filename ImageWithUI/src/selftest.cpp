@@ -960,6 +960,77 @@ int Run(const QString &imagePath)
         out().flush();
     }
 
+    // ---------- 10. 大图预览降采样：预览走缩略图，应用仍按全分辨率提交 ----------
+    {
+        const QString bigPath = QDir::tempPath() + "/imagewithui_preview_big.png";
+        bool srcOk = false;
+        {
+            QImage big(2200, 1500, QImage::Format_RGB32);   // 330 万像素，超过预览阈值
+            big.fill(qRgb(90, 110, 130));
+            srcOk = big.save(bigPath, "PNG");
+        }
+
+        QString failReason;
+        {
+            MainWindow win;
+            if (!srcOk) {
+                failReason = "无法生成大图";
+            } else if (!win.OpenImage(bigPath)) {
+                failReason = "无法打开大图";
+            } else {
+                const int32_t fullWidth = win.myValue.bmpInfo.GetWidth();
+                const int32_t fullHeight = win.myValue.bmpInfo.GetHeight();
+                const size_t historyBefore = win.imageDataHistory.size();
+                const std::vector<uint8_t> pixelsBefore = win.CurrentImageData();
+                QLineEdit *edit = win.findChild<QLineEdit *>("lineEdit_brightness");
+                QPushButton *apply = win.findChild<QPushButton *>("btn_brightness");
+                if (edit == nullptr || apply == nullptr) {
+                    failReason = "找不到亮度输入框/应用按钮";
+                } else {
+                    edit->setText("50");
+                    QEventLoop loop;
+                    QTimer::singleShot(2500, &loop, &QEventLoop::quit);
+                    loop.exec();
+
+                    if (win.imageDataHistory.size() != historyBefore) {
+                        failReason = "大图预览写入了历史";
+                    } else if (win.CurrentImageData() != pixelsBefore) {
+                        failReason = "大图预览修改了已提交的像素";
+                    } else if (!win.IsPreviewActive()) {
+                        failReason = "大图预览没有生成";
+                    } else {
+                        // 低分辨率预览不能提交，应用时应按全分辨率重算并写回历史
+                        apply->click();
+                        QEventLoop loop2;
+                        QTimer::singleShot(3000, &loop2, &QEventLoop::quit);
+                        loop2.exec();
+
+                        if (win.imageDataHistory.size() != historyBefore + 1) {
+                            failReason = "大图应用后历史未增加";
+                        } else if (win.myValue.bmpInfo.GetWidth() != fullWidth ||
+                                   win.myValue.bmpInfo.GetHeight() != fullHeight) {
+                            failReason = "大图应用后尺寸变了";
+                        } else if (win.CurrentImageData() == pixelsBefore) {
+                            failReason = "大图应用后像素没有变化";
+                        } else if (win.IsPreviewActive()) {
+                            failReason = "大图应用后仍停留在预览态";
+                        }
+                    }
+                }
+            }
+        }
+        QFile::remove(bigPath);
+
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 大图预览降采样 : 缩略图预览不写历史，应用按全分辨率提交\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 大图预览降采样 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
     out() << "------------------------------------------------\n";
     out() << "通过 " << g_pass << " 项，失败 " << g_fail << " 项\n";
     out().flush();
