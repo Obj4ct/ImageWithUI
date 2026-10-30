@@ -9,6 +9,7 @@
 #include <QMenu>
 #include <QTimer>
 #include <QTabBar>
+#include <QPolygon>
 #include "BMPFile.h"
 #include "Function.h"
 #include "blendwindow.h"
@@ -159,6 +160,8 @@ public:
     // ---- 选区(图像像素坐标，视觉坐标，y 向下；内部用掩码保存，支持羽化/反选/加选) ----
     // add=true 表示把新矩形并入已有选区(Shift 加选)
     void SetSelection(const QRect &imageRect, bool add = false);
+    // 套索：把多边形内的像素并入/替换/减去选区(subtract 优先于 add)
+    void SetSelectionPolygon(const QPolygon &points, bool add = false, bool subtract = false);
     // 直接替换整份掩码(尺寸不符或为空时视为取消选区)
     void SetSelectionMask(const SelectionMask &mask);
     const SelectionMask &CurrentSelectionMask() const { return m_mask; }
@@ -427,6 +430,7 @@ private:
     SelectionMask m_mask;                  // 选区掩码(唯一真值)
     QRect m_selection;                     // 掩码包围盒(供复制/裁剪/绘制使用)
     QAction *m_selectionToolAction = nullptr;
+    QAction *m_lassoToolAction = nullptr;
     QMenu *m_selectionMenu = nullptr;
 
     // ---- 图层 ----

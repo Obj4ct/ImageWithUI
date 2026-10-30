@@ -1566,6 +1566,81 @@ int Run(const QString &imagePath)
         out().flush();
     }
 
+    // ---------- 16. 套索选区：多边形栅格化 + 加选 / 减选 ----------
+    {
+        const QString lassoPath = QDir::tempPath() + "/imagewithui_selftest_lasso.png";
+        {
+            QImage img(80, 60, QImage::Format_RGB32);
+            img.fill(qRgb(40, 120, 200));
+            img.save(lassoPath, "PNG");
+        }
+
+        QString failReason;
+        auto maskValue = [](MainWindow &win, int x, int y) -> int {
+            const SelectionMask &m = win.CurrentSelectionMask();
+            const int32_t w = win.myValue.bmpInfo.GetWidth();
+            if (m.isEmpty() || w <= 0 || x < 0 || y < 0 || x >= m.width || y >= m.height) {
+                return -1;
+            }
+            return m.data[static_cast<size_t>(y) * static_cast<size_t>(w) + static_cast<size_t>(x)];
+        };
+
+        MainWindow win;
+        if (!win.OpenImage(lassoPath)) {
+            failReason = "无法打开测试图";
+        } else {
+            // (1) 三角形套索：内部被选中，外部与远处不被选中
+            QPolygon tri;
+            tri << QPoint(5, 5) << QPoint(35, 5) << QPoint(20, 35);
+            win.SetSelectionPolygon(tri);
+            if (!win.HasSelection()) {
+                failReason = "三角形套索没有建立选区";
+            } else if (maskValue(win, 20, 10) != 255) {
+                failReason = "三角形内部未被选中";
+            } else if (maskValue(win, 2, 10) != 0 || maskValue(win, 20, 45) != 0) {
+                failReason = "三角形外部被错误选中";
+            }
+
+            // (2) Shift 加选另一块矩形多边形：两块都选中
+            if (failReason.isEmpty()) {
+                QPolygon block;
+                block << QPoint(60, 10) << QPoint(75, 10) << QPoint(75, 25) << QPoint(60, 25);
+                win.SetSelectionPolygon(block, true);
+                if (maskValue(win, 65, 15) != 255) {
+                    failReason = "套索加选后新区域未被选中";
+                } else if (maskValue(win, 20, 10) != 255) {
+                    failReason = "套索加选把原有选区弄丢了";
+                } else if (win.SelectionRect().width() < 60) {
+                    failReason = "套索加选后包围盒没有覆盖两块区域";
+                }
+            }
+
+            // (3) Alt 减选：从已有选区内扣掉一块
+            if (failReason.isEmpty()) {
+                QPolygon cut;
+                cut << QPoint(20, 5) << QPoint(40, 5) << QPoint(40, 30) << QPoint(20, 30);
+                win.SetSelectionPolygon(cut, false, true);
+                if (maskValue(win, 20, 10) != 0) {
+                    failReason = "套索减选没有扣掉目标区域";
+                } else if (maskValue(win, 65, 15) != 255) {
+                    failReason = "套索减选误伤了其他区域";
+                } else if (!win.HasSelection()) {
+                    failReason = "套索减选后应仍有剩余选区";
+                }
+            }
+        }
+        QFile::remove(lassoPath);
+
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 套索选区 : 多边形内部/外部判定正确，加选与减选生效\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 套索选区 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
     out() << "------------------------------------------------\n";
     out() << "通过 " << g_pass << " 项，失败 " << g_fail << " 项\n";
     out().flush();

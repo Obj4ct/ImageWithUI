@@ -5,6 +5,7 @@
 #include "Theme.h"
 #include "editdialogs.h"
 #include <QAction>
+#include <QActionGroup>
 #include <QMenu>
 #include <QImageWriter>
 #include <QSignalBlocker>
@@ -340,10 +341,20 @@ public:
         update();
     }
 
+    // 切换工具类型：0 = 矩形选框，1 = 自由套索
+    void setToolKind(int kind)
+    {
+        m_tool = kind;
+        m_drag = None;
+        m_points.clear();
+        update();
+    }
+
     void setToolActive(bool active)
     {
         m_toolActive = active;
         m_drag = None;
+        m_points.clear();
         setAttribute(Qt::WA_TransparentForMouseEvents, !active);
         setCursor(active ? Qt::CrossCursor : Qt::ArrowCursor);
         update();
@@ -353,6 +364,8 @@ public:
     std::function<void(const QRect &, bool)> onSelectionChanged;
     // 用户拖动整体移动选区后回调(参数为图像像素位移)
     std::function<void(int, int)> onSelectionMoved;
+    // 套索松开后回调(add = Shift 加选，subtract = Alt 减选)
+    std::function<void(const QPolygon &, bool, bool)> onLassoFinished;
 
 protected:
     void paintEvent(QPaintEvent *) override
@@ -365,6 +378,29 @@ protected:
             return;
         }
         QPainter p(this);
+
+        // 套索正在绘制：只显示轨迹，不显示旧掩码与矩形框
+        if (m_tool == 1 && m_drag == Creating) {
+            QPolygon trail;
+            for (const QPoint &pt : m_points) {
+                trail << toWidgetPoint(pt);
+            }
+            if (trail.size() >= 2) {
+                QPen dark(QColor(0, 0, 0, 210));
+                dark.setStyle(Qt::CustomDashLine);
+                dark.setDashPattern(QVector<qreal>{4, 4});
+                dark.setDashOffset(m_dashOffset);
+                p.setPen(dark);
+                p.drawPolyline(trail);
+                QPen light(QColor(255, 255, 255, 230));
+                light.setStyle(Qt::CustomDashLine);
+                light.setDashPattern(QVector<qreal>{4, 4});
+                light.setDashOffset(m_dashOffset + 4);
+                p.setPen(light);
+                p.drawPolyline(trail);
+            }
+            return;
+        }
 
         // 掩码高亮：把半透明缩略图拉伸到图像显示区域；
         // 拖动移动选区时按像素位移同步平移，建立新选区时先隐藏旧掩码
@@ -437,6 +473,16 @@ protected:
         if (dr.isEmpty() || !dr.adjusted(-2, -2, 2, 2).contains(event->pos())) {
             return;   // 点在图像外的画布空区域：不建立选区
         }
+        if (m_tool == 1) {   // 自由套索：按下开始记录轨迹
+            m_drag = Creating;
+            m_points.clear();
+            m_points.append(toImage(event->pos()));
+            m_addMode = (event->modifiers() & Qt::ShiftModifier);
+            m_subtractMode = (event->modifiers() & Qt::AltModifier);
+            m_sel = QRect(m_points.first(), QSize(1, 1));
+            update();
+            return;
+        }
         if (!m_sel.isEmpty() && toWidget(m_sel).contains(event->pos())) {
             m_drag = Moving;   // 在选区内按下 = 整体移动选区
             m_pressPos = event->pos();
@@ -460,6 +506,17 @@ protected:
         if (m_drag == None) {
             setCursor((!m_sel.isEmpty() && toWidget(m_sel).contains(pos)) ? Qt::SizeAllCursor
                                                                           : Qt::CrossCursor);
+            return;
+        }
+        if (m_drag == Creating && m_tool == 1) {
+            const QPoint ip = toImage(pos);
+            if (!m_points.isEmpty() && (m_points.last() - ip).manhattanLength() < 2) {
+                return;   // 轨迹点太密，忽略
+            }
+            m_points.append(ip);
+            QRect bb = m_points.boundingRect();
+            m_sel = bb.isValid() ? bb : QRect(ip, QSize(1, 1));
+            update();
             return;
         }
         if (m_drag == Creating) {
@@ -490,6 +547,17 @@ protected:
         const bool wasMoving = (m_drag == Moving);
         m_drag = None;
         setCursor(Qt::CrossCursor);
+
+        if (wasCreating && m_tool == 1) {
+            const QPolygon poly = m_points;
+            m_points.clear();
+            if (poly.size() >= 3 && onLassoFinished) {
+                onLassoFinished(poly, m_addMode, m_subtractMode);
+            } else if (onSelectionChanged) {
+                onSelectionChanged(QRect(), false);
+            }
+            return;
+        }
 
         if (wasCreating && (m_sel.width() < 3 || m_sel.height() < 3)) {
             setSelection(QRect());   // 单击图像视为取消选区
@@ -553,6 +621,17 @@ private:
         return out.toAlignedRect();
     }
 
+    QPoint toWidgetPoint(const QPoint &p) const
+    {
+        const QRect dr = displayRect();
+        if (dr.isEmpty()) {
+            return QPoint();
+        }
+        const double sx = static_cast<double>(dr.width()) / std::max(1, m_imgW);
+        const double sy = static_cast<double>(dr.height()) / std::max(1, m_imgH);
+        return QPoint(dr.left() + qRound(p.x() * sx), dr.top() + qRound(p.y() * sy));
+    }
+
     QTimer *m_anim = nullptr;
     int m_dashOffset = 0;
     bool m_toolActive = false;
@@ -561,7 +640,10 @@ private:
     QRect m_sel;                 // 选区(图像像素坐标)
     QImage m_maskImage;          // 掩码半透明缩略图(由主窗口生成)
     DragMode m_drag = None;
+    int m_tool = 0;              // 0 = 矩形选框，1 = 自由套索
+    QPolygon m_points;           // 套索轨迹(图像像素坐标)
     bool m_addMode = false;      // 本次拖拽是否为加选(Shift)
+    bool m_subtractMode = false; // 本次套索是否为减选(Alt)
     QPoint m_pressPos;           // 移动起点(控件坐标)
     QPoint m_anchor;             // 建立选区锚点(图像坐标)
     QRect m_startSel;            // 移动前的选区
@@ -782,24 +864,51 @@ void MainWindow::SetupSelectionTool()
         TranslateSelection(dx, dy);
         UpdateStatus(QString("选区已移动 (%1, %2)").arg(dx).arg(dy));
     };
+    m_overlay->onLassoFinished = [this](const QPolygon &poly, bool add, bool subtract) {
+        SetSelectionPolygon(poly, add, subtract);
+    };
     ui->imageLabel->installEventFilter(this);
 
-    // 工具栏：矩形选框(勾选后才在图像上拖拽建立选区，避免误触)
+    // 工具栏：矩形选框 / 自由套索(勾选后才在图像上拖拽，避免误触)
+    QActionGroup *toolGroup = new QActionGroup(this);
+    toolGroup->setExclusive(true);
+
     m_selectionToolAction = new QAction(QString("矩形选框"), this);
     m_selectionToolAction->setCheckable(true);
-    m_selectionToolAction->setToolTip(QString("选中后在图像上按住左键拖动建立矩形选区；在选区内拖动可整体移动"));
-    connect(m_selectionToolAction, &QAction::toggled, this, [this](bool on) {
+    m_selectionToolAction->setToolTip(QString("选中后在图像上按住左键拖动建立矩形选区；Shift 加选；在选区内拖动可整体移动"));
+    toolGroup->addAction(m_selectionToolAction);
+
+    m_lassoToolAction = new QAction(QString("自由套索"), this);
+    m_lassoToolAction->setCheckable(true);
+    m_lassoToolAction->setToolTip(QString("选中后沿图像拖动描出边界，松开建立不规则选区；Shift 加选，Alt 减选"));
+
+    // 两个工具共用一套状态同步：任一被勾选时启用覆盖层，并切换工具类型
+    auto applyToolState = [this]() {
+        const bool lasso = m_lassoToolAction->isChecked();
+        const bool rect = m_selectionToolAction->isChecked();
         if (m_overlay != nullptr) {
-            m_overlay->setToolActive(on);
+            m_overlay->setToolKind(lasso ? 1 : 0);
+            m_overlay->setToolActive(lasso || rect);
         }
-        UpdateStatus(on ? QString("矩形选框：在图像上拖动建立选区") : QString("选区工具已关闭"));
-    });
+        if (lasso) {
+            UpdateStatus(QString("自由套索：沿图像拖动描边，松开后建立选区；Shift 加选、Alt 减选"));
+        } else if (rect) {
+            UpdateStatus(QString("矩形选框：在图像上拖动建立选区；Shift 加选"));
+        } else {
+            UpdateStatus(QString("选区工具已关闭"));
+        }
+    };
+    toolGroup->addAction(m_lassoToolAction);
+    connect(m_selectionToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
+    connect(m_lassoToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
     ui->toolBar->addSeparator();
     ui->toolBar->addAction(m_selectionToolAction);
+    ui->toolBar->addAction(m_lassoToolAction);
 
     // "选择"菜单(放在"编辑"之后、"图像模糊"之前)
     m_selectionMenu = new QMenu(QString("选择"), this);
     m_selectionMenu->addAction(m_selectionToolAction);
+    m_selectionMenu->addAction(m_lassoToolAction);
     m_selectionMenu->addSeparator();
 
     auto addItem = [this](const QString &text, const QKeySequence &shortcut,
@@ -1015,6 +1124,75 @@ void MainWindow::SetSelection(const QRect &imageRect, bool add)
     }
     m_selection = MaskBoundingRect();
     UpdateSelectionOverlay();
+}
+
+void MainWindow::SetSelectionPolygon(const QPolygon &points, bool add, bool subtract)
+{
+    const int32_t w = myValue.bmpInfo.GetWidth();
+    const int32_t h = myValue.bmpInfo.GetHeight();
+    if (imageData.empty() || w <= 0 || h <= 0) {
+        m_mask.clear();
+        m_selection = QRect();
+        UpdateSelectionOverlay();
+        return;
+    }
+    if (points.size() < 3) {
+        if (!add && !subtract) {
+            ClearSelection();
+            UpdateStatus("套索轨迹太短，已取消选区");
+        }
+        return;
+    }
+
+    // 用 QPainter 把多边形栅格化成与图像同尺寸的图(白色 = 在多边形内)
+    QImage shape(w, h, QImage::Format_RGB32);
+    shape.fill(Qt::black);
+    {
+        QPainter p(&shape);
+        p.setRenderHint(QPainter::Antialiasing, false);
+        p.setPen(Qt::NoPen);
+        p.setBrush(Qt::white);
+        p.drawPolygon(points);
+    }
+    SelectionMask target;
+    target.width = w;
+    target.height = h;
+    target.data.assign(static_cast<size_t>(w) * static_cast<size_t>(h), 0);
+    for (int32_t y = 0; y < h; ++y) {
+        const QRgb *line = reinterpret_cast<const QRgb *>(shape.constScanLine(y));
+        uint8_t *dst = target.data.data() + static_cast<size_t>(y) * static_cast<size_t>(w);
+        for (int32_t x = 0; x < w; ++x) {
+            dst[x] = qRed(line[x]) >= 128 ? 255 : 0;
+        }
+    }
+
+    if (subtract) {
+        // 减选：按覆盖度从已有掩码里扣掉多边形区域(没有选区时无效果)
+        if (!m_mask.isEmpty() && m_mask.width == w && m_mask.height == h) {
+            for (size_t i = 0; i < m_mask.data.size(); ++i) {
+                m_mask.data[i] = static_cast<uint8_t>(static_cast<int>(m_mask.data[i]) *
+                                                      (255 - static_cast<int>(target.data[i])) / 255);
+            }
+        }
+    } else if (add && !m_mask.isEmpty() && m_mask.width == w && m_mask.height == h) {
+        for (size_t i = 0; i < m_mask.data.size(); ++i) {
+            m_mask.data[i] = std::max(m_mask.data[i], target.data[i]);
+        }
+    } else {
+        m_mask = std::move(target);
+    }
+
+    m_selection = MaskBoundingRect();
+    if (m_selection.isEmpty()) {
+        m_mask.clear();
+        UpdateSelectionOverlay();
+        UpdateStatus("套索选区为空，已取消选区");
+        return;
+    }
+    UpdateSelectionOverlay();
+    UpdateStatus(QString("套索选区 %1 × %2 px%3")
+                     .arg(m_selection.width()).arg(m_selection.height())
+                     .arg(subtract ? QString("，已减选") : add ? QString("，已加选") : QString()));
 }
 
 void MainWindow::SetSelectionMask(const SelectionMask &mask)
