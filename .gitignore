@@ -36,3 +36,6 @@ Release/
 # ---- local workspace metadata / 中间产物 ----
 .workbuddy/
 _trash/
+
+# ---- 本地功能台账(不进版本库) ----
+FEATURES.md
