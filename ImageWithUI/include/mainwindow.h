@@ -75,7 +75,10 @@ struct Document {
     ContentQuad rotBaseQuad;
     double rotTotal = 0.0;
     bool canSave = false;
+    QRect selection;                          // 矩形选区(图像像素坐标，视觉，y 向下)
 };
+
+class SelectionOverlay;
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -115,6 +118,16 @@ public:
     // 当前打开的文档数 / 活动文档下标(供自检使用)
     int DocumentCount() const { return static_cast<int>(m_docs.size()); }
     int ActiveDocumentIndex() const { return m_activeDoc; }
+
+    // ---- 矩形选区(图像像素坐标，视觉坐标，y 向下) ----
+    void SetSelection(const QRect &imageRect);
+    QRect SelectionRect() const { return m_selection; }
+    bool HasSelection() const { return !m_selection.isEmpty(); }
+    void SelectAll();
+    void ClearSelection();
+    void CopySelection();
+    void CropToSelection();
+    void ClearSelectionContent();
 
 public:
     std::string BMPPath;
@@ -338,5 +351,14 @@ private:
     std::vector<Document> m_docs;
     int m_activeDoc = -1;
 
+    // ---- 矩形选区 ----
+    void SetupSelectionTool();
+    // 图像尺寸变化后把选区夹到图像范围内，并同步覆盖层
+    void SyncSelectionToImage();
+    void UpdateSelectionOverlay();
+    SelectionOverlay *m_overlay = nullptr;
+    QRect m_selection;                     // 选区(图像像素坐标，视觉，y 向下)
+    QAction *m_selectionToolAction = nullptr;
+    QMenu *m_selectionMenu = nullptr;
 };
 #endif // MAINWINDOW_H

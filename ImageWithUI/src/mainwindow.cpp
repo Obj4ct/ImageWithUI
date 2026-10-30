@@ -13,6 +13,9 @@
 #include <QApplication>
 #include <QVBoxLayout>
 #include <QAction>
+#include <QPainter>
+#include <QClipboard>
+#include <QFontMetrics>
 
 namespace {
 
@@ -125,6 +128,249 @@ constexpr size_t kPreviewMaxPixels = 2000000;
 
 }   // namespace
 
+// ------------------------------------------------------------------
+// 矩形选区覆盖层
+// 画在 imageLabel 之上：负责拖拽建立/移动选区，以及"蚂蚁线"绘制。
+// 选区始终以【图像像素】坐标保存(视觉坐标，y 向下)，与显示缩放无关。
+// ------------------------------------------------------------------
+class SelectionOverlay : public QWidget
+{
+public:
+    explicit SelectionOverlay(QLabel *label)
+        : QWidget(label)
+    {
+        setObjectName("selectionOverlay");
+        setAttribute(Qt::WA_NoSystemBackground);
+        // 未启用工具时鼠标穿透到标签，双击打开图片等原有交互不受影响
+        setAttribute(Qt::WA_TransparentForMouseEvents);
+        setMouseTracking(true);
+
+        // 蚂蚁线滚动动画
+        m_anim = new QTimer(this);
+        m_anim->setInterval(120);
+        connect(m_anim, &QTimer::timeout, this, [this]() {
+            if (m_sel.isEmpty()) {
+                return;
+            }
+            m_dashOffset = (m_dashOffset + 2) % 8;
+            update();
+        });
+        m_anim->start();
+    }
+
+    void setImageSize(int32_t w, int32_t h)
+    {
+        m_imgW = (w > 0) ? w : 0;
+        m_imgH = (h > 0) ? h : 0;
+        if (!m_sel.isEmpty()) {
+            m_sel = m_sel.intersected(QRect(0, 0, m_imgW, m_imgH));
+        }
+        update();
+    }
+
+    // 程序设置选区(直接调用不会触发 onSelectionChanged)
+    void setSelection(const QRect &imageRect)
+    {
+        QRect r = imageRect.normalized();
+        r = (m_imgW > 0 && m_imgH > 0) ? r.intersected(QRect(0, 0, m_imgW, m_imgH)) : QRect();
+        if (r != m_sel) {
+            m_sel = r;
+            update();
+        }
+    }
+
+    void setToolActive(bool active)
+    {
+        m_toolActive = active;
+        m_drag = None;
+        setAttribute(Qt::WA_TransparentForMouseEvents, !active);
+        setCursor(active ? Qt::CrossCursor : Qt::ArrowCursor);
+        update();
+    }
+
+    // 用户拖拽改变选区后回调
+    std::function<void(const QRect &)> onSelectionChanged;
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        if (m_sel.isEmpty() || m_imgW <= 0 || m_imgH <= 0) {
+            return;
+        }
+        const QRect wr = toWidget(m_sel);
+        if (wr.isEmpty()) {
+            return;
+        }
+        QPainter p(this);
+        p.fillRect(wr, QColor(34, 211, 238, 40));   // 选区高亮
+
+        // 蚂蚁线：黑白虚线错位叠加，随时间滚动
+        const QRectF border = QRectF(wr).adjusted(0.5, 0.5, -0.5, -0.5);
+        QPen dark(QColor(0, 0, 0, 210));
+        dark.setStyle(Qt::CustomDashLine);
+        dark.setDashPattern(QVector<qreal>{4, 4});
+        dark.setDashOffset(m_dashOffset);
+        p.setPen(dark);
+        p.drawRect(border);
+
+        QPen light(QColor(255, 255, 255, 230));
+        light.setStyle(Qt::CustomDashLine);
+        light.setDashPattern(QVector<qreal>{4, 4});
+        light.setDashOffset(m_dashOffset + 4);
+        p.setPen(light);
+        p.drawRect(border);
+
+        // 四角把手
+        p.setPen(QPen(QColor(34, 211, 238), 1));
+        p.setBrush(QColor(34, 211, 238));
+        const QPoint corners[4] = { wr.topLeft(), wr.topRight(), wr.bottomLeft(), wr.bottomRight() };
+        for (const QPoint &c : corners) {
+            p.drawRect(QRect(c.x() - 2, c.y() - 2, 5, 5));
+        }
+
+        // 尺寸提示(选区上方；贴边时放到内部)
+        const QString text = QString("%1 × %2").arg(m_sel.width()).arg(m_sel.height());
+        QFont f = font();
+        f.setPointSize(9);
+        p.setFont(f);
+        const QFontMetrics fm(f);
+        const int tw = fm.boundingRect(text).width() + 10;
+        const int th = fm.height() + 4;
+        QRect box(wr.left(), wr.top() - th - 4, tw, th);
+        if (box.top() < 0) {
+            box.moveTop(wr.top() + 4);
+        }
+        if (box.right() > width() - 2) {
+            box.moveRight(width() - 2);
+        }
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(9, 13, 18, 220));
+        p.drawRoundedRect(box, 4, 4);
+        p.setPen(QColor(103, 232, 249));
+        p.drawText(box, Qt::AlignCenter, text);
+    }
+
+    void mousePressEvent(QMouseEvent *event) override
+    {
+        if (event->button() != Qt::LeftButton || !m_toolActive || m_imgW <= 0 || m_imgH <= 0) {
+            return;
+        }
+        const QRect dr = displayRect();
+        if (dr.isEmpty() || !dr.adjusted(-2, -2, 2, 2).contains(event->pos())) {
+            return;   // 点在图像外的画布空区域：不建立选区
+        }
+        if (!m_sel.isEmpty() && toWidget(m_sel).contains(event->pos())) {
+            m_drag = Moving;   // 在选区内按下 = 整体移动选区
+            m_pressPos = event->pos();
+            m_startSel = m_sel;
+            setCursor(Qt::SizeAllCursor);
+        } else {
+            m_drag = Creating;
+            m_anchor = toImage(event->pos());
+            setSelection(QRect(m_anchor, QSize(1, 1)));
+        }
+    }
+
+    void mouseMoveEvent(QMouseEvent *event) override
+    {
+        if (!m_toolActive) {
+            return;
+        }
+        const QPoint pos = event->pos();
+        if (m_drag == None) {
+            setCursor((!m_sel.isEmpty() && toWidget(m_sel).contains(pos)) ? Qt::SizeAllCursor
+                                                                          : Qt::CrossCursor);
+            return;
+        }
+        if (m_drag == Creating) {
+            setSelection(QRect(m_anchor, toImage(pos)).normalized());
+            return;
+        }
+        const QRect dr = displayRect();
+        if (dr.isEmpty()) {
+            return;
+        }
+        const double sx = std::max(1.0, static_cast<double>(dr.width()) / std::max(1, m_imgW));
+        const double sy = std::max(1.0, static_cast<double>(dr.height()) / std::max(1, m_imgH));
+        const int dx = qRound((pos.x() - m_pressPos.x()) / sx);
+        const int dy = qRound((pos.y() - m_pressPos.y()) / sy);
+        QRect moved = m_startSel.translated(dx, dy);
+        moved.moveTo(qBound(0, moved.x(), m_imgW - moved.width()),
+                     qBound(0, moved.y(), m_imgH - moved.height()));
+        setSelection(moved);
+    }
+
+    void mouseReleaseEvent(QMouseEvent *event) override
+    {
+        Q_UNUSED(event);
+        if (m_drag == None) {
+            return;
+        }
+        const bool wasCreating = (m_drag == Creating);
+        m_drag = None;
+        setCursor(Qt::CrossCursor);
+        if (wasCreating && (m_sel.width() < 3 || m_sel.height() < 3)) {
+            setSelection(QRect());   // 单击图像视为取消选区
+        }
+        if (onSelectionChanged) {
+            onSelectionChanged(m_sel);
+        }
+    }
+
+private:
+    enum DragMode { None, Creating, Moving };
+
+    // 图像在控件中的显示矩形(标签按 AlignCenter 居中)
+    QRect displayRect() const
+    {
+        QLabel *label = qobject_cast<QLabel *>(parentWidget());
+        if (label == nullptr || label->pixmap() == nullptr || label->pixmap()->isNull()) {
+            return QRect();
+        }
+        const QRect area = label->contentsRect();
+        const QSize sz = label->pixmap()->size();
+        const QPoint topLeft = area.topLeft() + QPoint((area.width() - sz.width()) / 2,
+                                                       (area.height() - sz.height()) / 2);
+        return QRect(topLeft, sz);
+    }
+
+    QPoint toImage(const QPoint &p) const
+    {
+        const QRect dr = displayRect();
+        if (dr.isEmpty()) {
+            return QPoint();
+        }
+        const double sx = static_cast<double>(dr.width()) / std::max(1, m_imgW);
+        const double sy = static_cast<double>(dr.height()) / std::max(1, m_imgH);
+        return QPoint(qBound(0, static_cast<int>((p.x() - dr.left()) / sx), m_imgW),
+                      qBound(0, static_cast<int>((p.y() - dr.top()) / sy), m_imgH));
+    }
+
+    QRect toWidget(const QRect &r) const
+    {
+        const QRect dr = displayRect();
+        if (dr.isEmpty() || r.isEmpty()) {
+            return QRect();
+        }
+        const double sx = static_cast<double>(dr.width()) / std::max(1, m_imgW);
+        const double sy = static_cast<double>(dr.height()) / std::max(1, m_imgH);
+        const QRectF out(dr.left() + r.x() * sx, dr.top() + r.y() * sy,
+                         r.width() * sx, r.height() * sy);
+        return out.toAlignedRect();
+    }
+
+    QTimer *m_anim = nullptr;
+    int m_dashOffset = 0;
+    bool m_toolActive = false;
+    int32_t m_imgW = 0;
+    int32_t m_imgH = 0;
+    QRect m_sel;                 // 选区(图像像素坐标)
+    DragMode m_drag = None;
+    QPoint m_pressPos;           // 移动起点(控件坐标)
+    QPoint m_anchor;             // 建立选区锚点(图像坐标)
+    QRect m_startSel;            // 移动前的选区
+};
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent),
       ui(new Ui::MainWindow)
@@ -180,6 +426,7 @@ MainWindow::MainWindow(QWidget *parent)
     ui->imageLabel->setText(QString("双击此处，或按 Ctrl+N 打开图片"));
     statusBar()->showMessage("就绪 · 请先打开一张图片");
     UpdateStatusInfo();
+    SetupSelectionTool();   // 矩形选区覆盖层 + "选择"菜单
 }
 
 
@@ -212,6 +459,14 @@ void MainWindow::mouseDoubleClickEvent(QMouseEvent *event)
 // 输入框里按 Esc：放弃当前参数预览
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)
 {
+    // 标签尺寸变化时，选区覆盖层跟着铺满标签
+    if (watched == ui->imageLabel &&
+        (event->type() == QEvent::Resize || event->type() == QEvent::Show)) {
+        if (m_overlay != nullptr) {
+            m_overlay->setGeometry(ui->imageLabel->rect());
+            m_overlay->raise();
+        }
+    }
     if (event->type() == QEvent::KeyPress) {
         const QKeyEvent *key = static_cast<QKeyEvent *>(event);
         if (key->key() == Qt::Key_Escape && PreviewFieldIndex(qobject_cast<QLineEdit *>(watched)) >= 0) {
@@ -238,6 +493,7 @@ void MainWindow::ShowImage(const std::vector<uint8_t> &inImageData, MyValue valu
     myValue = value;
 
     SetDisplayPixmap(inImageData, width, height);
+    SyncSelectionToImage();
     UpdateStatusInfo();
 }
 
@@ -272,6 +528,217 @@ void MainWindow::RefreshDisplay()
         return;
     }
     SetDisplayPixmap(imageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+    SyncSelectionToImage();
+}
+
+// ------------------------------------------------------------------
+// 矩形选区
+// ------------------------------------------------------------------
+
+void MainWindow::SetupSelectionTool()
+{
+    m_overlay = new SelectionOverlay(ui->imageLabel);
+    m_overlay->setGeometry(ui->imageLabel->rect());
+    m_overlay->setVisible(false);
+    m_overlay->onSelectionChanged = [this](const QRect &rect) {
+        m_selection = rect;
+        if (rect.isEmpty()) {
+            UpdateStatus("已取消选区");
+        } else {
+            UpdateStatus(QString("选区 %1 × %2 px").arg(rect.width()).arg(rect.height()));
+        }
+    };
+    ui->imageLabel->installEventFilter(this);
+
+    // 工具栏：矩形选框(勾选后才在图像上拖拽建立选区，避免误触)
+    m_selectionToolAction = new QAction(QString("矩形选框"), this);
+    m_selectionToolAction->setCheckable(true);
+    m_selectionToolAction->setToolTip(QString("选中后在图像上按住左键拖动建立矩形选区；在选区内拖动可整体移动"));
+    connect(m_selectionToolAction, &QAction::toggled, this, [this](bool on) {
+        if (m_overlay != nullptr) {
+            m_overlay->setToolActive(on);
+        }
+        UpdateStatus(on ? QString("矩形选框：在图像上拖动建立选区") : QString("选区工具已关闭"));
+    });
+    ui->toolBar->addSeparator();
+    ui->toolBar->addAction(m_selectionToolAction);
+
+    // "选择"菜单(放在"编辑"之后、"图像模糊"之前)
+    m_selectionMenu = new QMenu(QString("选择"), this);
+    m_selectionMenu->addAction(m_selectionToolAction);
+    m_selectionMenu->addSeparator();
+
+    auto addItem = [this](const QString &text, const QKeySequence &shortcut,
+                          std::function<void()> handler) {
+        QAction *action = new QAction(text, this);
+        if (!shortcut.isEmpty()) {
+            action->setShortcut(shortcut);
+        }
+        connect(action, &QAction::triggered, this, handler);
+        m_selectionMenu->addAction(action);
+        return action;
+    };
+
+    // 快捷键带 Shift，避免抢走输入框里的 Ctrl+A / Ctrl+C
+    QAction *copyAction = addItem(QString("复制选区"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_C),
+                                  [this]() { CopySelection(); });
+    QAction *cropAction = addItem(QString("裁剪到选区"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_X),
+                                  [this]() { CropToSelection(); });
+    QAction *eraseAction = addItem(QString("清除选区内容"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Delete),
+                                   [this]() { ClearSelectionContent(); });
+    addItem(QString("全选"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_A), [this]() { SelectAll(); });
+    addItem(QString("取消选区"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_D), [this]() {
+        ClearSelection();
+        UpdateStatus("已取消选区");
+    });
+
+    // 没有选区时禁用需要选区的操作
+    connect(m_selectionMenu, &QMenu::aboutToShow, this, [this, copyAction, cropAction, eraseAction]() {
+        const bool has = HasSelection();
+        copyAction->setEnabled(has);
+        cropAction->setEnabled(has);
+        eraseAction->setEnabled(has);
+    });
+
+    menuBar()->insertMenu(ui->menu_blur->menuAction(), m_selectionMenu);
+    m_selectionMenu->menuAction()->setVisible(!imageData.empty());
+}
+
+void MainWindow::UpdateSelectionOverlay()
+{
+    if (m_overlay == nullptr) {
+        return;
+    }
+    const int32_t w = myValue.bmpInfo.GetWidth();
+    const int32_t h = myValue.bmpInfo.GetHeight();
+    const bool hasImage = !imageData.empty() && w > 0 && h > 0;
+    m_overlay->setGeometry(ui->imageLabel->rect());
+    m_overlay->setImageSize(hasImage ? w : 0, hasImage ? h : 0);
+    m_overlay->setSelection(hasImage ? m_selection : QRect());
+    m_overlay->setVisible(hasImage);
+    m_overlay->raise();
+}
+
+// 图像尺寸变化后把选区夹回图像范围(裁剪/旋转/撤销等都会走这里)
+void MainWindow::SyncSelectionToImage()
+{
+    const int32_t w = myValue.bmpInfo.GetWidth();
+    const int32_t h = myValue.bmpInfo.GetHeight();
+    if (imageData.empty() || w <= 0 || h <= 0) {
+        m_selection = QRect();
+    } else if (!m_selection.isEmpty()) {
+        m_selection = m_selection.intersected(QRect(0, 0, w, h));
+    }
+    UpdateSelectionOverlay();
+}
+
+void MainWindow::SetSelection(const QRect &imageRect)
+{
+    const int32_t w = myValue.bmpInfo.GetWidth();
+    const int32_t h = myValue.bmpInfo.GetHeight();
+    if (imageData.empty() || w <= 0 || h <= 0) {
+        m_selection = QRect();
+    } else {
+        m_selection = imageRect.normalized().intersected(QRect(0, 0, w, h));
+    }
+    UpdateSelectionOverlay();
+}
+
+void MainWindow::SelectAll()
+{
+    const int32_t w = myValue.bmpInfo.GetWidth();
+    const int32_t h = myValue.bmpInfo.GetHeight();
+    if (imageData.empty() || w <= 0 || h <= 0) {
+        UpdateStatus("请先打开一张图像");
+        return;
+    }
+    SetSelection(QRect(0, 0, w, h));
+    UpdateStatus(QString("已全选 %1 × %2 px").arg(w).arg(h));
+}
+
+void MainWindow::ClearSelection()
+{
+    m_selection = QRect();
+    UpdateSelectionOverlay();
+}
+
+void MainWindow::CopySelection()
+{
+    const int32_t w = myValue.bmpInfo.GetWidth();
+    const int32_t h = myValue.bmpInfo.GetHeight();
+    if (imageData.empty() || w <= 0 || h <= 0) {
+        UpdateStatus("请先打开一张图像");
+        return;
+    }
+    if (m_selection.isEmpty()) {
+        UpdateStatus("请先建立矩形选区");
+        return;
+    }
+    const QImage full = Function::ToDisplayImage(imageData, w, h);
+    const QImage sub = full.copy(m_selection.intersected(full.rect()));
+    if (sub.isNull() || sub.width() <= 0 || sub.height() <= 0) {
+        UpdateStatus("复制选区失败");
+        return;
+    }
+    QApplication::clipboard()->setImage(sub);
+    UpdateStatus(QString("已复制选区 %1 × %2 px 到剪贴板").arg(sub.width()).arg(sub.height()));
+}
+
+void MainWindow::CropToSelection()
+{
+    if (m_busy) {
+        UpdateStatus("上一个操作还在处理中，请稍候");
+        return;
+    }
+    if (imageData.empty() || myValue.bmpInfo.GetWidth() <= 0) {
+        function.CreateMessagebox("提示", "请先打开一张 BMP 图像");
+        return;
+    }
+    if (m_selection.isEmpty()) {
+        UpdateStatus("请先建立矩形选区");
+        return;
+    }
+    const QRect sel = m_selection;
+    if (sel.width() < 4 || sel.height() < 4) {
+        UpdateStatus("选区太小(至少 4 × 4)，已取消裁剪");
+        return;
+    }
+    ApplyOperator("裁剪到选区", [sel](std::vector<uint8_t> &d, OpContext &ctx) {
+        Function f;
+        f.CropImage(d, ctx.width, ctx.height,
+                    sel.x(), sel.y(), sel.width(), sel.height(), ctx.quad);
+    }, nullptr, [this]() { ClearSelection(); });
+}
+
+void MainWindow::ClearSelectionContent()
+{
+    if (m_busy) {
+        UpdateStatus("上一个操作还在处理中，请稍候");
+        return;
+    }
+    if (imageData.empty() || myValue.bmpInfo.GetWidth() <= 0) {
+        function.CreateMessagebox("提示", "请先打开一张 BMP 图像");
+        return;
+    }
+    if (m_selection.isEmpty()) {
+        UpdateStatus("请先建立矩形选区");
+        return;
+    }
+    const QRect sel = m_selection;
+    ApplyOperator("清除选区内容", [sel](std::vector<uint8_t> &d, OpContext &ctx) {
+        // 视觉行 y 对应内存行 height-1-y(第 0 行 = 画面最底行)
+        const int32_t rows = std::min(sel.height(), ctx.height - sel.y());
+        const int32_t cols = std::min(sel.width(), ctx.width - sel.x());
+        for (int32_t i = 0; i < rows; ++i) {
+            const int32_t memRow = ctx.height - 1 - (sel.y() + i);
+            if (memRow < 0 || memRow >= ctx.height) {
+                continue;
+            }
+            uint8_t *p = d.data() + (static_cast<size_t>(memRow) * static_cast<size_t>(ctx.width)
+                                     + static_cast<size_t>(sel.x())) * 3;
+            std::fill(p, p + static_cast<size_t>(cols) * 3, static_cast<uint8_t>(255));
+        }
+    }, nullptr, [this]() { UpdateStatus("已清除选区内容"); });
 }
 
 // ------------------------------------------------------------------
@@ -535,6 +1002,7 @@ void MainWindow::ResetAll(MyValue &myValue)
         }
     }
     ui->imageLabel->setPixmap(pixmap);
+    SyncSelectionToImage();
     imageDataHistory.clear();
     redoImageDataHistory.clear();
     {
@@ -878,6 +1346,8 @@ void MainWindow::ResetDocumentState()
     imageSize = 0;
     pixelCount = 0;
     segmentSize = 0;
+    m_selection = QRect();
+    UpdateSelectionOverlay();
 }
 
 // 切换标签：把当前状态整体换出、把目标文档状态换入(移动语义，不拷贝像素)
@@ -915,6 +1385,7 @@ void MainWindow::ActivateDocument(int index)
         cur.rotBaseQuad = m_rotBaseQuad;
         cur.rotTotal = m_rotTotal;
         cur.canSave = canSave;
+        cur.selection = m_selection;
         ResetDocumentState();   // 成员里不再保留旧文档的副本
     }
 
@@ -936,6 +1407,7 @@ void MainWindow::ActivateDocument(int index)
     m_rotBaseQuad = doc.rotBaseQuad;
     m_rotTotal = doc.rotTotal;
     canSave = doc.canSave;
+    m_selection = doc.selection;
 
     imageSize = imageData.size();
     pixelCount = imageSize / 3;
@@ -951,6 +1423,7 @@ void MainWindow::ActivateDocument(int index)
     } else {
         SetDisplayPixmap(imageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
     }
+    SyncSelectionToImage();
     UpdateStatusInfo();
     UpdateHistoryPanel();
     UpdateTabBar();
@@ -980,6 +1453,7 @@ void MainWindow::CloseDocument(int index)
         ui->imageLabel->setText(QString("双击此处，或按 Ctrl+N 打开图片"));
         ui->imageLabel->setPixmap(QPixmap());
         _SetVisible(false);
+        SyncSelectionToImage();
         UpdateStatus("已关闭全部图像");
         UpdateStatusInfo();
         UpdateHistoryPanel();
@@ -1123,6 +1597,12 @@ void MainWindow::SetBusy(bool busy)
     ui->menu_transform->setEnabled(!busy);
     ui->menu_enhance->setEnabled(!busy);
     ui->menu_morph->setEnabled(!busy);
+    if (m_selectionMenu != nullptr) {
+        m_selectionMenu->setEnabled(!busy);
+    }
+    if (m_overlay != nullptr) {
+        m_overlay->setEnabled(!busy);   // 处理中不接受选区拖拽
+    }
     // 处理中显示等待光标
     if (busy) {
         QApplication::setOverrideCursor(Qt::WaitCursor);
@@ -1695,6 +2175,9 @@ void MainWindow::_SetVisible(bool set)
     ui->menu_transform->menuAction()->setVisible(set);
     ui->menu_enhance->menuAction()->setVisible(set);
     ui->menu_morph->menuAction()->setVisible(set);
+    if (m_selectionMenu != nullptr) {
+        m_selectionMenu->menuAction()->setVisible(set);
+    }
     ui->widget->setVisible(set);
 }
 

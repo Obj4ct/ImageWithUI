@@ -105,6 +105,11 @@ QToolBar QToolButton:hover {
     color: #e8f6ff;
 }
 QToolBar QToolButton:pressed { background-color: #12333f; border-color: #1f5d70; color: #8be9f9; }
+QToolBar QToolButton:checked {
+    background-color: #123040;
+    border-color: #22d3ee;
+    color: #8be9f9;
+}
 QToolBar::separator { background: #232830; width: 1px; margin: 4px 8px; }
 
 /* ================= 文档标签栏 ================= */
@@ -391,6 +396,7 @@ QToolBar QToolButton {
 }
 QToolBar QToolButton:hover { background-color: #f0f4f8; border-color: #dfe3e8; }
 QToolBar QToolButton:pressed { background-color: #dff3f8; border-color: #9edbe6; color: #0b7285; }
+QToolBar QToolButton:checked { background-color: #e3f6fa; border-color: #22b8cf; color: #0b7285; }
 QToolBar::separator { background: #e7eaee; width: 1px; margin: 4px 8px; }
 /* ================= 文档标签栏 ================= */
 QTabBar#documentTabBar { background: transparent; }

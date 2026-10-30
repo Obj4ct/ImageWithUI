@@ -36,8 +36,18 @@ int main(int argc, char *argv[])
     if (args.contains("--screenshot")) {
         QString shotPath;
         QString imagePath;
+        QRect selectRect;
         for (int i = 1; i < args.size(); ++i) {
             const QString &arg = args.at(i);
+            if (arg.startsWith("--select=")) {
+                // --select=x,y,w,h：截图前先建立一个选区，用于视觉回归
+                const QStringList parts = arg.mid(9).split(',');
+                if (parts.size() == 4) {
+                    selectRect = QRect(parts.at(0).toInt(), parts.at(1).toInt(),
+                                       parts.at(2).toInt(), parts.at(3).toInt());
+                }
+                continue;
+            }
             if (arg.startsWith("--")) {
                 continue;
             }
@@ -56,6 +66,9 @@ int main(int argc, char *argv[])
         w.show();
         if (!imagePath.isEmpty()) {
             w.OpenImage(imagePath);
+        }
+        if (!selectRect.isEmpty()) {
+            w.SetSelection(selectRect);
         }
         QTimer::singleShot(800, &w, [&w, shotPath]() {
             w.grab().save(shotPath);

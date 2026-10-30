@@ -1122,6 +1122,114 @@ int Run(const QString &imagePath)
         out().flush();
     }
 
+    // ---------- 12. 矩形选区：夹取/按文档保存/清除内容/裁剪 ----------
+    {
+        const QString selPathA = QDir::tempPath() + "/imagewithui_sel_a.png";
+        const QString selPathB = QDir::tempPath() + "/imagewithui_sel_b.png";
+        {
+            QImage a(80, 60, QImage::Format_RGB32);
+            a.fill(qRgb(40, 120, 200));
+            a.save(selPathA, "PNG");
+            QImage b(80, 60, QImage::Format_RGB32);
+            b.fill(qRgb(200, 120, 40));
+            b.save(selPathB, "PNG");
+        }
+
+        QString failReason;
+        {
+            MainWindow win;
+            if (!win.OpenImage(selPathA)) {
+                failReason = "无法打开测试图";
+            } else {
+                // 超出图像范围的选区应被夹到图像内
+                win.SetSelection(QRect(-5, -5, 100, 100));
+                if (!win.HasSelection() || win.SelectionRect() != QRect(0, 0, 80, 60)) {
+                    failReason = "选区没有被夹到图像范围内";
+                } else {
+                    win.SetSelection(QRect(10, 20, 30, 20));
+                    if (win.SelectionRect() != QRect(10, 20, 30, 20)) {
+                        failReason = "选区设置失败";
+                    }
+                }
+
+                // 选区按文档保存：切到新文档应为空，切回来应恢复
+                if (failReason.isEmpty()) {
+                    QTabBar *bar = win.findChild<QTabBar *>("documentTabBar");
+                    if (!win.OpenImage(selPathB) || bar == nullptr || bar->count() != 2) {
+                        failReason = "打开第二张图失败";
+                    } else if (!win.HasSelection()) {
+                        // 新文档没有选区是正确的
+                    } else {
+                        failReason = "打开新文档后继承了上一文档的选区";
+                    }
+                    if (failReason.isEmpty()) {
+                        bar->setCurrentIndex(0);   // 切回文档 A
+                        if (win.SelectionRect() != QRect(10, 20, 30, 20)) {
+                            failReason = "切回文档 A 后选区没有恢复";
+                        }
+                    }
+                }
+
+                // 清除选区内容：历史 +1，选区内部变白、外部不变
+                if (failReason.isEmpty()) {
+                    const size_t historyBefore = win.imageDataHistory.size();
+                    win.ClearSelectionContent();
+                    QEventLoop loop;
+                    QTimer::singleShot(1200, &loop, &QEventLoop::quit);
+                    loop.exec();
+
+                    if (win.imageDataHistory.size() != historyBefore + 1) {
+                        failReason = "清除选区内容后历史未增加";
+                    } else {
+                        const std::vector<uint8_t> pixels = win.CurrentImageData();
+                        const QRect sel = win.SelectionRect();
+                        const int32_t w = win.myValue.bmpInfo.GetWidth();
+                        const int32_t h = win.myValue.bmpInfo.GetHeight();
+                        const int32_t cx = sel.x() + sel.width() / 2;
+                        const int32_t cy = sel.y() + sel.height() / 2;
+                        const size_t inside = (static_cast<size_t>(h - 1 - cy) * w + cx) * 3;
+                        const size_t outside = (static_cast<size_t>(h - 1) * w + 0) * 3;
+                        if (inside + 2 >= pixels.size() || outside + 2 >= pixels.size()) {
+                            failReason = "像素索引越界";
+                        } else if (pixels[inside] != 255 || pixels[inside + 1] != 255 ||
+                                   pixels[inside + 2] != 255) {
+                            failReason = "选区内部没有变白";
+                        } else if (pixels[outside] == 255 && pixels[outside + 1] == 255) {
+                            failReason = "选区外部也被改动了";
+                        }
+                    }
+                }
+
+                // 裁剪到选区：尺寸变成选区大小，完成后选区清空
+                if (failReason.isEmpty()) {
+                    const QRect sel = win.SelectionRect();
+                    win.CropToSelection();
+                    QEventLoop loop;
+                    QTimer::singleShot(1200, &loop, &QEventLoop::quit);
+                    loop.exec();
+
+                    if (win.myValue.bmpInfo.GetWidth() != sel.width() ||
+                        win.myValue.bmpInfo.GetHeight() != sel.height()) {
+                        failReason = "裁剪到选区后尺寸不对";
+                    } else if (win.HasSelection()) {
+                        failReason = "裁剪到选区后选区没有清空";
+                    }
+                }
+            }
+        }
+        QFile::remove(selPathA);
+        QFile::remove(selPathB);
+
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 矩形选区 : 夹取/按文档保存/清除内容/裁剪到选区\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 矩形选区 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
     out() << "------------------------------------------------\n";
     out() << "通过 " << g_pass << " 项，失败 " << g_fail << " 项\n";
     out().flush();
