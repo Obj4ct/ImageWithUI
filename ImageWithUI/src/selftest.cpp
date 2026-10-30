@@ -406,7 +406,402 @@ int Run(const QString &imagePath)
         check("边界参数(阈值0/标准差0/sigma0)", blurred, bytes, false, nullptr);
     }
 
-    // ---------- 5. 写回文件并重新读取，验证文件格式正确 ----------
+    // ---------- 4.5 P2-A 新增算子 ----------
+    auto expect = [](const QString &name, bool ok, const QString &detail) {
+        if (ok) {
+            ++g_pass;
+            out() << "[PASS] " << name << "  " << detail << "\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] " << name << "  " << detail << "\n";
+        }
+        out().flush();
+    };
+    {
+        // 水平翻转两次必须逐字节复原
+        auto data = copyOf();
+        int32_t rw = w, rh = h;
+        ContentQuad quad;
+        quad.setRect(w, h);
+        fn.FlipImage(data, rw, rh, Function::FlipMode::Horizontal, quad);
+        fn.FlipImage(data, rw, rh, Function::FlipMode::Horizontal, quad);
+        expect("水平翻转两次复原", data == base.imageData && rw == w && rh == h, "");
+    }
+    {
+        auto data = copyOf();
+        int32_t rw = w, rh = h;
+        ContentQuad quad;
+        quad.setRect(w, h);
+        fn.FlipImage(data, rw, rh, Function::FlipMode::Vertical, quad);
+        fn.FlipImage(data, rw, rh, Function::FlipMode::Vertical, quad);
+        expect("垂直翻转两次复原", data == base.imageData && rw == w && rh == h, "");
+    }
+    {
+        // 转置：宽高互换，两次转置复原
+        auto data = copyOf();
+        int32_t rw = w, rh = h;
+        ContentQuad quad;
+        quad.setRect(w, h);
+        fn.FlipImage(data, rw, rh, Function::FlipMode::Transpose, quad);
+        const bool swapped = (rw == h && rh == w);
+        fn.FlipImage(data, rw, rh, Function::FlipMode::Transpose, quad);
+        expect("转置两次复原", swapped && data == base.imageData && rw == w && rh == h,
+               swapped ? "" : "宽高未交换");
+    }
+    {
+        auto data = copyOf();
+        int32_t rw = w, rh = h;
+        ContentQuad quad;
+        quad.setRect(w, h);
+        fn.FlipImage(data, rw, rh, Function::FlipMode::AntiTranspose, quad);
+        fn.FlipImage(data, rw, rh, Function::FlipMode::AntiTranspose, quad);
+        expect("副对角镜像两次复原", data == base.imageData && rw == w && rh == h, "");
+    }
+    {
+        // 裁剪：尺寸正确，且新图左上角(视觉)对应源图 (x,y)
+        auto data = copyOf();
+        int32_t rw = w, rh = h;
+        ContentQuad quad;
+        quad.setRect(w, h);
+        const int32_t cx = w / 4, cy = h / 4;
+        const int32_t cw = w / 2, ch = h / 2;
+        fn.CropImage(data, rw, rh, cx, cy, cw, ch, quad);
+        const size_t srcIdx = (static_cast<size_t>(h - 1 - cy) * w + cx) * 3;
+        const size_t dstIdx = static_cast<size_t>(ch - 1) * cw * 3;
+        const bool dimOk = (rw == cw && rh == ch && data.size() == static_cast<size_t>(cw) * ch * 3);
+        const bool pixOk = dimOk && data[dstIdx] == base.imageData[srcIdx] &&
+                           data[dstIdx + 1] == base.imageData[srcIdx + 1] &&
+                           data[dstIdx + 2] == base.imageData[srcIdx + 2];
+        expect("裁剪尺寸与像素映射", dimOk && pixOk,
+               QString("%1x%2 -> %3x%4").arg(w).arg(h).arg(rw).arg(rh));
+    }
+    {
+        // 直方图均衡化：尺寸不变、内容改变，且亮度直方图熵上升(分布更均匀)
+        auto data = copyOf();
+        fn.HistogramEqualize(data, w, h);
+        auto lumEntropy = [](const std::vector<uint8_t> &d) {
+            double hist[256] = {0};
+            size_t n = 0;
+            for (size_t i = 0; i + 2 < d.size(); i += 3) {
+                int g = static_cast<int>(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
+                g = std::max(0, std::min(255, g));
+                hist[g] += 1.0;
+                ++n;
+            }
+            double entropy = 0.0;
+            if (n == 0) {
+                return entropy;
+            }
+            for (int v = 0; v < 256; ++v) {
+                if (hist[v] > 0) {
+                    const double p = hist[v] / static_cast<double>(n);
+                    entropy -= p * std::log2(p);
+                }
+            }
+            return entropy;
+        };
+        const double e0 = lumEntropy(base.imageData);
+        const double e1 = lumEntropy(data);
+        expect("直方图均衡化", data.size() == bytes && data != base.imageData && e1 > e0 + 0.05,
+               QString("亮度熵 %1 -> %2").arg(e0, 0, 'f', 3).arg(e1, 0, 'f', 3));
+    }
+    {
+        // 腐蚀：逐通道只会变小或不变
+        auto data = copyOf();
+        fn.Morphology(data, w, h, Function::MorphType::Erode, 0, pixels);
+        bool notGreater = true;
+        for (size_t i = 0; i < data.size(); ++i) {
+            if (data[i] > base.imageData[i]) {
+                notGreater = false;
+                break;
+            }
+        }
+        expect("腐蚀(只减不增)", data.size() == bytes && data != base.imageData && notGreater, "");
+    }
+    {
+        auto data = copyOf();
+        fn.Morphology(data, w, h, Function::MorphType::Dilate, 0, pixels);
+        bool notLess = true;
+        for (size_t i = 0; i < data.size(); ++i) {
+            if (data[i] < base.imageData[i]) {
+                notLess = false;
+                break;
+            }
+        }
+        expect("膨胀(只增不减)", data.size() == bytes && data != base.imageData && notLess, "");
+    }
+    {
+        auto data = copyOf();
+        fn.Morphology(data, w, h, Function::MorphType::Open, 0, pixels);
+        expect("开运算", data.size() == bytes && data != base.imageData, "");
+    }
+    {
+        auto data = copyOf();
+        fn.Morphology(data, w, h, Function::MorphType::Close, 0, pixels);
+        expect("闭运算", data.size() == bytes && data != base.imageData, "");
+    }
+    {
+        // 恒等核必须逐字节不改变图像
+        auto data = copyOf();
+        double identity[9] = {0, 0, 0, 0, 1, 0, 0, 0, 0};
+        std::vector<uint8_t> out;
+        fn.Convolve3x3(data, out, w, h, identity, 1.0, 0.0, 0, pixels);
+        expect("卷积：恒等核", out == base.imageData, "");
+    }
+    {
+        auto data = copyOf();
+        double sharpen[9] = {0, -1, 0, -1, 5, -1, 0, -1, 0};
+        std::vector<uint8_t> out;
+        fn.Convolve3x3(data, out, w, h, sharpen, 1.0, 0.0, 0, pixels);
+        check("卷积：锐化核", out, bytes, true, &base.imageData);
+    }
+    {
+        // USM 强度 0 = 不变
+        auto data = copyOf();
+        std::vector<uint8_t> out;
+        fn.USMSharpen(data, out, w, h, 1.2, 0.0, 6.0);
+        expect("USM 强度0不改变", out == base.imageData, "");
+    }
+    {
+        auto data = copyOf();
+        std::vector<uint8_t> out;
+        fn.USMSharpen(data, out, w, h, 1.2, 1.5, 0.0);
+        check("USM 锐化", out, bytes, true, &base.imageData);
+    }
+    {
+        // 旋转稳定性(崩溃回归)：任意角度旋转后 quad 不再是轴对齐矩形，
+        // 此时连续 90° 旋转必须仍然只交换宽高、不扩大画布像素总量；
+        // 旧实现会按内容外接矩形重建画布，每转一次膨胀一圈，反复旋转最终撑爆内存。
+        std::vector<uint8_t> data = base.imageData;
+        int32_t rw = w, rh = h;
+        ContentQuad quad;
+        quad.setRect(w, h);
+        fn.RotateImage(data, rw, rh, 23.0, quad);   // 让 quad 变成斜置四边形
+        bool ok = quad.isValid() && data.size() == static_cast<size_t>(rw) * rh * 3;
+        const size_t pixelsBefore = static_cast<size_t>(rw) * rh;
+        for (int i = 0; i < 4 && ok; ++i) {
+            fn.RotateImage(data, rw, rh, 90.0, quad);
+            if (data.size() != static_cast<size_t>(rw) * rh * 3 ||
+                static_cast<size_t>(rw) * rh != pixelsBefore) {
+                ok = false;
+            }
+        }
+        const QImage img = ok ? Function::ToDisplayImage(data, rw, rh) : QImage();
+        expect("反复 90° 旋转不膨胀", ok && !img.isNull() && img.width() == rw,
+               QString("画布像素 %1 -> %2×%3").arg(pixelsBefore).arg(rw).arg(rh));
+    }
+    {
+        // 画质回归：旋转必须"从同一基准按累计角度重采样一次"。
+        // 若像旧实现那样在上一次(已被插值糊过)的结果上反复插值，图片会越来越模糊。
+        // 用拉普拉斯能量衡量锐利度：基准累计方案必须明显更锐利。
+        auto laplacianEnergy = [](const std::vector<uint8_t> &d, int32_t dw, int32_t dh) {
+            if (dw < 3 || dh < 3 || d.size() < static_cast<size_t>(dw) * dh * 3) {
+                return 0.0;
+            }
+            auto lum = [&d, dw](int32_t x, int32_t y) {
+                const size_t i = (static_cast<size_t>(y) * dw + x) * 3;
+                return 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+            };
+            double sum = 0.0;
+            for (int32_t y = 1; y + 1 < dh; ++y) {
+                for (int32_t x = 1; x + 1 < dw; ++x) {
+                    const double v = 4 * lum(x, y) - lum(x - 1, y) - lum(x + 1, y)
+                                     - lum(x, y - 1) - lum(x, y + 1);
+                    sum += (v < 0.0) ? -v : v;
+                }
+            }
+            return sum / (static_cast<double>(dw - 2) * static_cast<double>(dh - 2));
+        };
+        ContentQuad q0;
+        q0.setRect(w, h);
+        // (A) 基准 + 累计角度 60°：只插值一次
+        std::vector<uint8_t> once = base.imageData;
+        int32_t ow = w, oh = h;
+        ContentQuad oq = q0;
+        fn.RotateImage(once, ow, oh, 60.0, oq);
+        // (B) 在上一次结果上再插值，共 6 次 10°
+        std::vector<uint8_t> chain = base.imageData;
+        int32_t cw = w, ch = h;
+        ContentQuad cq = q0;
+        for (int i = 0; i < 6; ++i) {
+            fn.RotateImage(chain, cw, ch, 10.0, cq);
+        }
+        const double sharpBase = laplacianEnergy(once, ow, oh);
+        const double sharpChain = laplacianEnergy(chain, cw, ch);
+        expect("旋转画质：基准累计优于反复插值", sharpBase > sharpChain * 1.05,
+               QString("锐度 %1 vs %2").arg(sharpBase, 0, 'f', 2).arg(sharpChain, 0, 'f', 2));
+    }
+    {
+        // 非法角度(0 度)不应改变任何内容
+        std::vector<uint8_t> data = copyOf();
+        int32_t rw = w, rh = h;
+        ContentQuad quad;
+        quad.setRect(w, h);
+        fn.RotateImage(data, rw, rh, 0.0, quad);
+        expect("旋转 0° 保持不变", data == base.imageData && rw == w && rh == h, "");
+    }
+    {
+        // 多格式导出：PNG 落盘后能被重新读取，尺寸一致
+        const QImage img = Function::ToDisplayImage(base.imageData, w, h);
+        const QString pngPath = QDir::tempPath() + "/imagewithui_selftest_out.png";
+        const bool saved = img.save(pngPath, "PNG");
+        QImage back(pngPath);
+        expect("导出 PNG", saved && back.width() == w && back.height() == h,
+               saved ? "" : "保存失败");
+        QFile::remove(pngPath);
+    }
+
+
+    {
+        // 显示路径崩溃回归：缓冲区是紧凑的 width*3 字节/行，
+        // 构造 QImage 时必须显式给 bytesPerLine=width*3。
+        // 若用 4 参数构造，Qt 会把行宽补齐到 4 字节对齐，宽度不是 4 的倍数时
+        // 于是每行错读 1~3 字节：画面撕裂(像素错位)，并读到缓冲区末尾之外
+        // (Debug CRT 的 memcpy 里概率性触发 0xC0000005 —— 任意角度旋转后宽度常不是 4 的倍数)。
+        const int32_t tw = 101, th = 9;          // 101*3 = 303，不是 4 的倍数
+        std::vector<uint8_t> buf(static_cast<size_t>(tw) * th * 3);
+        for (int32_t mr = 0; mr < th; ++mr) {    // mr 为内存行(BMP 自底向上)
+            for (int32_t c = 0; c < tw; ++c) {
+                const size_t i = (static_cast<size_t>(mr) * tw + c) * 3;
+                buf[i + 0] = static_cast<uint8_t>((c * 7 + mr * 13) % 256);
+                buf[i + 1] = static_cast<uint8_t>((c * 5 + mr * 11 + 60) % 256);
+                buf[i + 2] = static_cast<uint8_t>((c * 3 + mr * 17 + 120) % 256);
+            }
+        }
+        const QImage img = Function::ToDisplayImage(buf, tw, th);
+        int mismatch = 0;
+        if (img.isNull() || img.width() != tw || img.height() != th) {
+            mismatch = tw * th;
+        } else {
+            for (int32_t vy = 0; vy < th; ++vy) {        // 视觉行
+                const int32_t mr = th - 1 - vy;          // 对应的内存行
+                for (int32_t c = 0; c < tw; ++c) {
+                    const size_t i = (static_cast<size_t>(mr) * tw + c) * 3;
+                    const QRgb p = img.pixel(c, vy);
+                    if (qBlue(p) != buf[i] || qGreen(p) != buf[i + 1] || qRed(p) != buf[i + 2]) {
+                        ++mismatch;
+                    }
+                }
+            }
+        }
+        expect("显示路径行宽正确(宽非4倍数)", mismatch == 0,
+               QString("错位像素 %1 / %2").arg(mismatch).arg(tw * th));
+    }
+
+    // ---------- 5. 非 BMP 格式读取：PNG 往返(通道顺序 + 自底向上布局) ----------
+    {
+        QImage pngSrc(4, 3, QImage::Format_RGB32);
+        for (int y = 0; y < 3; ++y) {
+            for (int x = 0; x < 4; ++x) {
+                // 每个像素颜色都不同，一旦通道顺序或上下翻转错误必然失败
+                pngSrc.setPixel(x, y, qRgb(10 + x, 20 + y, 30 + x + y));
+            }
+        }
+        const QString pngPath = QDir::tempPath() + "/imagewithui_selftest_fmt.png";
+        const bool savedPng = pngSrc.save(pngPath, "PNG");
+
+        MyValue mv;
+        QString e;
+        const bool readOk = savedPng && MYFunction::ReadImageFile(pngPath.toStdString(), mv, e);
+        bool ok = readOk && mv.bmpInfo.GetWidth() == 4 && mv.bmpInfo.GetHeight() == 3 &&
+                  mv.imageData.size() == static_cast<size_t>(4 * 3 * 3);
+        if (ok) {
+            for (int y = 0; y < 3 && ok; ++y) {
+                const int srcY = 2 - y;  // 内部第 0 行 = 画面最底行
+                for (int x = 0; x < 4; ++x) {
+                    const size_t i = (static_cast<size_t>(y) * 4 + static_cast<size_t>(x)) * 3;
+                    if (mv.imageData[i] != static_cast<uint8_t>(30 + x + srcY) ||  // B
+                        mv.imageData[i + 1] != static_cast<uint8_t>(20 + srcY) ||  // G
+                        mv.imageData[i + 2] != static_cast<uint8_t>(10 + x)) {    // R
+                        ok = false;
+                        break;
+                    }
+                }
+            }
+        }
+        if (ok) {
+            ++g_pass;
+            out() << "[PASS] PNG 读取 : 通道顺序与自底向上布局正确\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] PNG 读取失败 : " << e << "\n";
+        }
+        out().flush();
+        QFile::remove(pngPath);
+    }
+
+    // ---------- 6. 眼部放大：径向放大(中心不被平移、圆外像素不变) ----------
+    {
+        const int32_t w = 41, h = 41, cx = 20, cy = 20, r = 12;
+        std::vector<uint8_t> img(static_cast<size_t>(w) * h * 3, 0);
+        // 圆心画一个 3×3 的白色方块
+        for (int32_t y = cy - 1; y <= cy + 1; ++y) {
+            for (int32_t x = cx - 1; x <= cx + 1; ++x) {
+                const size_t i = (static_cast<size_t>(y) * w + x) * 3;
+                img[i] = img[i + 1] = img[i + 2] = 255;
+            }
+        }
+        auto brightCount = [&img]() {
+            size_t n = 0;
+            for (size_t i = 0; i + 2 < img.size(); i += 3) {
+                if (img[i] >= 128 && img[i + 1] >= 128 && img[i + 2] >= 128) {
+                    ++n;
+                }
+            }
+            return n;
+        };
+        const size_t before = brightCount();
+        Function::EnlargeEye(img, w, h, cx, cy, r, 0.6);
+        const size_t after = brightCount();
+
+        // 白色方块被径向放大后面积应明显变大
+        const bool grew = after > before && after * 2 > before * 3;
+        // 质心必须仍在圆心附近：旧实现是沿对角线整体平移，质心会明显跑偏
+        double sumX = 0, sumY = 0;
+        size_t n = 0;
+        for (int32_t y = 0; y < h; ++y) {
+            for (int32_t x = 0; x < w; ++x) {
+                const size_t i = (static_cast<size_t>(y) * w + x) * 3;
+                if (img[i] >= 128) {
+                    sumX += x;
+                    sumY += y;
+                    ++n;
+                }
+            }
+        }
+        const bool centered = n > 0 &&
+                              std::abs(sumX / static_cast<double>(n) - cx) < 0.8 &&
+                              std::abs(sumY / static_cast<double>(n) - cy) < 0.8;
+        // 半径之外的像素不允许被改动
+        bool outsideIntact = true;
+        for (int32_t y = 0; y < h && outsideIntact; ++y) {
+            for (int32_t x = 0; x < w; ++x) {
+                const double d = std::sqrt(static_cast<double>(x - cx) * (x - cx) +
+                                           static_cast<double>(y - cy) * (y - cy));
+                if (d > static_cast<double>(r)) {
+                    const size_t i = (static_cast<size_t>(y) * w + x) * 3;
+                    if (img[i] != 0 || img[i + 1] != 0 || img[i + 2] != 0) {
+                        outsideIntact = false;
+                        break;
+                    }
+                }
+            }
+        }
+        if (grew && centered && outsideIntact) {
+            ++g_pass;
+            out() << "[PASS] 眼部放大 : 亮块面积 " << before << " -> " << after
+                  << "，质心 (" << sumX / static_cast<double>(n) << ", "
+                  << sumY / static_cast<double>(n) << ")，圆外未改动\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 眼部放大 : grew=" << (grew ? 1 : 0) << " centered=" << (centered ? 1 : 0)
+                  << " outsideIntact=" << (outsideIntact ? 1 : 0)
+                  << " 面积 " << before << " -> " << after << "\n";
+        }
+        out().flush();
+    }
+
+    // ---------- 7. 写回文件并重新读取，验证文件格式正确 ----------
     {
         auto data = copyOf();
         fn.ConvertToGray(data, 0, pixels);

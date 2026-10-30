@@ -44,8 +44,9 @@ private:
     MyValue myValue_2;
 
     //下拉框选项
-    BlendMode currentBlendMode;
-    double currentAlpha;
+    BlendMode currentBlendMode = BLEND_NORMAL;
+    double currentAlpha = 1.0;
+    bool m_blending = false;   // 防止滑块/下拉框在混合过程中重入
     //first image data
     std::vector<uint8_t> originalImageData_1;
 

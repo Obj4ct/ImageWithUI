@@ -195,6 +195,9 @@ public:
     // 读取 BMP。失败时返回 false 并把原因写入 errMsg(不再直接 exit 掉整个程序)。
     // 仅支持 24 位未压缩(BGR888) BMP；自顶向下存储(height<0)的文件会被自动转为自底向上。
     static bool ReadBMPFile(const std::string &fileName, MyValue &outValue, QString &errMsg);
+    // 读取常见图片格式：BMP 走 ReadBMPFile，其余(BMP/PNG/JPG/JPEG/GIF/TIFF/TGA/WebP/ICO/SVG 等)
+    // 交给 Qt 图像插件解码；统一转成 24 位 BGR 自底向上内存，透明像素按白底合成。
+    static bool ReadImageFile(const std::string &fileName, MyValue &outValue, QString &errMsg);
     // 保存 BMP，filePath 为完整输出路径
     static bool WriteBMPFile(const std::string &filePath, const std::vector<uint8_t> &imageData, BMP &bmp, BMPInfo &bmpInfo);
     static void SetBMPHeaderValues(BMP &bmp, BMPInfo &bmpInfo, int width, int height, uint16_t bitsPerPixel);

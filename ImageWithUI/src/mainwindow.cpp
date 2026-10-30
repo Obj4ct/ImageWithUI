@@ -3,8 +3,12 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 #include "Theme.h"
+#include "editdialogs.h"
 #include <QAction>
 #include <QMenu>
+#include <QImageWriter>
+#include <QSignalBlocker>
+#include <QFont>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent),
@@ -56,8 +60,8 @@ MainWindow::MainWindow(QWidget *parent)
 
     // 状态栏：左侧提示 + 右侧信息
     ui->imageLabel->setAlignment(Qt::AlignCenter);
-    ui->imageLabel->setText(QString("双击此处，或按 Ctrl+N 打开 24 位 BMP 图像"));
-    statusBar()->showMessage("就绪 · 请先打开一张 BMP 图像");
+    ui->imageLabel->setText(QString("双击此处，或按 Ctrl+N 打开图片"));
+    statusBar()->showMessage("就绪 · 请先打开一张图片");
     UpdateStatusInfo();
 }
 
@@ -76,9 +80,11 @@ void MainWindow::mouseDoubleClickEvent(QMouseEvent *event)
 
     // 文件默认路径
     const QString defaultPath = QDir::homePath();
-    // 设置过滤
-    const QString filter = "BMP文件(*.bmp)";
-    const QString path = QFileDialog::getOpenFileName(this, "选择BMP文件", defaultPath, filter);
+    // 常见图片格式（BMP/PNG/JPG/GIF/TIFF/WebP/TGA/ICO/SVG）
+    const QString filter = QString("图片文件 (*.bmp *.png *.jpg *.jpeg *.gif *.tif *.tiff *.webp *.tga *.ico *.svg);;"
+                                   "BMP (*.bmp);;PNG (*.png);;JPEG (*.jpg *.jpeg);;GIF (*.gif);;"
+                                   "TIFF (*.tif *.tiff);;WebP (*.webp);;TGA (*.tga);;图标 (*.ico *.icns);;SVG (*.svg)");
+    const QString path = QFileDialog::getOpenFileName(this, "选择图片文件", defaultPath, filter);
     if (path.isEmpty()) {
         qDebug() << "未选择文件";
         return;
@@ -141,8 +147,19 @@ void MainWindow::ResetAll(MyValue &myValue)
     ui->imageLabel->setPixmap(pixmap);
     imageDataHistory.clear();
     redoImageDataHistory.clear();
+    {
+        // 重置后把"原图"作为历史第 1 步，历史面板与撤销行为保持一致
+        ImageSnapshot snap;
+        snap.data = imageData;
+        snap.width = myValue.bmpInfo.GetWidth();
+        snap.height = myValue.bmpInfo.GetHeight();
+        snap.quad = m_contentQuad;
+        SaveImageDataToHistory(snap);
+    }
+    InvalidateRotateBase();
     UpdateStatus("已重置为原始图像");
     UpdateStatusInfo();
+    UpdateHistoryPanel();
 }
 
 ReturnValue MainWindow::CheckOK(QLineEdit * lineEdit)
@@ -199,10 +216,21 @@ OperationType MainWindow::SaveImageDataToHistory(const ImageSnapshot &snap)
 }
 
 // 应用一个快照：写历史 + 同步尺寸 + 刷新显示
-void MainWindow::ApplySnapshot(const ImageSnapshot &snap)
+void MainWindow::ApplySnapshot(const ImageSnapshot &snap, bool keepRotateBase)
 {
     if (snap.data.empty()) {
         return;
+    }
+    // 尺寸与像素数据必须严格匹配，否则显示阶段会读越界
+    if (snap.width <= 0 || snap.height <= 0 ||
+        snap.data.size() != static_cast<size_t>(snap.width) * static_cast<size_t>(snap.height) * 3) {
+        UpdateStatus("结果尺寸与像素数据不一致，已忽略本次操作");
+        return;
+    }
+    // 只有旋转结果才继续沿用无损基准；其它算子改的是像素本身，
+    // 基准必须换成新的当前图像，否则后续旋转会丢掉这些修改
+    if (!keepRotateBase) {
+        InvalidateRotateBase();
     }
     SaveImageDataToHistory(snap);
     m_contentQuad = snap.quad;
@@ -213,6 +241,7 @@ void MainWindow::ApplySnapshot(const ImageSnapshot &snap)
     myValue.bmp.SetFileSize(sizeof(BMP) + sizeof(BMPInfo) +
                             static_cast<uint32_t>(snap.width) * static_cast<uint32_t>(snap.height) * 3);
     ShowImage(snap.data, myValue, snap.width, snap.height);
+    UpdateHistoryPanel();
 }
 
 
@@ -233,8 +262,10 @@ void MainWindow::UndoImageProcessing()
     myValue.bmpInfo.SetWidth(snap.width);
     myValue.bmpInfo.SetHeight(snap.height);
     ShowImage(imageData, myValue, snap.width, snap.height);
+    InvalidateRotateBase();   // 撤销后以当前图像作为新的旋转基准
     qDebug() << "Undo operation";
     UpdateStatus("已撤销");
+    UpdateHistoryPanel();
 }
 
 void MainWindow::RedoImageProcessing()
@@ -254,16 +285,65 @@ void MainWindow::RedoImageProcessing()
     myValue.bmpInfo.SetWidth(snap.width);
     myValue.bmpInfo.SetHeight(snap.height);
     ShowImage(imageData, myValue, snap.width, snap.height);
+    InvalidateRotateBase();   // 重做后以当前图像作为新的旋转基准
     qDebug() << "Redo operation";
     UpdateStatus("已重做");
+    UpdateHistoryPanel();
 }
 
-// 打开 BMP 文件并初始化界面状态
+// 刷新右侧"历史记录"面板：每次图像状态变化后调用
+void MainWindow::UpdateHistoryPanel()
+{
+    if (ui->historyList == nullptr) {
+        return;
+    }
+    // 重建列表期间屏蔽信号，避免 setCurrentRow 反过来触发点击槽
+    const QSignalBlocker blocker(ui->historyList);
+    ui->historyList->clear();
+    const int lastIndex = static_cast<int>(imageDataHistory.size()) - 1;
+    int index = 0;
+    for (auto it = imageDataHistory.begin(); it != imageDataHistory.end(); ++it, ++index) {
+        QString text = QString("步骤 %1 · %2×%3").arg(index + 1).arg(it->width).arg(it->height);
+        if (index == 0) {
+            text += QString(" · 原图");
+        }
+        QListWidgetItem *entry = new QListWidgetItem(text);
+        if (index == lastIndex) {
+            // 当前步用加粗 + 箭头标记；列表禁用选中，避免系统高亮色破坏深色主题
+            QFont font = entry->font();
+            font.setBold(true);
+            entry->setFont(font);
+            entry->setText(QString("▶ ") + text);
+        }
+        ui->historyList->addItem(entry);
+    }
+    ui->historyList->scrollToBottom();
+}
+
+// 点击历史项：连续撤销/重做到目标步骤(历史是栈，当前状态永远是最后一项)
+void MainWindow::on_historyList_itemClicked(QListWidgetItem *item)
+{
+    if (item == nullptr) {
+        return;
+    }
+    const int target = ui->historyList->row(item);
+    int current = static_cast<int>(imageDataHistory.size()) - 1;
+    while (current > target && imageDataHistory.size() > 1) {
+        UndoImageProcessing();
+        --current;
+    }
+    while (current < target && !redoImageDataHistory.empty()) {
+        RedoImageProcessing();
+        ++current;
+    }
+}
+
+// 打开图片文件并初始化界面状态（BMP 走自有解析器，其它格式由 Qt 插件解码）
 bool MainWindow::LoadImage(const QString &path)
 {
     MyValue loaded;
     QString errMsg;
-    if (!MYFunction::ReadBMPFile(path.toStdString(), loaded, errMsg)) {
+    if (!MYFunction::ReadImageFile(path.toStdString(), loaded, errMsg)) {
         function.CreateMessagebox("打开失败", errMsg);
         UpdateStatus("打开失败：" + errMsg);
         return false;
@@ -292,6 +372,7 @@ bool MainWindow::LoadImage(const QString &path)
         m_originalWidth = snap.width;
         m_originalHeight = snap.height;
         m_contentQuad = snap.quad;
+        InvalidateRotateBase();
         SaveImageDataToHistory(snap);
     }
 
@@ -302,6 +383,7 @@ bool MainWindow::LoadImage(const QString &path)
     canSave = true;
     UpdateStatus(QString("已打开 %1").arg(QFileInfo(path).fileName()));
     UpdateStatusInfo();
+    UpdateHistoryPanel();
     return true;
 }
 
@@ -309,9 +391,11 @@ void MainWindow::on_openImage_triggered()
 {
     // 文件默认路径
     const QString defaultPath = QDir::homePath();
-    // 设置过滤
-    const QString filter = "BMP文件(*.bmp)";
-    const QString path = QFileDialog::getOpenFileName(this, "选择BMP文件", defaultPath, filter);
+    // 常见图片格式（BMP/PNG/JPG/GIF/TIFF/WebP/TGA/ICO/SVG）
+    const QString filter = QString("图片文件 (*.bmp *.png *.jpg *.jpeg *.gif *.tif *.tiff *.webp *.tga *.ico *.svg);;"
+                                   "BMP (*.bmp);;PNG (*.png);;JPEG (*.jpg *.jpeg);;GIF (*.gif);;"
+                                   "TIFF (*.tif *.tiff);;WebP (*.webp);;TGA (*.tga);;图标 (*.ico *.icns);;SVG (*.svg)");
+    const QString path = QFileDialog::getOpenFileName(this, "选择图片文件", defaultPath, filter);
     if (path.isEmpty()) {
         qDebug() << "未选择文件";
         return;
@@ -328,29 +412,53 @@ void MainWindow::on_actionsave_triggered()
     }
 
     // 保存当前正在显示的图像(而不是历史栈里的旧数据)
-    std::vector<uint8_t> saveImageData = imageData;
-
-    QString filePath = QFileDialog::getSaveFileName(nullptr, "保存文件", "", "BMP文件(*.bmp)");
+    const QString filter = QString("BMP 图像 (*.bmp);;PNG 图像 (*.png);;JPEG 图像 (*.jpg *.jpeg);;"
+                                   "TIFF 图像 (*.tif *.tiff);;WebP 图像 (*.webp)");
+    QString filePath = QFileDialog::getSaveFileName(this, "保存图像", "", filter);
     if (filePath.isEmpty()) {
         qDebug() << "保存操作已取消。";
         return;
     }
-    if (!filePath.endsWith(".bmp", Qt::CaseInsensitive)) {
+
+    QString suffix = QFileInfo(filePath).suffix().toLower();
+    if (suffix.isEmpty()) {
         filePath += ".bmp";
+        suffix = "bmp";
     }
 
-    // 用当前数据的实际尺寸重写头信息，保证保存出来的文件可被正常读取
-    BMP outBmp = myValue.bmp;
-    BMPInfo outInfo = myValue.bmpInfo;
     const int32_t width = myValue.bmpInfo.GetWidth();
     const int32_t height = myValue.bmpInfo.GetHeight();
-    MYFunction::SetBMPHeaderValues(outBmp, outInfo, width, height, outInfo.GetBitsPerPixel());
 
-    if (MYFunction::WriteBMPFile(filePath.toStdString(), saveImageData, outBmp, outInfo)) {
-        UpdateStatus(QString("已保存到 %1").arg(QFileInfo(filePath).fileName()));
-        qDebug() << "保存成功！";
+    // BMP：沿用项目自己的读写实现，保证自底向上的内存布局不被破坏
+    if (suffix == "bmp") {
+        BMP outBmp = myValue.bmp;
+        BMPInfo outInfo = myValue.bmpInfo;
+        MYFunction::SetBMPHeaderValues(outBmp, outInfo, width, height, outInfo.GetBitsPerPixel());
+        if (MYFunction::WriteBMPFile(filePath.toStdString(), imageData, outBmp, outInfo)) {
+            UpdateStatus(QString("已保存到 %1").arg(QFileInfo(filePath).fileName()));
+        } else {
+            function.CreateMessagebox("保存失败", "无法写入文件，请检查路径是否有效");
+        }
+        return;
+    }
+
+    // 其它格式：交给 Qt 图像插件（PNG / JPEG / TIFF / WebP）
+    const QImage image = Function::ToDisplayImage(imageData, width, height);
+    if (image.isNull()) {
+        function.CreateMessagebox("保存失败", "当前图像数据无效");
+        return;
+    }
+    QImageWriter writer(filePath);
+    if (suffix == "jpg" || suffix == "jpeg") {
+        writer.setQuality(92);
+    }
+    if (writer.write(image)) {
+        UpdateStatus(QString("已导出 %1").arg(QFileInfo(filePath).fileName()));
     } else {
-        function.CreateMessagebox("保存失败", "无法写入文件，请检查路径是否有效");
+        function.CreateMessagebox("保存失败",
+                                  "无法写入该格式：" + writer.errorString() +
+                                  "\n（部分格式需要对应的 Qt 图像插件支持）");
+        UpdateStatus("导出失败：" + QFileInfo(filePath).fileName());
     }
 }
 
@@ -397,6 +505,9 @@ void MainWindow::SetBusy(bool busy)
     ui->menu_blur->setEnabled(!busy);
     ui->menu_base->setEnabled(!busy);
     ui->menu_unbase->setEnabled(!busy);
+    ui->menu_transform->setEnabled(!busy);
+    ui->menu_enhance->setEnabled(!busy);
+    ui->menu_morph->setEnabled(!busy);
     // 处理中显示等待光标
     if (busy) {
         QApplication::setOverrideCursor(Qt::WaitCursor);
@@ -432,7 +543,9 @@ void MainWindow::UpdateStatusInfo()
 
 // 在后台线程执行算子；完成后自动写历史并刷新显示
 void MainWindow::ApplyOperator(const QString &title,
-                               std::function<void(std::vector<uint8_t> &, OpContext &)> op)
+                               std::function<void(std::vector<uint8_t> &, OpContext &)> op,
+                               const ImageSnapshot *sourceOverride,
+                               std::function<void()> onDone)
 {
     if (m_busy) {
         UpdateStatus("上一个操作还在处理中，请稍候");
@@ -443,31 +556,48 @@ void MainWindow::ApplyOperator(const QString &title,
         return;
     }
 
+    // 输入既可以是当前图像，也可以是旋转专用的一次性快照(无损基准)
+    const std::vector<uint8_t> *input = &imageData;
+    int32_t inWidth = myValue.bmpInfo.GetWidth();
+    int32_t inHeight = myValue.bmpInfo.GetHeight();
+    ContentQuad inQuad = m_contentQuad;
+    if (sourceOverride && !sourceOverride->data.empty()) {
+        input = &sourceOverride->data;
+        inWidth = sourceOverride->width;
+        inHeight = sourceOverride->height;
+        inQuad = sourceOverride->quad;
+    }
+
     OpContext ctx;
-    ctx.width = myValue.bmpInfo.GetWidth();
-    ctx.height = myValue.bmpInfo.GetHeight();
-    ctx.pixelCount = imageData.size() / 3;
+    ctx.width = inWidth;
+    ctx.height = inHeight;
+    ctx.pixelCount = input->size() / 3;
     ctx.numThreads = num_threads;
     ctx.segmentSize = ctx.pixelCount / static_cast<size_t>(std::max(1, num_threads));
     if (ctx.segmentSize == 0) ctx.segmentSize = 1;
-    ctx.quad = m_contentQuad;
+    ctx.quad = inQuad;
 
-    const std::vector<uint8_t> source = imageData;   // 在 UI 线程取快照，避免数据竞争
+    const std::vector<uint8_t> source = *input;   // 在 UI 线程取快照，避免数据竞争
+    const bool fromRotation = (sourceOverride != nullptr);
     SetBusy(true);
     UpdateStatus(title + " 处理中…");
 
     auto result = std::make_shared<ImageSnapshot>();
     auto *watcher = new QFutureWatcher<void>(this);
-    connect(watcher, &QFutureWatcher<void>::finished, this, [this, watcher, result, title]() {
+    connect(watcher, &QFutureWatcher<void>::finished, this,
+            [this, watcher, result, title, fromRotation, onDone]() {
         watcher->deleteLater();
         if (result && !result->data.empty()) {
-            ApplySnapshot(*result);
+            ApplySnapshot(*result, fromRotation);
             UpdateStatus(title + " 完成");
         } else {
             UpdateStatus(title + " 未产生结果");
         }
         SetBusy(false);
         UpdateStatusInfo();
+        if (onDone) {
+            onDone();
+        }
     });
     watcher->setFuture(QtConcurrent::run([source, op, ctx, result]() mutable {
         std::vector<uint8_t> work = source;
@@ -479,16 +609,96 @@ void MainWindow::ApplyOperator(const QString &title,
     }));
 }
 
+// 任何改动像素/几何的非旋转操作、撤销、重做、重置、重新打开图片，
+// 都会让"旋转无损基准"失效(下次旋转时以当前图像作为新基准)
+void MainWindow::InvalidateRotateBase()
+{
+    m_rotBaseValid = false;
+    m_rotTotal = 0.0;
+    std::vector<uint8_t>().swap(m_rotBase);   // 真正释放内存
+}
+
+// 旋转：始终从无损基准按累计角度重新采样一次，
+// 这样无论转多少次，插值只发生一次，不会越转越糊
+void MainWindow::ApplyRotation(double deltaDegrees, const QString &title)
+{
+    if (m_busy) {
+        UpdateStatus("上一个操作还在处理中，请稍候");
+        return;
+    }
+    if (imageData.empty() || myValue.bmpInfo.GetWidth() <= 0 || myValue.bmpInfo.GetHeight() <= 0) {
+        function.CreateMessagebox("提示", "请先打开一张 BMP 图像");
+        return;
+    }
+
+    // 第一次旋转：把当前图像作为基准(此时它还没有被旋转插值糊过)
+    if (!m_rotBaseValid || m_rotBase.empty() ||
+        m_rotBase.size() != static_cast<size_t>(m_rotBaseW) * m_rotBaseH * 3) {
+        m_rotBase = imageData;
+        m_rotBaseW = myValue.bmpInfo.GetWidth();
+        m_rotBaseH = myValue.bmpInfo.GetHeight();
+        m_rotBaseQuad = m_contentQuad;
+        if (!m_rotBaseQuad.isValid()) {
+            m_rotBaseQuad.setRect(m_rotBaseW, m_rotBaseH);
+        }
+        m_rotTotal = 0.0;
+        m_rotBaseValid = true;
+    }
+
+    // 累计角度归一到 [0, 360)
+    double total = std::fmod(m_rotTotal + deltaDegrees, 360.0);
+    if (total < 0.0) {
+        total += 360.0;
+    }
+    if (!std::isfinite(total)) {
+        return;
+    }
+
+    ImageSnapshot base;
+    base.data = m_rotBase;
+    base.width = m_rotBaseW;
+    base.height = m_rotBaseH;
+    base.quad = m_rotBaseQuad;
+
+    auto applied = std::make_shared<bool>(false);
+    ApplyOperator(
+        title,
+        [total, applied](std::vector<uint8_t> &d, OpContext &ctx) {
+            Function f;
+            *applied = f.RotateImage(d, ctx.width, ctx.height, total, ctx.quad);
+        },
+        &base,
+        [this, total, applied]() {
+            if (*applied) {
+                m_rotTotal = total;      // 基准继续沿用，角度已累计
+            } else {
+                // 本次旋转没有生效(角度为 0/360 的整数倍、或画布超出上限)：
+                // 基准作废，回到"以当前图像为基准"的状态，避免状态错位
+                InvalidateRotateBase();
+            }
+        });
+}
+
 // 子窗口结果写回主窗口
 void MainWindow::ApplyResult(std::vector<uint8_t> &result)
 {
-    if (result.empty()) {
+    const int32_t width = myValue.bmpInfo.GetWidth();
+    const int32_t height = myValue.bmpInfo.GetHeight();
+    if (result.empty() || width <= 0 || height <= 0 ||
+        result.size() != static_cast<size_t>(width) * height * 3) {
+        UpdateStatus("子窗口结果与当前图像不一致，已忽略");
         return;
+    }
+    if (!m_contentQuad.isValid()) {
+        m_contentQuad.setRect(width, height);
     }
     ImageSnapshot snap;
     snap.data = result;
-    snap.width = myValue.bmpInfo.GetWidth();
-    snap.height = myValue.bmpInfo.GetHeight();
+    snap.width = width;
+    snap.height = height;
+    // 子窗口只改像素、不改画布几何；必须沿用当前内容区域，
+    // 否则 quad 被重置为全 0 后，下一次旋转会退化成 1x1 黑图。
+    snap.quad = m_contentQuad;
     ApplySnapshot(snap);
     UpdateStatus("已应用子窗口结果");
 }
@@ -689,11 +899,7 @@ void MainWindow::on_btn_rotate_ok_clicked()
         return;
     }
     const double_t angle = returnValue.value;
-    ApplyOperator("顺时针旋转", [angle](std::vector<uint8_t> &d, OpContext &ctx) {
-        Function f;
-        // 旋转会改变画布尺寸与内容区域，通过 ctx 回传
-        f.RotateImage(d, ctx.width, ctx.height, angle, ctx.quad);
-    });
+    ApplyRotation(angle, "顺时针旋转");
 }
 
 void MainWindow::on_btn_rotate_r_clicked()
@@ -708,10 +914,7 @@ void MainWindow::on_btn_rotate_r_clicked()
         return;
     }
     const double_t angle = returnValue.value;
-    ApplyOperator("逆时针旋转", [angle](std::vector<uint8_t> &d, OpContext &ctx) {
-        Function f;
-        f.RotateReverse(d, ctx.width, ctx.height, angle, ctx.quad);
-    });
+    ApplyRotation(-angle, "逆时针旋转");
 }
 
 void MainWindow::on_actionmedian_triggered()
@@ -876,6 +1079,9 @@ void MainWindow::_SetVisible(bool set)
     ui->menu_blur->menuAction()->setVisible(set);
     ui->menu_base->menuAction()->setVisible(set);
     ui->menu_unbase->menuAction()->setVisible(set);
+    ui->menu_transform->menuAction()->setVisible(set);
+    ui->menu_enhance->menuAction()->setVisible(set);
+    ui->menu_morph->menuAction()->setVisible(set);
     ui->widget->setVisible(set);
 }
 
@@ -1001,5 +1207,181 @@ void MainWindow::on_actionhighContrast_triggered()
         std::future<std::vector<uint8_t>> highFuture = highPromise.get_future();
         f.HighContrast(d, highPromise, blurred);
         d = highFuture.get();
+    });
+}
+
+// ------------------------------------------------------------------
+// P2-A：几何变换 / 增强 / 形态学 / 卷积 / USM
+// ------------------------------------------------------------------
+void MainWindow::on_actionflipH_triggered()
+{
+    ApplyOperator("水平翻转", [](std::vector<uint8_t> &d, OpContext &ctx) {
+        Function f;
+        f.FlipImage(d, ctx.width, ctx.height, Function::FlipMode::Horizontal, ctx.quad);
+    });
+}
+
+void MainWindow::on_actionflipV_triggered()
+{
+    ApplyOperator("垂直翻转", [](std::vector<uint8_t> &d, OpContext &ctx) {
+        Function f;
+        f.FlipImage(d, ctx.width, ctx.height, Function::FlipMode::Vertical, ctx.quad);
+    });
+}
+
+void MainWindow::on_actionrotate90_triggered()
+{
+    ApplyOperator("顺时针旋转 90°", [](std::vector<uint8_t> &d, OpContext &ctx) {
+        Function f;
+        f.RotateImage(d, ctx.width, ctx.height, 90.0, ctx.quad);
+    });
+}
+
+void MainWindow::on_actionrotate90ccw_triggered()
+{
+    ApplyOperator("逆时针旋转 90°", [](std::vector<uint8_t> &d, OpContext &ctx) {
+        Function f;
+        f.RotateImage(d, ctx.width, ctx.height, 270.0, ctx.quad);
+    });
+}
+
+void MainWindow::on_actiontranspose_triggered()
+{
+    ApplyOperator("沿主对角线镜像", [](std::vector<uint8_t> &d, OpContext &ctx) {
+        Function f;
+        f.FlipImage(d, ctx.width, ctx.height, Function::FlipMode::Transpose, ctx.quad);
+    });
+}
+
+void MainWindow::on_actionantitranspose_triggered()
+{
+    ApplyOperator("沿副对角线镜像", [](std::vector<uint8_t> &d, OpContext &ctx) {
+        Function f;
+        f.FlipImage(d, ctx.width, ctx.height, Function::FlipMode::AntiTranspose, ctx.quad);
+    });
+}
+
+void MainWindow::on_actiontailor_triggered()
+{
+    if (m_busy) {
+        UpdateStatus("上一个操作还在处理中，请稍候");
+        return;
+    }
+    if (imageData.empty() || myValue.bmpInfo.GetWidth() <= 0) {
+        function.CreateMessagebox("提示", "请先打开一张 BMP 图像");
+        return;
+    }
+    const QImage display = Function::ToDisplayImage(imageData,
+                                                    myValue.bmpInfo.GetWidth(),
+                                                    myValue.bmpInfo.GetHeight());
+    CropDialog dlg(display, this);
+    if (dlg.exec() != QDialog::Accepted) {
+        return;
+    }
+    const QRect sel = dlg.selectionInImage();
+    if (sel.width() < 4 || sel.height() < 4) {
+        UpdateStatus("裁剪选区太小，已取消");
+        return;
+    }
+    ApplyOperator("图像裁剪", [sel](std::vector<uint8_t> &d, OpContext &ctx) {
+        Function f;
+        f.CropImage(d, ctx.width, ctx.height,
+                    sel.x(), sel.y(), sel.width(), sel.height(), ctx.quad);
+    });
+}
+
+void MainWindow::on_actionequalize_triggered()
+{
+    ApplyOperator("直方图均衡化", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
+        uint8_t lut[256];
+        this->function.BuildEqualizeLUT(d, lut);
+        RunSegmented(ctx, [this, &d, &lut](size_t s, size_t e) {
+            this->function.ApplyLUT(d, lut, s, e);
+        });
+    });
+}
+
+void MainWindow::on_actionerode_triggered()
+{
+    ApplyOperator("腐蚀", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
+        this->function.Morphology(d, ctx.width, ctx.height,
+                                  Function::MorphType::Erode, 0, ctx.pixelCount);
+    });
+}
+
+void MainWindow::on_actiondilate_triggered()
+{
+    ApplyOperator("膨胀", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
+        this->function.Morphology(d, ctx.width, ctx.height,
+                                  Function::MorphType::Dilate, 0, ctx.pixelCount);
+    });
+}
+
+void MainWindow::on_actionopenMorph_triggered()
+{
+    ApplyOperator("开运算", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
+        this->function.Morphology(d, ctx.width, ctx.height,
+                                  Function::MorphType::Open, 0, ctx.pixelCount);
+    });
+}
+
+void MainWindow::on_actioncloseMorph_triggered()
+{
+    ApplyOperator("闭运算", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
+        this->function.Morphology(d, ctx.width, ctx.height,
+                                  Function::MorphType::Close, 0, ctx.pixelCount);
+    });
+}
+
+void MainWindow::on_actionconvolution_triggered()
+{
+    if (m_busy) {
+        UpdateStatus("上一个操作还在处理中，请稍候");
+        return;
+    }
+    if (imageData.empty()) {
+        function.CreateMessagebox("提示", "请先打开一张 BMP 图像");
+        return;
+    }
+    KernelDialog dlg(this);
+    if (dlg.exec() != QDialog::Accepted) {
+        return;
+    }
+    const std::vector<double> kernel = dlg.kernel();
+    const double scale = dlg.scale();
+    const double offset = dlg.offset();
+    ApplyOperator("自定义卷积", [this, kernel, scale, offset](std::vector<uint8_t> &d, const OpContext &ctx) {
+        std::vector<uint8_t> out;
+        this->function.Convolve3x3(d, out, ctx.width, ctx.height,
+                                   kernel.data(), scale, offset, 0, ctx.pixelCount);
+        if (!out.empty()) {
+            d.swap(out);
+        }
+    });
+}
+
+void MainWindow::on_actionusm_triggered()
+{
+    if (m_busy) {
+        UpdateStatus("上一个操作还在处理中，请稍候");
+        return;
+    }
+    if (imageData.empty()) {
+        function.CreateMessagebox("提示", "请先打开一张 BMP 图像");
+        return;
+    }
+    USMDialog dlg(this);
+    if (dlg.exec() != QDialog::Accepted) {
+        return;
+    }
+    const double radius = dlg.radius();
+    const double amount = dlg.amount();
+    const double threshold = dlg.threshold();
+    ApplyOperator("USM 锐化", [this, radius, amount, threshold](std::vector<uint8_t> &d, const OpContext &ctx) {
+        std::vector<uint8_t> out;
+        this->function.USMSharpen(d, out, ctx.width, ctx.height, radius, amount, threshold);
+        if (!out.empty() && out.size() == d.size()) {
+            d.swap(out);
+        }
     });
 }

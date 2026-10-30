@@ -40,6 +40,18 @@ struct ContentQuad {
                std::abs(x[3]) < eps && std::abs(y[3] - static_cast<double>(height)) < eps;
     }
 
+    // 四点是否构成一块有效区域(退化/全零时返回 false)
+    bool isValid() const {
+        double minX = x[0], maxX = x[0], minY = y[0], maxY = y[0];
+        for (int i = 1; i < 4; ++i) {
+            minX = std::min(minX, x[i]);
+            maxX = std::max(maxX, x[i]);
+            minY = std::min(minY, y[i]);
+            maxY = std::max(maxY, y[i]);
+        }
+        return (maxX - minX) > 1.0 && (maxY - minY) > 1.0;
+    }
+
     // 点是否落在四边形内部(凸多边形同向叉积判定)
     bool contains(double px, double py) const {
         int sign = 0;
@@ -114,11 +126,44 @@ public:
     //  - 其它情况：按内容外接矩形重建画布 + 双线性采样，内容完整不丢失
     //width/height 为引用，出参会被更新为旋转后的实际尺寸
     //quad 为内容区域，旋转后会同步更新
-    void RotateImage(std::vector<uint8_t> &imageData, int32_t &width, int32_t &height,
+    //返回值：true 表示确实做了旋转；false 表示角度为 0/360 的整数倍、参数非法或内存不足，
+    //        此时图像与宽高保持不变(调用方据此决定是否继续累计角度)
+    bool RotateImage(std::vector<uint8_t> &imageData, int32_t &width, int32_t &height,
                      double_t angle, ContentQuad &quad);
     //逆时针旋转
     void RotateReverse(std::vector<uint8_t> &imageData, int32_t &width, int32_t &height,
                        double_t angle, ContentQuad &quad);
+    // ---- 几何变换(精确，无插值) ----
+    // 翻转/转置：Transpose / AntiTranspose 会交换宽高；quad 按视觉坐标同步更新
+    enum class FlipMode { Horizontal, Vertical, Transpose, AntiTranspose };
+    void FlipImage(std::vector<uint8_t> &imageData, int32_t &width, int32_t &height,
+                   FlipMode mode, ContentQuad &quad);
+    // 裁剪：x/y 为【视觉】坐标(左上角)，cw/ch 为目标宽高；裁剪后画布即内容
+    void CropImage(std::vector<uint8_t> &imageData, int32_t &width, int32_t &height,
+                   int32_t x, int32_t y, int32_t cw, int32_t ch, ContentQuad &quad);
+
+    // ---- 增强 ----
+    // 直方图均衡化：按亮度直方图构造映射表，三通道共用(保持色调)
+    void BuildEqualizeLUT(const std::vector<uint8_t> &imageData, uint8_t lut[256]);
+    void ApplyLUT(std::vector<uint8_t> &imageData, const uint8_t lut[256],
+                  size_t startPixel, size_t endPixel);
+    void HistogramEqualize(std::vector<uint8_t> &imageData, int32_t width, int32_t height);
+
+    // 形态学(3×3 结构元，逐通道，越界按边缘复制)
+    enum class MorphType { Erode, Dilate, Open, Close };
+    void Morphology(std::vector<uint8_t> &imageData, int32_t width, int32_t height,
+                    MorphType type, size_t startPixel, size_t endPixel);
+
+    // 3×3 卷积：scale 为除数(归一化)，offset 为偏移量
+    void Convolve3x3(const std::vector<uint8_t> &src, std::vector<uint8_t> &dst,
+                     int32_t width, int32_t height, const double *kernel,
+                     double scale, double offset, size_t startPixel, size_t endPixel);
+
+    // USM 锐化：radius 高斯半径，amount 强度(0~5)，threshold 保护阈值(0~255)
+    void USMSharpen(const std::vector<uint8_t> &src, std::vector<uint8_t> &dst,
+                    int32_t width, int32_t height,
+                    double radius, double amount, double threshold);
+
     //中值模糊
     uint8_t CalculateMedian(std::vector<uint8_t>& window);
     void MedianBlur(std::vector<uint8_t>& imageData, uint32_t width, uint32_t height);
@@ -138,6 +183,12 @@ public:
     //马赛克
     void FullMosaic(std::vector<uint8_t> &imageData, uint32_t width, uint32_t height, uint32_t degree);
 
+    // 眼部放大：以 (centerX, centerY) 为圆心、radius 为半径做径向放大。
+    // strength ∈ (0,1]：采样点向圆心收缩，strength=0.3 约放大 1.43 倍。
+    // 衰减曲线 (1-t²)² 保证圆心最强、圆边界处为 0 且一阶导为 0（无硬接缝）。
+    // 坐标为内存行号(第 0 行 = 画面最底行)，与内部存储一致。
+    static void EnlargeEye(std::vector<uint8_t> &imageData, int32_t width, int32_t height,
+                           int32_t centerX, int32_t centerY, int32_t radius, double strength);
     //把 BGR 像素缓冲转成可直接显示的 QImage(自动处理自底向上翻转)
     static QImage ToDisplayImage(const std::vector<uint8_t>& imageData, int32_t width, int32_t height);
 };

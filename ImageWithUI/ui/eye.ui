@@ -124,7 +124,7 @@ QStatusBar::item {
          <item>
           <widget class="QLabel" name="label_2">
            <property name="text">
-            <string>请用鼠标单击选择两眼位置</string>
+            <string>依次点击左右两只眼睛的中心</string>
            </property>
           </widget>
          </item>
@@ -236,12 +236,16 @@ QStatusBar::item {
          <item>
           <widget class="QLabel" name="label_4">
            <property name="text">
-            <string>眼部半径</string>
+            <string>眼部半径(像素)</string>
            </property>
           </widget>
          </item>
          <item>
-          <widget class="QLineEdit" name="lineEdit_range"/>
+          <widget class="QLineEdit" name="lineEdit_range">
+           <property name="placeholderText">
+            <string>如 40</string>
+           </property>
+          </widget>
          </item>
          <item>
           <spacer name="horizontalSpacer_7">
@@ -259,12 +263,16 @@ QStatusBar::item {
          <item>
           <widget class="QLabel" name="label_5">
            <property name="text">
-            <string>眼部变化程度</string>
+            <string>放大强度(0~1)</string>
            </property>
           </widget>
          </item>
          <item>
-          <widget class="QLineEdit" name="lineEdit_increase"/>
+          <widget class="QLineEdit" name="lineEdit_increase">
+           <property name="placeholderText">
+            <string>如 0.3</string>
+           </property>
+          </widget>
          </item>
          <item>
           <spacer name="horizontalSpacer_8">
@@ -301,7 +309,7 @@ QStatusBar::item {
          <item>
           <widget class="QPushButton" name="btn_ok">
            <property name="text">
-            <string>确定</string>
+            <string>预览</string>
            </property>
           </widget>
          </item>

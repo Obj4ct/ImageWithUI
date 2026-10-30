@@ -66,5 +66,14 @@ int main(int argc, char *argv[])
 
     MainWindow w;
     w.show();
+    // 支持从命令行直接打开图片： ImageWithUI.exe [图片路径]
+    for (int i = 1; i < args.size(); ++i) {
+        const QString &arg = args.at(i);
+        if (!arg.startsWith("--")) {
+            const QString path = arg;
+            QTimer::singleShot(0, &w, [&w, path]() { w.OpenImage(path); });
+            break;
+        }
+    }
     return a.exec();
 }

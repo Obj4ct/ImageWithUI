@@ -1,5 +1,8 @@
 //加载BMP文件
 #include "BMPFile.h"
+#include <QFileInfo>
+#include <QImage>
+#include <QImageReader>
 #include <cstdio>
 
 //读取BMP文件
@@ -115,6 +118,62 @@ bool MYFunction::ReadBMPFile(const std::string &fileName, MyValue &outValue, QSt
     return true;
 }
 
+
+bool MYFunction::ReadImageFile(const std::string &fileName, MyValue &outValue, QString &errMsg)
+{
+    errMsg.clear();
+    const QString path = QString::fromStdString(fileName);
+    if (path.isEmpty()) {
+        errMsg = "文件名为空";
+        return false;
+    }
+    // BMP 继续走项目自己的解析器：保留原有的头部校验与自底向上布局
+    if (QFileInfo(path).suffix().compare("bmp", Qt::CaseInsensitive) == 0) {
+        return ReadBMPFile(fileName, outValue, errMsg);
+    }
+
+    // 其它格式交给 Qt 图像插件(PNG 内置，JPG/GIF/TIFF/TGA/WebP/ICO/SVG 为插件)
+    QImageReader reader(path);
+    reader.setAutoTransform(true);  // 按 EXIF 方向自动旋正手机照片
+    const QImage image = reader.read();
+    if (image.isNull()) {
+        const QString reason = reader.errorString().isEmpty() ? QStringLiteral("不支持的格式") : reader.errorString();
+        errMsg = QString("无法读取图像：%1（%2）").arg(QFileInfo(path).fileName(), reason);
+        return false;
+    }
+
+    const int32_t width = image.width();
+    const int32_t height = image.height();
+    if (width <= 0 || height <= 0) {
+        errMsg = "图像尺寸非法";
+        return false;
+    }
+
+    // 内部只有 24 位，统一转 RGBA8888 后取 RGB；透明像素与白底合成，避免出现纯黑底
+    const QImage rgba = image.convertToFormat(QImage::Format_RGBA8888);
+    std::vector<uint8_t> data(static_cast<size_t>(width) * static_cast<size_t>(height) * 3);
+    for (int32_t y = 0; y < height; ++y) {
+        // 内部第 0 行 = 画面最底行，因此从 QImage 的最后一行开始取
+        const uchar *line = rgba.constScanLine(height - 1 - y);
+        for (int32_t x = 0; x < width; ++x) {
+            const uchar *px = line + static_cast<size_t>(x) * 4;
+            const int alpha = px[3];
+            const int inv = 255 - alpha;
+            const size_t i = (static_cast<size_t>(y) * static_cast<size_t>(width) + static_cast<size_t>(x)) * 3;
+            data[i + 0] = static_cast<uint8_t>((px[2] * alpha + 255 * inv) / 255);  // B
+            data[i + 1] = static_cast<uint8_t>((px[1] * alpha + 255 * inv) / 255);  // G
+            data[i + 2] = static_cast<uint8_t>((px[0] * alpha + 255 * inv) / 255);  // R
+        }
+    }
+
+    BMP bmp;
+    BMPInfo bmpInfo;
+    SetBMPHeaderValues(bmp, bmpInfo, width, height, 24);
+    outValue.imageData = std::move(data);
+    outValue.bmp = bmp;
+    outValue.bmpInfo = bmpInfo;
+    return true;
+}
 
 bool MYFunction::WriteBMPFile(const std::string &filePath, const std::vector<uint8_t> &imageData, BMP &bmp, BMPInfo &bmpInfo)
 {

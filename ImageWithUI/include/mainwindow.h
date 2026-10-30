@@ -1,6 +1,7 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 #include"QTHeader.h"
+#include <QListWidgetItem>
 #include "BMPFile.h"
 #include "Function.h"
 #include "blendwindow.h"
@@ -129,6 +130,9 @@ private slots:
 
     void on_btn_undo_clicked();
 
+    // 点击历史面板某一项：自动连续撤销/重做到该步
+    void on_historyList_itemClicked(QListWidgetItem *item);
+
     void on_actionmedian_triggered();
 
     void on_actionaver_triggered();
@@ -181,6 +185,22 @@ private slots:
     void on_actionsmall_bicubic_triggered();
     void on_actionhighContrast_triggered();
 
+    // ---- P2-A 新功能 ----
+    void on_actionflipH_triggered();
+    void on_actionflipV_triggered();
+    void on_actionrotate90_triggered();
+    void on_actionrotate90ccw_triggered();
+    void on_actiontranspose_triggered();
+    void on_actionantitranspose_triggered();
+    void on_actiontailor_triggered();
+    void on_actionequalize_triggered();
+    void on_actionerode_triggered();
+    void on_actiondilate_triggered();
+    void on_actionopenMorph_triggered();
+    void on_actioncloseMorph_triggered();
+    void on_actionconvolution_triggered();
+    void on_actionusm_triggered();
+
 protected:
     void mouseDoubleClickEvent(QMouseEvent *event) override;
 
@@ -200,9 +220,27 @@ private:
     int32_t m_originalHeight = 0;
     ContentQuad m_contentQuad;    // 当前内容区域(旋转时用于确定新画布)
 
+    // 旋转"无损基准"：任意角度旋转都从这份基准像素按累计角度一次性重采样，
+    // 避免在上一次(已被插值糊过)的结果上再插值，导致越转越模糊
+    bool m_rotBaseValid = false;
+    std::vector<uint8_t> m_rotBase;   // 基准像素(紧凑 width*3)
+    int32_t m_rotBaseW = 0;
+    int32_t m_rotBaseH = 0;
+    ContentQuad m_rotBaseQuad;        // 基准的内容区域
+    double m_rotTotal = 0.0;          // 相对基准的累计角度(顺时针，0~360)
+
     // 在后台线程执行算子；算子可通过 ctx 修改宽高(旋转等会改变画布尺寸)
+    // sourceOverride 非空时以该快照作为输入(旋转走"无损基准"，不再用上一次的结果)
+    // onDone 在结果应用后回到 UI 线程调用(ok 表示算子确实产生了有效结果)
     void ApplyOperator(const QString &title,
-                       std::function<void(std::vector<uint8_t> &, OpContext &)> op);
+                       std::function<void(std::vector<uint8_t> &, OpContext &)> op,
+                       const ImageSnapshot *sourceOverride = nullptr,
+                       std::function<void()> onDone = nullptr);
+    // 旋转：始终从"无损基准"按【累计角度】重新采样一次，
+    // 避免每次都在上一次的插值结果上再插值，导致一直旋转越来越模糊
+    void ApplyRotation(double deltaDegrees, const QString &title);
+    // 丢弃旋转基准(任何非旋转操作/撤销/重做/重置/重新打开都会调用)
+    void InvalidateRotateBase();
     // 把算子按线程分段执行(以像素为单位，保证 BGR 通道不被拆散)
     void RunSegmented(const OpContext &ctx,
                       const std::function<void(size_t, size_t)> &fn);
@@ -210,8 +248,10 @@ private:
     // 打开文件后的统一初始化
     bool LoadImage(const QString &path);
     // 应用一个快照：写历史 + 同步尺寸 + 刷新显示
-    void ApplySnapshot(const ImageSnapshot &snap);
+    void ApplySnapshot(const ImageSnapshot &snap, bool keepRotateBase = false);
     // 刷新状态栏右侧信息
     void UpdateStatusInfo();
+    // 刷新右侧"历史记录"面板：列出每一步的尺寸，并选中当前步
+    void UpdateHistoryPanel();
 };
 #endif // MAINWINDOW_H

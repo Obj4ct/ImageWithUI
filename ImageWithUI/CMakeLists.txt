@@ -53,6 +53,9 @@ set(PROJECT_SOURCES
         src/colormap.cpp
         ui/colormap.ui
 
+        include/editdialogs.h
+        src/editdialogs.cpp
+
 
 )
 

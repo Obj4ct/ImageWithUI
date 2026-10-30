@@ -15,12 +15,33 @@
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QHBoxLayout" name="horizontalLayout_4">
+    <property name="spacing">
+     <number>12</number>
+    </property>
+    <property name="leftMargin">
+     <number>12</number>
+    </property>
+    <property name="topMargin">
+     <number>12</number>
+    </property>
+    <property name="rightMargin">
+     <number>12</number>
+    </property>
+    <property name="bottomMargin">
+     <number>12</number>
+    </property>
     <item>
      <widget class="QLabel" name="imageLabel">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+        <horstretch>1</horstretch>
+        <verstretch>1</verstretch>
+       </sizepolicy>
+      </property>
       <property name="minimumSize">
        <size>
-        <width>512</width>
-        <height>512</height>
+        <width>320</width>
+        <height>320</height>
        </size>
       </property>
       <property name="maximumSize">
@@ -31,12 +52,11 @@
       </property>
       <property name="font">
        <font>
-        <pointsize>20</pointsize>
-        <bold>true</bold>
+        <pointsize>12</pointsize>
        </font>
       </property>
       <property name="text">
-       <string>双击任意位置打开文件</string>
+       <string>拖入图片，或双击此处打开</string>
       </property>
       <property name="textFormat">
        <enum>Qt::AutoText</enum>
@@ -57,6 +77,18 @@
     </item>
     <item>
      <widget class="QWidget" name="widget" native="true">
+      <property name="minimumSize">
+       <size>
+        <width>336</width>
+        <height>0</height>
+       </size>
+      </property>
+      <property name="maximumSize">
+       <size>
+        <width>336</width>
+        <height>16777215</height>
+       </size>
+      </property>
       <layout class="QHBoxLayout" name="horizontalLayout_5">
        <item>
         <spacer name="horizontalSpacer">
@@ -77,6 +109,28 @@
        <item>
         <widget class="QWidget" name="widget_14" native="true">
          <layout class="QVBoxLayout" name="verticalLayout_4">
+          <property name="spacing">
+           <number>8</number>
+          </property>
+          <property name="leftMargin">
+           <number>18</number>
+          </property>
+          <property name="topMargin">
+           <number>16</number>
+          </property>
+          <property name="rightMargin">
+           <number>16</number>
+          </property>
+          <property name="bottomMargin">
+           <number>16</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="label_sec_adjust">
+            <property name="text">
+             <string>图像调整</string>
+            </property>
+           </widget>
+          </item>
           <item>
            <widget class="QWidget" name="widget_8" native="true">
             <layout class="QHBoxLayout" name="horizontalLayout_12">
@@ -103,12 +157,16 @@
               </widget>
              </item>
              <item>
-              <widget class="QLineEdit" name="lineEdit_sharpen"/>
+              <widget class="QLineEdit" name="lineEdit_sharpen">
+               <property name="placeholderText">
+                <string>0 ~ 200</string>
+               </property>
+              </widget>
              </item>
              <item>
               <widget class="QPushButton" name="btn_sharpen">
                <property name="text">
-                <string>确定</string>
+                <string>应用</string>
                </property>
               </widget>
              </item>
@@ -149,17 +207,21 @@
              <item>
               <widget class="QLabel" name="label_32">
                <property name="text">
-                <string>输入高光值         </string>
+                <string>高光值         </string>
                </property>
               </widget>
              </item>
              <item>
-              <widget class="QLineEdit" name="lineEdit_highlight"/>
+              <widget class="QLineEdit" name="lineEdit_highlight">
+               <property name="placeholderText">
+                <string>0 ~ 255</string>
+               </property>
+              </widget>
              </item>
              <item>
               <widget class="QPushButton" name="btn_highlight_ok">
                <property name="text">
-                <string>确定</string>
+                <string>应用</string>
                </property>
               </widget>
              </item>
@@ -200,17 +262,21 @@
              <item>
               <widget class="QLabel" name="label_34">
                <property name="text">
-                <string>输入阈值             </string>
+                <string>阈值             </string>
                </property>
               </widget>
              </item>
              <item>
-              <widget class="QLineEdit" name="lineEdit_threshold"/>
+              <widget class="QLineEdit" name="lineEdit_threshold">
+               <property name="placeholderText">
+                <string>0 ~ 255</string>
+               </property>
+              </widget>
              </item>
              <item>
               <widget class="QPushButton" name="btn_threshold_ok">
                <property name="text">
-                <string>确定</string>
+                <string>应用</string>
                </property>
               </widget>
              </item>
@@ -251,17 +317,21 @@
              <item>
               <widget class="QLabel" name="label_30">
                <property name="text">
-                <string>阴影化程度         </string>
+                <string>阴影程度         </string>
                </property>
               </widget>
              </item>
              <item>
-              <widget class="QLineEdit" name="lineEdit_shadow"/>
+              <widget class="QLineEdit" name="lineEdit_shadow">
+               <property name="placeholderText">
+                <string>0 ~ 100</string>
+               </property>
+              </widget>
              </item>
              <item>
               <widget class="QPushButton" name="btn_shadow_ok">
                <property name="text">
-                <string>确定</string>
+                <string>应用</string>
                </property>
               </widget>
              </item>
@@ -302,17 +372,21 @@
              <item>
               <widget class="QLabel" name="label">
                <property name="text">
-                <string>亮度调整(-150到150)</string>
+                <string>亮度</string>
                </property>
               </widget>
              </item>
              <item>
-              <widget class="QLineEdit" name="lineEdit_brightness"/>
+              <widget class="QLineEdit" name="lineEdit_brightness">
+               <property name="placeholderText">
+                <string>-150 ~ 150</string>
+               </property>
+              </widget>
              </item>
              <item>
               <widget class="QPushButton" name="btn_brightness">
                <property name="text">
-                <string>确定</string>
+                <string>应用</string>
                </property>
               </widget>
              </item>
@@ -356,17 +430,21 @@
              <item>
               <widget class="QLabel" name="label_2">
                <property name="text">
-                <string>对比度调整(-50到100)</string>
+                <string>对比度</string>
                </property>
               </widget>
              </item>
              <item>
-              <widget class="QLineEdit" name="lineEdit_contrast"/>
+              <widget class="QLineEdit" name="lineEdit_contrast">
+               <property name="placeholderText">
+                <string>-50 ~ 100</string>
+               </property>
+              </widget>
              </item>
              <item>
               <widget class="QPushButton" name="btn_contrast">
                <property name="text">
-                <string>确定</string>
+                <string>应用</string>
                </property>
               </widget>
              </item>
@@ -407,21 +485,21 @@
              <item>
               <widget class="QLabel" name="label_3">
                <property name="text">
-                <string>饱和度调整          </string>
+                <string>饱和度          </string>
                </property>
               </widget>
              </item>
              <item>
               <widget class="QLineEdit" name="lineEdit_saturation">
-               <property name="text">
-                <string/>
+               <property name="placeholderText">
+                <string>-100 ~ 100</string>
                </property>
               </widget>
              </item>
              <item>
               <widget class="QPushButton" name="btn_saturation">
                <property name="text">
-                <string>确定</string>
+                <string>应用</string>
                </property>
               </widget>
              </item>
@@ -439,6 +517,13 @@
               </spacer>
              </item>
             </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="label_sec_transform">
+            <property name="text">
+             <string>几何变换</string>
+            </property>
            </widget>
           </item>
           <item>
@@ -465,17 +550,21 @@
              <item>
               <widget class="QLabel" name="label_20">
                <property name="text">
-                <string>顺时针旋转          </string>
+                <string>顺时针          </string>
                </property>
               </widget>
              </item>
              <item>
-              <widget class="QLineEdit" name="lineEdit_rotate"/>
+              <widget class="QLineEdit" name="lineEdit_rotate">
+               <property name="placeholderText">
+                <string>角度 0~360</string>
+               </property>
+              </widget>
              </item>
              <item>
               <widget class="QPushButton" name="btn_rotate_ok">
                <property name="text">
-                <string>确定</string>
+                <string>应用</string>
                </property>
               </widget>
              </item>
@@ -516,17 +605,21 @@
              <item>
               <widget class="QLabel" name="label_21">
                <property name="text">
-                <string>逆时针旋转          </string>
+                <string>逆时针          </string>
                </property>
               </widget>
              </item>
              <item>
-              <widget class="QLineEdit" name="lineEdit_rotate_r"/>
+              <widget class="QLineEdit" name="lineEdit_rotate_r">
+               <property name="placeholderText">
+                <string>角度 0~360</string>
+               </property>
+              </widget>
              </item>
              <item>
               <widget class="QPushButton" name="btn_rotate_r">
                <property name="text">
-                <string>确定</string>
+                <string>应用</string>
                </property>
               </widget>
              </item>
@@ -542,6 +635,87 @@
                 </size>
                </property>
               </spacer>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <spacer name="verticalSpacer_panel">
+            <property name="orientation">
+             <enum>Qt::Vertical</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>20</width>
+              <height>40</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QGroupBox" name="group_history">
+            <property name="title">
+             <string>历史记录</string>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_history">
+             <property name="spacing">
+              <number>6</number>
+             </property>
+             <property name="leftMargin">
+              <number>8</number>
+             </property>
+             <property name="topMargin">
+              <number>10</number>
+             </property>
+             <property name="rightMargin">
+              <number>8</number>
+             </property>
+             <property name="bottomMargin">
+              <number>8</number>
+             </property>
+             <item>
+              <widget class="QListWidget" name="historyList">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
+                 <horstretch>0</horstretch>
+                 <verstretch>1</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="selectionMode">
+                <enum>QAbstractItemView::NoSelection</enum>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QGroupBox" name="group_layers">
+            <property name="title">
+             <string>图层</string>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_layers">
+             <property name="leftMargin">
+              <number>8</number>
+             </property>
+             <property name="topMargin">
+              <number>10</number>
+             </property>
+             <property name="rightMargin">
+              <number>8</number>
+             </property>
+             <property name="bottomMargin">
+              <number>8</number>
+             </property>
+             <item>
+              <widget class="QLabel" name="label_layers_hint">
+               <property name="text">
+                <string>图层系统开发中（当前为单图层）</string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignCenter</set>
+               </property>
+              </widget>
              </item>
             </layout>
            </widget>
@@ -639,11 +813,43 @@
     <addaction name="actionface"/>
     <addaction name="actionhighContrast"/>
    </widget>
+   <widget class="QMenu" name="menu_transform">
+    <property name="title">
+     <string>变换</string>
+    </property>
+    <addaction name="actionflipH"/>
+    <addaction name="actionflipV"/>
+    <addaction name="actionrotate90"/>
+    <addaction name="actionrotate90ccw"/>
+    <addaction name="actiontranspose"/>
+    <addaction name="actionantitranspose"/>
+    <addaction name="actiontailor"/>
+   </widget>
+   <widget class="QMenu" name="menu_enhance">
+    <property name="title">
+     <string>增强</string>
+    </property>
+    <addaction name="actionequalize"/>
+    <addaction name="actionusm"/>
+    <addaction name="actionconvolution"/>
+   </widget>
+   <widget class="QMenu" name="menu_morph">
+    <property name="title">
+     <string>形态学</string>
+    </property>
+    <addaction name="actionerode"/>
+    <addaction name="actiondilate"/>
+    <addaction name="actionopenMorph"/>
+    <addaction name="actioncloseMorph"/>
+   </widget>
    <addaction name="menu"/>
    <addaction name="menu_edit"/>
    <addaction name="menu_blur"/>
    <addaction name="menu_base"/>
    <addaction name="menu_unbase"/>
+   <addaction name="menu_transform"/>
+   <addaction name="menu_enhance"/>
+   <addaction name="menu_morph"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
   <widget class="QToolBar" name="toolBar">
@@ -756,7 +962,7 @@
   </action>
   <action name="actionliquefaction">
    <property name="text">
-    <string>眼部区域液化</string>
+    <string>眼部放大</string>
    </property>
   </action>
   <action name="actioncolorMap">
@@ -829,6 +1035,71 @@
   <action name="actionhighContrast">
    <property name="text">
     <string>高反差保留</string>
+   </property>
+  </action>
+  <action name="actionflipH">
+   <property name="text">
+    <string>水平翻转</string>
+   </property>
+  </action>
+  <action name="actionflipV">
+   <property name="text">
+    <string>垂直翻转</string>
+   </property>
+  </action>
+  <action name="actionrotate90">
+   <property name="text">
+    <string>顺时针旋转 90°</string>
+   </property>
+  </action>
+  <action name="actionrotate90ccw">
+   <property name="text">
+    <string>逆时针旋转 90°</string>
+   </property>
+  </action>
+  <action name="actiontranspose">
+   <property name="text">
+    <string>沿主对角线镜像</string>
+   </property>
+  </action>
+  <action name="actionantitranspose">
+   <property name="text">
+    <string>沿副对角线镜像</string>
+   </property>
+  </action>
+  <action name="actionequalize">
+   <property name="text">
+    <string>直方图均衡化</string>
+   </property>
+  </action>
+  <action name="actionusm">
+   <property name="text">
+    <string>USM 锐化</string>
+   </property>
+  </action>
+  <action name="actionconvolution">
+   <property name="text">
+    <string>自定义卷积核 (3×3)</string>
+   </property>
+  </action>
+  <action name="actionerode">
+   <property name="text">
+    <string>腐蚀</string>
+   </property>
+  </action>
+  <action name="actiondilate">
+   <property name="text">
+    <string>膨胀</string>
+   </property>
+  </action>
+  <action name="actionopenMorph">
+   <property name="text">
+    <string>开运算</string>
+   </property>
+  </action>
+  <action name="actioncloseMorph">
+   <property name="text">
+    <string>闭运算</string>
    </property>
   </action>
  </widget>

@@ -43,14 +43,89 @@ bool Function::CreateMessagebox(QString title,QString message)
     return !clickedOk;
 }
 
-QImage Function::ToDisplayImage(const std::vector<uint8_t>& imageData, int32_t width, int32_t height)
-{
+QImage Function::ToDisplayImage(const std::vector<uint8_t>& imageData, int32_t width, int32_t height){
     if (imageData.empty() || width <= 0 || height <= 0) {
         return QImage();
     }
-    QImage image(imageData.data(), width, height, QImage::Format_BGR888);
+    // 缓冲区必须容纳声明的画布尺寸，否则 QImage 包装后会越界读取
+    if (imageData.size() < static_cast<size_t>(width) * static_cast<size_t>(height) * 3) {
+        return QImage();
+    }
+    // 必须显式给出 bytesPerLine = width*3：
+    // QImage 的 4 参数构造会把每行补齐到 4 字节对齐(width 不是 4 的倍数时每行多 1~3 字节)，
+    // 后续 mirrored()/convert 按对齐后的行宽读取，就会读到缓冲区末尾之外，
+    // 在 Debug CRT 的 memcpy 里触发 0xC0000005(旋转后宽度常不是 4 的倍数)。
+    QImage image(imageData.data(), width, height, width * 3, QImage::Format_BGR888);
     // BMP 自底向上存储，翻转后才是正立的画面
     return image.mirrored(false, true);
+}
+
+// 眼部放大：径向放大(类似 PS 液化里的"膨胀"工具)
+// 对圆内每个像素，把采样点往圆心收缩 factor 倍再双线性插值，等价于把眼睛内容整体放大；
+// 收缩量由 (1-t²)² 控制(t=r/R)，所以圆心处最强、到半径处平滑归零，不会留下硬边圆环。
+void Function::EnlargeEye(std::vector<uint8_t> &imageData, int32_t width, int32_t height,
+                          int32_t centerX, int32_t centerY, int32_t radius, double strength)
+{
+    if (width <= 0 || height <= 0 || radius <= 0 ||
+        imageData.size() < static_cast<size_t>(width) * static_cast<size_t>(height) * 3) {
+        return;
+    }
+    // 强度上限留余量：取 1.0 时中心所有像素都会采样到同一点，放大后会糊成一团
+    const double s = std::max(0.0, std::min(0.98, strength));
+    const double radiusD = static_cast<double>(radius);
+    const std::vector<uint8_t> src = imageData;      // 只读快照，圆外像素保持原样
+
+    const int32_t yBegin = std::max<int32_t>(0, centerY - radius);
+    const int32_t yEnd = std::min<int32_t>(height - 1, centerY + radius);
+
+    for (int32_t row = yBegin; row <= yEnd; ++row) {
+        const double dy = static_cast<double>(row) - static_cast<double>(centerY);
+        const double halfWidthSq = radiusD * radiusD - dy * dy;
+        if (halfWidthSq <= 0.0) {
+            continue;                                // 该行完全在圆外
+        }
+        const double halfWidth = std::sqrt(halfWidthSq);
+        const int32_t xBegin = std::max<int32_t>(0, static_cast<int32_t>(std::ceil(centerX - halfWidth)));
+        const int32_t xEnd = std::min<int32_t>(width - 1, static_cast<int32_t>(std::floor(centerX + halfWidth)));
+
+        for (int32_t x = xBegin; x <= xEnd; ++x) {
+            const double dx = static_cast<double>(x) - static_cast<double>(centerX);
+            const double distance = std::sqrt(dx * dx + dy * dy);
+            if (distance >= radiusD) {
+                continue;
+            }
+            const double t = distance / radiusD;
+            const double falloff = 1.0 - t * t;
+            const double factor = 1.0 - s * falloff * falloff;
+
+            const double sampleX = std::max(0.0, std::min(static_cast<double>(width - 1),
+                                                          static_cast<double>(centerX) + dx * factor));
+            const double sampleY = std::max(0.0, std::min(static_cast<double>(height - 1),
+                                                          static_cast<double>(centerY) + dy * factor));
+
+            const int32_t x0 = static_cast<int32_t>(std::floor(sampleX));
+            const int32_t y0 = static_cast<int32_t>(std::floor(sampleY));
+            const int32_t x1 = std::min(x0 + 1, width - 1);
+            const int32_t y1 = std::min(y0 + 1, height - 1);
+            const double fx = sampleX - x0;
+            const double fy = sampleY - y0;
+
+            const size_t i00 = (static_cast<size_t>(y0) * width + x0) * 3;
+            const size_t i01 = (static_cast<size_t>(y0) * width + x1) * 3;
+            const size_t i10 = (static_cast<size_t>(y1) * width + x0) * 3;
+            const size_t i11 = (static_cast<size_t>(y1) * width + x1) * 3;
+            const size_t o = (static_cast<size_t>(row) * width + x) * 3;
+
+            for (int c = 0; c < 3; ++c) {
+                const double value =
+                        src[i00 + c] * (1 - fx) * (1 - fy) +
+                        src[i01 + c] * fx * (1 - fy) +
+                        src[i10 + c] * (1 - fx) * fy +
+                        src[i11 + c] * fx * fy;
+                imageData[o + c] = static_cast<uint8_t>(std::max(0.0, std::min(255.0, value)));
+            }
+        }
+    }
 }
 
 //to gray
@@ -464,11 +539,24 @@ void Function::HighContrast(const std::vector<uint8_t> &imageData, std::promise<
     result.set_value(highContrastImageData);
 }
 
-void Function::RotateImage(std::vector<uint8_t> &imageData, int32_t &width, int32_t &height,
+bool Function::RotateImage(std::vector<uint8_t> &imageData, int32_t &width, int32_t &height,
                            double_t angle, ContentQuad &quad)
 {
     if (width <= 0 || height <= 0 || imageData.empty()) {
-        return;
+        return false;
+    }
+    if (imageData.size() != static_cast<size_t>(width) * height * 3) {
+        return false;   // 缓冲区与宽高不一致时直接放弃，避免越界读写产生撕裂
+    }
+    // 内容区域数据损坏(非有限值/退化，例如子窗口结果丢失了几何信息) -> 回退为整幅画布
+    bool quadBad = !quad.isValid();
+    for (int i = 0; i < 4 && !quadBad; ++i) {
+        if (!std::isfinite(quad.x[i]) || !std::isfinite(quad.y[i])) {
+            quadBad = true;
+        }
+    }
+    if (quadBad) {
+        quad.setRect(width, height);
     }
 
     // 归一化角度到 [0, 360)
@@ -476,39 +564,62 @@ void Function::RotateImage(std::vector<uint8_t> &imageData, int32_t &width, int3
     if (a < 0.0) {
         a += 360.0;
     }
+    if (!std::isfinite(a)) {
+        return false;   // 角度非法，保持原图
+    }
 
-    // ---- 精确无损路径：内容铺满画布(轴对齐) + 90 度整数倍 ----
-    const bool axisAligned = quad.isCanvasRect(width, height);
+    const int32_t W = width;
+    const int32_t H = height;
+
+    // ---- 精确无损路径：任意 90 度整数倍 ----
+    // 这里不再要求 quad 与画布轴对齐：90 度旋转对整幅画布本身就是精确变换。
+    // 若此时仍走"按内容外接矩形重建"的通用路径，每转一次画布就膨胀一圈(最大 1.41 倍)，
+    // 反复旋转会让画布尺寸指数增长，最终申请到无法提交的虚拟内存，写入时触发访问冲突崩溃。
     const double_t nearestQuarter = std::round(a / 90.0) * 90.0;
-    if (axisAligned && std::abs(a - nearestQuarter) < 1e-6) {
+    if (std::abs(a - nearestQuarter) < 1e-6) {
         const int quarter = ((static_cast<int>(std::lround(a / 90.0)) % 4) + 4) % 4;
-        if (quarter != 0) {
-            const int32_t newW = (quarter % 2 == 0) ? width : height;
-            const int32_t newH = (quarter % 2 == 0) ? height : width;
-            std::vector<uint8_t> rotated(static_cast<size_t>(newW) * newH * 3, 0);
-            // 内存行 r 对应视觉行 (height-1-r)；顺时针 90° 的映射为 dst=(width-1-c, r)
-            for (int32_t r = 0; r < height; ++r) {
-                for (int32_t c = 0; c < width; ++c) {
-                    int32_t nr = 0;
-                    int32_t nc = 0;
-                    switch (quarter) {
-                    case 1:  nr = width - 1 - c;  nc = r;             break; // 顺时针 90°
-                    case 2:  nr = height - 1 - r; nc = width - 1 - c; break; // 180°
-                    default: nr = c;             nc = height - 1 - r; break; // 逆时针 90°
-                    }
-                    const size_t src = (static_cast<size_t>(r) * width + c) * 3;
-                    const size_t dst = (static_cast<size_t>(nr) * newW + nc) * 3;
-                    rotated[dst] = imageData[src];
-                    rotated[dst + 1] = imageData[src + 1];
-                    rotated[dst + 2] = imageData[src + 2];
-                }
-            }
-            imageData.swap(rotated);
-            width = newW;
-            height = newH;
-            quad.setRect(newW, newH);
+        if (quarter == 0) {
+            return false;   // 0/360 度：无变化
         }
-        return;
+        const int32_t newW = (quarter % 2 == 0) ? W : H;
+        const int32_t newH = (quarter % 2 == 0) ? H : W;
+        std::vector<uint8_t> rotated;
+        try {
+            rotated.assign(static_cast<size_t>(newW) * static_cast<size_t>(newH) * 3, 0);
+        } catch (const std::bad_alloc &) {
+            return false;   // 内存不足：保持原图，避免崩溃
+        }
+        // 内存行 r 对应视觉行 (H-1-r)；顺时针 90° 的映射为 dst=(W-1-c, r)
+        for (int32_t r = 0; r < H; ++r) {
+            for (int32_t c = 0; c < W; ++c) {
+                int32_t nr = 0;
+                int32_t nc = 0;
+                switch (quarter) {
+                case 1:  nr = W - 1 - c;  nc = r;          break; // 顺时针 90°
+                case 2:  nr = H - 1 - r; nc = W - 1 - c; break; // 180°
+                default: nr = c;         nc = H - 1 - r; break; // 逆时针 90°
+                }
+                const size_t src = (static_cast<size_t>(r) * W + c) * 3;
+                const size_t dst = (static_cast<size_t>(nr) * newW + nc) * 3;
+                rotated[dst] = imageData[src];
+                rotated[dst + 1] = imageData[src + 1];
+                rotated[dst + 2] = imageData[src + 2];
+            }
+        }
+        imageData.swap(rotated);
+        width = newW;
+        height = newH;
+        // 内容四边形按同一变换同步(视觉坐标，角点按画布边界)
+        for (int i = 0; i < 4; ++i) {
+            const double_t qx0 = quad.x[i];
+            const double_t qy0 = quad.y[i];
+            switch (quarter) {
+            case 1:  quad.x[i] = H - qy0; quad.y[i] = qx0; break;
+            case 2:  quad.x[i] = W - qx0; quad.y[i] = H - qy0; break;
+            default: quad.x[i] = qy0;     quad.y[i] = W - qx0; break;
+            }
+        }
+        return true;
     }
 
     // ---- 通用路径：按内容外接矩形重建画布 + 双线性采样 ----
@@ -516,8 +627,8 @@ void Function::RotateImage(std::vector<uint8_t> &imageData, int32_t &width, int3
     const double_t rad = a * M_PI / 180.0;
     const double_t cosA = std::cos(rad);
     const double_t sinA = std::sin(rad);
-    const double_t cx = width / 2.0;    // 旧画布中心(= 内容中心)
-    const double_t cy = height / 2.0;
+    const double_t cx = W / 2.0;    // 旧画布中心(= 内容中心)
+    const double_t cy = H / 2.0;
 
     // 内容四边形绕中心旋转(屏幕坐标顺时针)
     double_t qx[4];
@@ -534,13 +645,35 @@ void Function::RotateImage(std::vector<uint8_t> &imageData, int32_t &width, int3
         maxY = std::max(maxY, qy[i]);
     }
 
+    // 内容区域明显异常(外接矩形远超画布)时放弃本次旋转，防止按错误范围重建画布
+    const double_t spanX = maxX - minX;
+    const double_t spanY = maxY - minY;
+    const double_t maxSpan = 8.0 * static_cast<double_t>(std::max(W, H));
+    if (!std::isfinite(spanX) || !std::isfinite(spanY) ||
+        spanX <= 0.0 || spanY <= 0.0 || spanX > maxSpan || spanY > maxSpan) {
+        return false;
+    }
+
     // 新画布 = 内容外接矩形(向上取整，内容居中，不多不少)
-    const int32_t newW = std::max(1, static_cast<int32_t>(std::ceil(maxX - minX)));
-    const int32_t newH = std::max(1, static_cast<int32_t>(std::ceil(maxY - minY)));
+    const int32_t newW = std::max(1, static_cast<int32_t>(std::ceil(spanX)));
+    const int32_t newH = std::max(1, static_cast<int32_t>(std::ceil(spanY)));
     const double_t halfNewW = newW / 2.0;
     const double_t halfNewH = newH / 2.0;
 
-    std::vector<uint8_t> rotated(static_cast<size_t>(newW) * newH * 3, 0);
+    // 像素总量上限：防止反复旋转导致画布无限膨胀，
+    // 申请到无法提交的虚拟内存后写入会直接引发访问冲突(0xC0000005)。
+    const size_t outPixels = static_cast<size_t>(newW) * static_cast<size_t>(newH);
+    const size_t kMaxRotatePixels = 100ULL * 1000ULL * 1000ULL;   // 1 亿像素(约 300MB)
+    if (outPixels > kMaxRotatePixels) {
+        return false;
+    }
+
+    std::vector<uint8_t> rotated;
+    try {
+        rotated.assign(outPixels * 3, 0);
+    } catch (const std::bad_alloc &) {
+        return false;   // 内存不足：保持原图，避免崩溃
+    }
 
     for (int32_t v = 0; v < newH; ++v) {
         for (int32_t x = 0; x < newW; ++x) {
@@ -558,22 +691,22 @@ void Function::RotateImage(std::vector<uint8_t> &imageData, int32_t &width, int3
 
             // 视觉坐标 -> 内存连续坐标(像素中心正好落在整数上)
             const double_t mc = X - 0.5;             // 列
-            const double_t mr = (height - 0.5) - Y;  // 行(自底向上)
+            const double_t mr = (H - 0.5) - Y;       // 行(自底向上)
 
             const int32_t c0 = static_cast<int32_t>(std::floor(mc));
             const int32_t r0 = static_cast<int32_t>(std::floor(mr));
             const double_t fx = mc - c0;
             const double_t fy = mr - r0;
 
-            const int32_t cr = std::max(0, std::min(c0, width - 1));
-            const int32_t c1 = std::max(0, std::min(c0 + 1, width - 1));
-            const int32_t rr = std::max(0, std::min(r0, height - 1));
-            const int32_t r1 = std::max(0, std::min(r0 + 1, height - 1));
+            const int32_t cr = std::max(0, std::min(c0, W - 1));
+            const int32_t c1 = std::max(0, std::min(c0 + 1, W - 1));
+            const int32_t rr = std::max(0, std::min(r0, H - 1));
+            const int32_t r1 = std::max(0, std::min(r0 + 1, H - 1));
 
-            const size_t i00 = (static_cast<size_t>(rr) * width + cr) * 3;
-            const size_t i01 = (static_cast<size_t>(rr) * width + c1) * 3;
-            const size_t i10 = (static_cast<size_t>(r1) * width + cr) * 3;
-            const size_t i11 = (static_cast<size_t>(r1) * width + c1) * 3;
+            const size_t i00 = (static_cast<size_t>(rr) * W + cr) * 3;
+            const size_t i01 = (static_cast<size_t>(rr) * W + c1) * 3;
+            const size_t i10 = (static_cast<size_t>(r1) * W + cr) * 3;
+            const size_t i11 = (static_cast<size_t>(r1) * W + c1) * 3;
 
             const size_t dst = (static_cast<size_t>(newH - 1 - v) * newW + x) * 3;
             for (int ch = 0; ch < 3; ++ch) {
@@ -595,6 +728,7 @@ void Function::RotateImage(std::vector<uint8_t> &imageData, int32_t &width, int3
         quad.x[i] = qx[i] + halfNewW;
         quad.y[i] = qy[i] + halfNewH;
     }
+    return true;
 }
 
 void Function::RotateReverse(std::vector<uint8_t> &imageData, int32_t &width, int32_t &height,
@@ -788,5 +922,269 @@ void Function::FullMosaic(std::vector<uint8_t> &imageData, uint32_t width, uint3
                 }
             }
         }
+    }
+}
+
+// ------------------------------------------------------------------
+// 几何变换(P2-A)：翻转/转置/裁剪
+// 所有坐标均按【视觉】约定(y 向下)，内部再换算成自底向上的内存行，
+// 保证与显示/保存结果一致。
+// ------------------------------------------------------------------
+void Function::FlipImage(std::vector<uint8_t> &imageData, int32_t &width, int32_t &height,
+                         FlipMode mode, ContentQuad &quad)
+{
+    if (width <= 0 || height <= 0) {
+        return;
+    }
+    if (imageData.size() < static_cast<size_t>(width) * static_cast<size_t>(height) * 3) {
+        return;
+    }
+    const int32_t W = width;
+    const int32_t H = height;
+    const bool swap = (mode == FlipMode::Transpose || mode == FlipMode::AntiTranspose);
+    const int32_t outW = swap ? H : W;
+    const int32_t outH = swap ? W : H;
+
+    std::vector<uint8_t> out(static_cast<size_t>(outW) * static_cast<size_t>(outH) * 3, 0);
+    for (int32_t yv = 0; yv < outH; ++yv) {
+        for (int32_t x = 0; x < outW; ++x) {
+            int32_t sx = x;
+            int32_t sy = yv;
+            switch (mode) {
+            case FlipMode::Horizontal:    sx = W - 1 - x;  break;
+            case FlipMode::Vertical:      sy = H - 1 - yv; break;
+            case FlipMode::Transpose:     sx = yv; sy = x; break;
+            case FlipMode::AntiTranspose: sx = H - 1 - yv; sy = W - 1 - x; break;
+            }
+            const size_t src = (static_cast<size_t>(H - 1 - sy) * W + sx) * 3;
+            const size_t dst = (static_cast<size_t>(outH - 1 - yv) * outW + x) * 3;
+            out[dst]     = imageData[src];
+            out[dst + 1] = imageData[src + 1];
+            out[dst + 2] = imageData[src + 2];
+        }
+    }
+    imageData.swap(out);
+    width = outW;
+    height = outH;
+
+    // 内容区域同步变换(视觉坐标)
+    for (int i = 0; i < 4; ++i) {
+        const double qx = quad.x[i];
+        const double qy = quad.y[i];
+        switch (mode) {
+        case FlipMode::Horizontal:    quad.x[i] = W - qx; quad.y[i] = qy; break;
+        case FlipMode::Vertical:      quad.x[i] = qx; quad.y[i] = H - qy; break;
+        case FlipMode::Transpose:     quad.x[i] = qy; quad.y[i] = qx; break;
+        case FlipMode::AntiTranspose: quad.x[i] = H - qy; quad.y[i] = W - qx; break;
+        }
+    }
+}
+
+void Function::CropImage(std::vector<uint8_t> &imageData, int32_t &width, int32_t &height,
+                         int32_t x, int32_t y, int32_t cw, int32_t ch, ContentQuad &quad)
+{
+    if (width <= 0 || height <= 0 || imageData.empty()) {
+        return;
+    }
+    x = std::max(0, std::min(x, width - 1));
+    y = std::max(0, std::min(y, height - 1));
+    cw = std::max(1, std::min(cw, width - x));
+    ch = std::max(1, std::min(ch, height - y));
+
+    std::vector<uint8_t> out(static_cast<size_t>(cw) * static_cast<size_t>(ch) * 3, 0);
+    for (int32_t yv = 0; yv < ch; ++yv) {
+        const size_t srcRow = static_cast<size_t>(height - 1 - (y + yv)) * width;
+        const size_t dstRow = static_cast<size_t>(ch - 1 - yv) * cw;
+        for (int32_t i = 0; i < cw; ++i) {
+            const size_t s = (srcRow + x + i) * 3;
+            const size_t d = (dstRow + i) * 3;
+            out[d]     = imageData[s];
+            out[d + 1] = imageData[s + 1];
+            out[d + 2] = imageData[s + 2];
+        }
+    }
+    imageData.swap(out);
+    width = cw;
+    height = ch;
+    quad.setRect(width, height);
+}
+
+// ------------------------------------------------------------------
+// 增强(P2-A)：直方图均衡 / 形态学 / 卷积 / USM
+// ------------------------------------------------------------------
+void Function::BuildEqualizeLUT(const std::vector<uint8_t> &imageData, uint8_t lut[256])
+{
+    for (int i = 0; i < 256; ++i) {
+        lut[i] = static_cast<uint8_t>(i);   // 默认恒等映射
+    }
+    const size_t n = imageData.size() / 3;
+    if (n == 0) {
+        return;
+    }
+    uint64_t hist[256] = {0};
+    for (size_t p = 0; p < n; ++p) {
+        const size_t i = p * 3;
+        int gray = static_cast<int>(0.299 * imageData[i] + 0.587 * imageData[i + 1] + 0.114 * imageData[i + 2]);
+        gray = std::max(0, std::min(255, gray));
+        ++hist[gray];
+    }
+    uint64_t cdf[256];
+    uint64_t acc = 0;
+    for (int v = 0; v < 256; ++v) {
+        acc += hist[v];
+        cdf[v] = acc;
+    }
+    uint64_t cdfMin = 0;
+    for (int v = 0; v < 256; ++v) {
+        if (cdf[v] > 0) {
+            cdfMin = cdf[v];
+            break;
+        }
+    }
+    const double denom = static_cast<double>(n) - static_cast<double>(cdfMin);
+    if (denom <= 0.0) {
+        return;   // 纯色图：保持原样
+    }
+    for (int v = 0; v < 256; ++v) {
+        const double t = (static_cast<double>(cdf[v]) - static_cast<double>(cdfMin)) / denom * 255.0;
+        lut[v] = static_cast<uint8_t>(std::max(0.0, std::min(255.0, t)));
+    }
+}
+
+void Function::ApplyLUT(std::vector<uint8_t> &imageData, const uint8_t lut[256],
+                        size_t startPixel, size_t endPixel)
+{
+    const size_t total = imageData.size() / 3;
+    const size_t last = std::min(endPixel, total);
+    for (size_t p = startPixel; p < last; ++p) {
+        const size_t i = p * 3;
+        imageData[i]     = lut[imageData[i]];
+        imageData[i + 1] = lut[imageData[i + 1]];
+        imageData[i + 2] = lut[imageData[i + 2]];
+    }
+}
+
+void Function::HistogramEqualize(std::vector<uint8_t> &imageData, int32_t width, int32_t height)
+{
+    if (width <= 0 || height <= 0) {
+        return;
+    }
+    uint8_t lut[256];
+    BuildEqualizeLUT(imageData, lut);
+    ApplyLUT(imageData, lut, 0, imageData.size() / 3);
+}
+
+void Function::Morphology(std::vector<uint8_t> &imageData, int32_t width, int32_t height,
+                          MorphType type, size_t startPixel, size_t endPixel)
+{
+    if (width <= 0 || height <= 0 || imageData.empty()) {
+        return;
+    }
+    const size_t total = static_cast<size_t>(width) * static_cast<size_t>(height);
+    const size_t last = std::min(endPixel, total);
+
+    auto clampIndex = [width, height](int64_t x, int64_t y) -> size_t {
+        const int64_t cx = std::max<int64_t>(0, std::min<int64_t>(width - 1, x));
+        const int64_t cy = std::max<int64_t>(0, std::min<int64_t>(height - 1, y));
+        return (static_cast<size_t>(cy) * static_cast<size_t>(width) + static_cast<size_t>(cx)) * 3;
+    };
+    // 单趟形态学：src 只读，dst 只写本段(可分段并行)
+    auto runPass = [&](const std::vector<uint8_t> &src, std::vector<uint8_t> &dst, bool dilate) {
+        for (size_t p = startPixel; p < last; ++p) {
+            const int32_t x = static_cast<int32_t>(p % width);
+            const int32_t y = static_cast<int32_t>(p / width);
+            const size_t di = p * 3;
+            for (int c = 0; c < 3; ++c) {
+                uint8_t v = dilate ? 0 : 255;
+                for (int dy = -1; dy <= 1; ++dy) {
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        const uint8_t n = src[clampIndex(x + dx, y + dy) + c];
+                        v = dilate ? std::max(v, n) : std::min(v, n);
+                    }
+                }
+                dst[di + c] = v;
+            }
+        }
+    };
+
+    std::vector<uint8_t> snapshot(imageData);
+    switch (type) {
+    case MorphType::Erode:
+        runPass(snapshot, imageData, false);
+        break;
+    case MorphType::Dilate:
+        runPass(snapshot, imageData, true);
+        break;
+    case MorphType::Open: {
+        std::vector<uint8_t> tmp(snapshot.size(), 0);
+        runPass(snapshot, tmp, false);
+        runPass(tmp, imageData, true);
+        break;
+    }
+    case MorphType::Close: {
+        std::vector<uint8_t> tmp(snapshot.size(), 0);
+        runPass(snapshot, tmp, true);
+        runPass(tmp, imageData, false);
+        break;
+    }
+    }
+}
+
+void Function::Convolve3x3(const std::vector<uint8_t> &src, std::vector<uint8_t> &dst,
+                           int32_t width, int32_t height, const double *kernel,
+                           double scale, double offset, size_t startPixel, size_t endPixel)
+{
+    const size_t total = static_cast<size_t>(std::max(0, width)) * static_cast<size_t>(std::max(0, height));
+    if (total == 0 || src.size() < total * 3 || kernel == nullptr) {
+        dst.clear();
+        return;
+    }
+    dst.assign(total * 3, 0);
+    if (std::abs(scale) < 1e-9) {
+        scale = 1.0;   // 除零保护
+    }
+    const size_t last = std::min(endPixel, total);
+    for (size_t p = startPixel; p < last; ++p) {
+        const int32_t x = static_cast<int32_t>(p % width);
+        const int32_t y = static_cast<int32_t>(p / width);
+        const size_t di = p * 3;
+        for (int c = 0; c < 3; ++c) {
+            double sum = 0.0;
+            for (int ky = -1; ky <= 1; ++ky) {
+                for (int kx = -1; kx <= 1; ++kx) {
+                    const int64_t sx = std::max<int64_t>(0, std::min<int64_t>(width - 1, x + kx));
+                    const int64_t sy = std::max<int64_t>(0, std::min<int64_t>(height - 1, y + ky));
+                    const size_t si = (static_cast<size_t>(sy) * static_cast<size_t>(width) +
+                                       static_cast<size_t>(sx)) * 3;
+                    sum += static_cast<double>(src[si + c]) * kernel[(ky + 1) * 3 + (kx + 1)];
+                }
+            }
+            const int v = static_cast<int>(std::lround(sum / scale + offset));
+            dst[di + c] = static_cast<uint8_t>(std::max(0, std::min(255, v)));
+        }
+    }
+}
+
+void Function::USMSharpen(const std::vector<uint8_t> &src, std::vector<uint8_t> &dst,
+                          int32_t width, int32_t height,
+                          double radius, double amount, double threshold)
+{
+    dst = src;
+    if (amount <= 0.0 || width <= 0 || height <= 0 || src.empty()) {
+        return;
+    }
+    std::promise<std::vector<uint8_t>> promise;
+    std::future<std::vector<uint8_t>> future = promise.get_future();
+    Gauss(src, promise, width, height, std::max(0.1, radius));
+    const std::vector<uint8_t> blurred = future.get();
+    const size_t n = std::min(src.size(), blurred.size());
+    const double thr = std::max(0.0, threshold);
+    for (size_t i = 0; i < n; ++i) {
+        const double d = static_cast<double>(src[i]) - static_cast<double>(blurred[i]);
+        if (std::abs(d) < thr) {
+            continue;   // 低于阈值视为噪声/平滑区，不锐化
+        }
+        const int v = static_cast<int>(std::lround(static_cast<double>(src[i]) + amount * d));
+        dst[i] = static_cast<uint8_t>(std::max(0, std::min(255, v)));
     }
 }
