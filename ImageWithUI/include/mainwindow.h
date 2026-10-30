@@ -2,6 +2,7 @@
 #define MAINWINDOW_H
 #include"QTHeader.h"
 #include <QListWidgetItem>
+#include <QTimer>
 #include "BMPFile.h"
 #include "Function.h"
 #include "blendwindow.h"
@@ -40,6 +41,19 @@ struct ImageSnapshot {
     ContentQuad quad;         // 内容区域(撤销/重做要一起恢复)
 };
 
+// 算子函数：输入像素与执行上下文(可修改画布尺寸)
+using OpFn = std::function<void(std::vector<uint8_t> &, OpContext &)>;
+
+// 参数实时预览的一个输入项：
+// 提交路径与预览路径共用同一个算子工厂，保证两边结果完全一致
+struct PreviewField {
+    QLineEdit *edit = nullptr;
+    QString title;
+    double min = 0.0;
+    double max = 0.0;
+    OpFn (*makeOp)(double) = nullptr;   // 把输入值变成一次算子调用
+};
+
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
@@ -69,6 +83,8 @@ public:
     const std::vector<uint8_t> &CurrentImageData() const { return imageData; }
     // 是否正在处理中(处理中应禁止再次触发算子)
     bool IsBusy() const { return m_busy; }
+    // 当前画面是否为尚未提交的预览结果
+    bool IsPreviewActive() const { return m_previewActive; }
     // 更新状态栏文字
     void UpdateStatus(const QString &text);
     // 供外部(命令行)载入图片
@@ -203,6 +219,8 @@ private slots:
 
 protected:
     void mouseDoubleClickEvent(QMouseEvent *event) override;
+    // 输入框按 Esc 取消预览
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
     Ui::MainWindow *ui;
@@ -249,6 +267,31 @@ private:
     bool LoadImage(const QString &path);
     // 应用一个快照：写历史 + 同步尺寸 + 刷新显示
     void ApplySnapshot(const ImageSnapshot &snap, bool keepRotateBase = false);
+    // 只刷新画面(不修改已提交的像素数据)，供预览/取消预览使用
+    void SetDisplayPixmap(const std::vector<uint8_t> &data, int32_t width, int32_t height);
+    void RefreshDisplay();
+
+    // ---- 参数实时预览 ----
+    // 右侧"图像调整"的 7 个输入框：停止输入约 280ms 后在【已提交的图像】上
+    // 后台执行一次算子并只刷新画面，不写历史；点"应用"才真正提交
+    void SetupLivePreview();
+    void OnPreviewTextChanged(int fieldIndex);
+    void RunPreview();
+    void CancelPreview();
+    // 预览结果与当前输入完全一致时直接提交(省掉一次重复计算)，否则返回 false
+    bool CommitPreview(const QString &title, QLineEdit *edit, double value);
+    int PreviewFieldIndex(const QLineEdit *edit) const;
+
+    QTimer *m_previewTimer = nullptr;
+    std::vector<PreviewField> m_previewFields;
+    int m_pendingFieldIndex = -1;   // 正在等待/执行的输入项
+    int m_previewGeneration = 0;    // 世代号：过期结果直接丢弃
+    bool m_previewRunning = false;  // 有预览任务在后台执行
+    bool m_previewQueued = false;   // 执行期间又有新输入，完成后重算
+    bool m_previewActive = false;   // 当前画面是预览结果(尚未提交)
+    ImageSnapshot m_previewResult;  // 最近一次有效的预览结果
+    double m_previewValue = 0.0;    // 该结果对应的输入值
+    int m_previewFieldIndex = -1;   // 该结果来自哪个输入项
     // 刷新状态栏右侧信息
     void UpdateStatusInfo();
     // 刷新右侧"历史记录"面板：列出每一步的尺寸，并选中当前步

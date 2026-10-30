@@ -1,8 +1,13 @@
 #include "selftest.h"
 #include "BMPFile.h"
 #include "Function.h"
+#include "mainwindow.h"
 #include <QFileInfo>
 #include <QTextStream>
+#include <QEventLoop>
+#include <QTimer>
+#include <QLineEdit>
+#include <QPushButton>
 #include <cstdio>
 
 namespace {
@@ -822,6 +827,69 @@ int Run(const QString &imagePath)
         }
         out().flush();
         QFile::remove(outPath);
+    }
+
+    // ---------- 8. 参数实时预览：改输入只刷新画面，点"应用"才写历史 ----------
+    {
+        const QString previewPath = QDir::tempPath() + "/imagewithui_preview_src.png";
+        QImage src(64, 48, QImage::Format_RGB32);
+        for (int y = 0; y < src.height(); ++y) {
+            for (int x = 0; x < src.width(); ++x) {
+                src.setPixel(x, y, qRgb(20 + x, 30 + y, 60));
+            }
+        }
+        const bool srcOk = src.save(previewPath, "PNG");
+
+        QString failReason;
+        {
+            MainWindow win;
+            QLineEdit *edit = win.findChild<QLineEdit *>("lineEdit_brightness");
+            QPushButton *apply = win.findChild<QPushButton *>("btn_brightness");
+            if (!srcOk) {
+                failReason = "无法生成测试图";
+            } else if (!win.OpenImage(previewPath)) {
+                failReason = "无法打开测试图";
+            } else if (edit == nullptr || apply == nullptr) {
+                failReason = "找不到亮度输入框/应用按钮";
+            } else {
+                const size_t historyBefore = win.imageDataHistory.size();
+                const std::vector<uint8_t> pixelsBefore = win.CurrentImageData();
+
+                // 输入参数后等待防抖 + 后台计算完成，画面应进入预览态
+                edit->setText("40");
+                QEventLoop loop;
+                QTimer::singleShot(1500, &loop, &QEventLoop::quit);
+                loop.exec();
+
+                if (win.imageDataHistory.size() != historyBefore) {
+                    failReason = "预览写入了历史";
+                } else if (win.CurrentImageData() != pixelsBefore) {
+                    failReason = "预览修改了已提交的像素";
+                } else if (!win.IsPreviewActive()) {
+                    failReason = "预览没有生成";
+                } else {
+                    // 点"应用"：预览结果提交，历史加一步
+                    apply->click();
+                    if (win.imageDataHistory.size() != historyBefore + 1) {
+                        failReason = "应用预览后历史未增加";
+                    } else if (win.CurrentImageData() == pixelsBefore) {
+                        failReason = "应用预览后像素没有变化";
+                    } else if (win.IsPreviewActive()) {
+                        failReason = "应用后仍停留在预览态";
+                    }
+                }
+            }
+        }
+        QFile::remove(previewPath);
+
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 参数实时预览 : 预览不写历史，应用后历史 +1\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 参数实时预览 : " << failReason << "\n";
+        }
+        out().flush();
     }
 
     out() << "------------------------------------------------\n";

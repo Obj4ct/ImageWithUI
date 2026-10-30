@@ -9,6 +9,88 @@
 #include <QImageWriter>
 #include <QSignalBlocker>
 #include <QFont>
+#include <QKeyEvent>
+#include <QApplication>
+
+namespace {
+
+// ---- 调整算子工厂：提交路径与实时预览路径共用同一份实现 ----
+
+OpFn MakeBrightnessOp(double value)
+{
+    return [value](std::vector<uint8_t> &d, OpContext &) {
+        Function f;
+        f.Brightness(d, value);
+    };
+}
+
+OpFn MakeContrastOp(double value)
+{
+    return [value](std::vector<uint8_t> &d, OpContext &) {
+        Function f;
+        f.Contrast(d, value);
+    };
+}
+
+OpFn MakeSaturationOp(double value)
+{
+    return [value](std::vector<uint8_t> &d, OpContext &ctx) {
+        Function f;
+        f.Saturation(d, ctx.width, ctx.height, value);
+    };
+}
+
+OpFn MakeShadowOp(double value)
+{
+    return [value](std::vector<uint8_t> &d, OpContext &) {
+        Function f;
+        std::vector<uint8_t> out;
+        f.MakeShadow(d, out, value);
+        d.swap(out);
+    };
+}
+
+OpFn MakeHighlightOp(double value)
+{
+    return [value](std::vector<uint8_t> &d, OpContext &) {
+        Function f;
+        std::vector<uint8_t> out;
+        f.HighLight(d, out, value);
+        d.swap(out);
+    };
+}
+
+OpFn MakeThresholdOp(double threshold)
+{
+    return [threshold](std::vector<uint8_t> &d, OpContext &ctx) {
+        Function f;
+        f.ApplyThreshold(d, threshold, 0, ctx.pixelCount);
+    };
+}
+
+// 锐化：高斯模糊 → 高反差保留 → 锐化，程度值同时作为模糊半径
+OpFn MakeSharpenOp(double amount)
+{
+    return [amount](std::vector<uint8_t> &d, OpContext &ctx) {
+        Function f;
+        std::promise<std::vector<uint8_t>> blurPromise;
+        std::future<std::vector<uint8_t>> blurFuture = blurPromise.get_future();
+        f.Gauss(d, blurPromise, ctx.width, ctx.height, amount);
+        const std::vector<uint8_t> blurred = blurFuture.get();
+
+        std::promise<std::vector<uint8_t>> highPromise;
+        std::future<std::vector<uint8_t>> highFuture = highPromise.get_future();
+        f.HighContrast(d, highPromise, blurred);
+        const std::vector<uint8_t> highContrast = highFuture.get();
+
+        std::promise<std::vector<uint8_t>> sharpPromise;
+        std::future<std::vector<uint8_t>> sharpFuture = sharpPromise.get_future();
+        f.Sharpen(d, sharpPromise, highContrast);
+        d = sharpFuture.get();
+    };
+}
+
+}   // namespace
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent),
@@ -31,6 +113,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     _SetShortCut();
     _SetVisible(false);
+    SetupLivePreview();   // 右侧调整参数的实时预览
 
     // 工具栏：常用操作快捷入口(原先工具栏为空)
     ui->toolBar->setMovable(false);
@@ -92,6 +175,18 @@ void MainWindow::mouseDoubleClickEvent(QMouseEvent *event)
     LoadImage(path);
 }
 
+// 输入框里按 Esc：放弃当前参数预览
+bool MainWindow::eventFilter(QObject *watched, QEvent *event)
+{
+    if (event->type() == QEvent::KeyPress) {
+        const QKeyEvent *key = static_cast<QKeyEvent *>(event);
+        if (key->key() == Qt::Key_Escape && PreviewFieldIndex(qobject_cast<QLineEdit *>(watched)) >= 0) {
+            CancelPreview();
+        }
+    }
+    return QMainWindow::eventFilter(watched, event);
+}
+
 void MainWindow::ResetImage(MyValue &myValue)
 {
     imageData = myValue.imageData;
@@ -108,7 +203,14 @@ void MainWindow::ShowImage(const std::vector<uint8_t> &inImageData, MyValue valu
     imageData = inImageData;
     myValue = value;
 
-    const QImage image = Function::ToDisplayImage(inImageData, width, height);
+    SetDisplayPixmap(inImageData, width, height);
+    UpdateStatusInfo();
+}
+
+// 只更新画面显示，不改动 imageData/myValue —— 预览与取消预览都走这里
+void MainWindow::SetDisplayPixmap(const std::vector<uint8_t> &data, int32_t width, int32_t height)
+{
+    const QImage image = Function::ToDisplayImage(data, width, height);
     if (image.isNull()) {
         return;
     }
@@ -122,11 +224,221 @@ void MainWindow::ShowImage(const std::vector<uint8_t> &inImageData, MyValue valu
     ui->imageLabel->setText(QString());
     ui->imageLabel->setAlignment(Qt::AlignCenter);
     ui->imageLabel->setPixmap(pixmap);
-    UpdateStatusInfo();
+}
+
+// 画面回到"已提交"的图像状态
+void MainWindow::RefreshDisplay()
+{
+    if (imageData.empty()) {
+        return;
+    }
+    SetDisplayPixmap(imageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+}
+
+// ------------------------------------------------------------------
+// 参数实时预览
+// ------------------------------------------------------------------
+
+int MainWindow::PreviewFieldIndex(const QLineEdit *edit) const
+{
+    for (size_t i = 0; i < m_previewFields.size(); ++i) {
+        if (m_previewFields[i].edit == edit) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
+}
+
+void MainWindow::SetupLivePreview()
+{
+    m_previewTimer = new QTimer(this);
+    m_previewTimer->setSingleShot(true);
+    m_previewTimer->setInterval(280);   // 停止输入 280ms 后才开始计算
+    connect(m_previewTimer, &QTimer::timeout, this, &MainWindow::RunPreview);
+
+    struct Desk {
+        QLineEdit *edit;
+        const char *title;
+        double min;
+        double max;
+        OpFn (*makeOp)(double);
+    };
+    const Desk desks[] = {
+        { ui->lineEdit_sharpen,    "锐化",      0.0,   200.0, &MakeSharpenOp },
+        { ui->lineEdit_highlight,  "高光调整",  0.0,   255.0, &MakeHighlightOp },
+        { ui->lineEdit_threshold,  "阈值处理",  0.0,   255.0, &MakeThresholdOp },
+        { ui->lineEdit_shadow,     "阴影调整",  0.0,   100.0, &MakeShadowOp },
+        { ui->lineEdit_brightness, "亮度调整", -150.0, 150.0, &MakeBrightnessOp },
+        { ui->lineEdit_contrast,   "对比度调整", -50.0, 100.0, &MakeContrastOp },
+        { ui->lineEdit_saturation, "饱和度调整", -100.0, 100.0, &MakeSaturationOp },
+    };
+
+    for (const Desk &d : desks) {
+        PreviewField field;
+        field.edit = d.edit;
+        field.title = QString::fromUtf8(d.title);
+        field.min = d.min;
+        field.max = d.max;
+        field.makeOp = d.makeOp;
+        m_previewFields.push_back(field);
+
+        const int index = static_cast<int>(m_previewFields.size()) - 1;
+        connect(d.edit, &QLineEdit::textChanged, this, [this, index]() {
+            OnPreviewTextChanged(index);
+        });
+        d.edit->installEventFilter(this);   // Esc 取消预览
+    }
+
+    // 焦点离开右侧调整面板(或窗口失去焦点)时回滚到已提交的图像
+    connect(qApp, &QApplication::focusChanged, this, [this](QWidget *, QWidget *now) {
+        if (!m_previewActive) {
+            return;
+        }
+        if (now != nullptr && (now == ui->widget_14 || ui->widget_14->isAncestorOf(now))) {
+            return;
+        }
+        CancelPreview();
+    });
+}
+
+void MainWindow::OnPreviewTextChanged(int fieldIndex)
+{
+    if (fieldIndex < 0 || fieldIndex >= static_cast<int>(m_previewFields.size())) {
+        return;
+    }
+    if (imageData.empty() || m_busy) {
+        return;
+    }
+    m_pendingFieldIndex = fieldIndex;
+    m_previewTimer->start();   // 防抖：连续输入时不断重新计时
+}
+
+// 在【已提交的图像】上跑一次算子，只刷新画面，不写历史
+void MainWindow::RunPreview()
+{
+    if (m_previewRunning) {
+        m_previewQueued = true;   // 上一次还没算完，等它结束后再算最新输入
+        return;
+    }
+    if (m_pendingFieldIndex < 0 || m_pendingFieldIndex >= static_cast<int>(m_previewFields.size())) {
+        return;
+    }
+    if (imageData.empty() || myValue.bmpInfo.GetWidth() <= 0 || myValue.bmpInfo.GetHeight() <= 0) {
+        CancelPreview();
+        return;
+    }
+
+    const PreviewField &field = m_previewFields[static_cast<size_t>(m_pendingFieldIndex)];
+    const ReturnValue rv = CheckOK(field.edit);
+    // 输入不完整/非法/越界：静默回到已提交的画面(提交时会给出提示)
+    if (rv.isNull || !rv.isNumeric || rv.value < field.min || rv.value > field.max) {
+        CancelPreview();
+        return;
+    }
+
+    const double value = rv.value;
+    const OpFn op = field.makeOp(value);
+    const int index = m_pendingFieldIndex;
+
+    // 每次都从已提交的像素出发，反复修改参数不会层层叠加
+    const std::vector<uint8_t> source = imageData;
+    const int32_t width = myValue.bmpInfo.GetWidth();
+    const int32_t height = myValue.bmpInfo.GetHeight();
+    const ContentQuad quad = m_contentQuad;
+    const int gen = ++m_previewGeneration;
+    m_previewRunning = true;
+
+    auto result = std::make_shared<ImageSnapshot>();
+    auto *watcher = new QFutureWatcher<void>(this);
+    connect(watcher, &QFutureWatcher<void>::finished, this,
+            [this, watcher, result, gen, value, index]() {
+        watcher->deleteLater();
+        m_previewRunning = false;
+        // 世代号已过期 → 这条结果对应的是旧输入，直接丢弃
+        if (gen == m_previewGeneration && !result->data.empty()) {
+            m_previewResult = std::move(*result);
+            m_previewValue = value;
+            m_previewFieldIndex = index;
+            m_previewActive = true;
+            SetDisplayPixmap(m_previewResult.data, m_previewResult.width, m_previewResult.height);
+            UpdateStatus(QString("预览中：%1 = %2")
+                             .arg(m_previewFields[static_cast<size_t>(index)].title)
+                             .arg(value));
+        }
+        if (m_previewQueued) {
+            m_previewQueued = false;
+            RunPreview();
+        }
+    });
+
+    watcher->setFuture(QtConcurrent::run([source, op, width, height, quad, result]() mutable {
+        std::vector<uint8_t> work = source;
+        OpContext ctx;
+        ctx.width = width;
+        ctx.height = height;
+        ctx.pixelCount = work.size() / 3;
+        ctx.numThreads = 1;
+        ctx.segmentSize = ctx.pixelCount;
+        ctx.quad = quad;
+        op(work, ctx);
+        result->data = std::move(work);
+        result->width = ctx.width;
+        result->height = ctx.height;
+        result->quad = ctx.quad;
+    }));
+}
+
+// 放弃预览：停止等待中的任务，并把画面恢复成已提交的图像
+void MainWindow::CancelPreview()
+{
+    ++m_previewGeneration;   // 让在途结果失效
+    m_previewQueued = false;
+    m_pendingFieldIndex = -1;
+    if (m_previewTimer != nullptr) {
+        m_previewTimer->stop();
+    }
+    if (!m_previewActive) {
+        return;
+    }
+    m_previewActive = false;
+    m_previewFieldIndex = -1;
+    m_previewValue = 0.0;
+    m_previewResult = ImageSnapshot();
+    RefreshDisplay();
+}
+
+// 预览结果与当前输入完全一致时直接提交，省掉一次重复计算
+bool MainWindow::CommitPreview(const QString &title, QLineEdit *edit, double value)
+{
+    const int index = PreviewFieldIndex(edit);
+    const bool match = m_previewActive && m_previewFieldIndex == index &&
+                       m_previewValue == value && !m_previewResult.data.empty();
+    const bool wasPreviewing = m_previewActive;
+    // 无论是否命中，先清掉预览状态：不一致时由调用方走正常算子流程
+    const ImageSnapshot snap = match ? m_previewResult : ImageSnapshot();
+    ++m_previewGeneration;
+    m_previewQueued = false;
+    m_pendingFieldIndex = -1;
+    m_previewTimer->stop();
+    m_previewActive = false;
+    m_previewFieldIndex = -1;
+    m_previewValue = 0.0;
+    m_previewResult = ImageSnapshot();
+
+    if (!match) {
+        if (wasPreviewing) {
+            RefreshDisplay();   // 有未提交的预览，先回滚
+        }
+        return false;
+    }
+    ApplySnapshot(snap, false);
+    UpdateStatus(title + " 已应用");
+    return true;
 }
 
 void MainWindow::ResetAll(MyValue &myValue)
 {
+    CancelPreview();
     imageData = myValue.imageData;
     // 恢复原始尺寸(旋转等算子可能改过画布大小)
     if (m_originalWidth > 0 && m_originalHeight > 0) {
@@ -253,6 +565,7 @@ void MainWindow::UndoImageProcessing()
         return;
     }
     // 当前状态压入重做栈
+    CancelPreview();
     redoImageDataHistory.push_back(imageDataHistory.back());
     imageDataHistory.pop_back();
 
@@ -275,6 +588,7 @@ void MainWindow::RedoImageProcessing()
         UpdateStatus("没有可重做的操作");
         return;
     }
+    CancelPreview();
     const ImageSnapshot snap = redoImageDataHistory.back();
     imageDataHistory.push_back(snap);
     redoImageDataHistory.pop_back();
@@ -341,6 +655,7 @@ void MainWindow::on_historyList_itemClicked(QListWidgetItem *item)
 // 打开图片文件并初始化界面状态（BMP 走自有解析器，其它格式由 Qt 插件解码）
 bool MainWindow::LoadImage(const QString &path)
 {
+    CancelPreview();   // 打开新图前先回滚未提交的预览
     MyValue loaded;
     QString errMsg;
     if (!MYFunction::ReadImageFile(path.toStdString(), loaded, errMsg)) {
@@ -555,6 +870,7 @@ void MainWindow::ApplyOperator(const QString &title,
         function.CreateMessagebox("提示", "请先打开一张 BMP 图像");
         return;
     }
+    CancelPreview();   // 新算子从已提交的图像出发
 
     // 输入既可以是当前图像，也可以是旋转专用的一次性快照(无损基准)
     const std::vector<uint8_t> *input = &imageData;
@@ -767,10 +1083,10 @@ void MainWindow::on_btn_brightness_clicked()
         return;
     }
     const double_t value = returnValue.value;
-    ApplyOperator("亮度调整", [value](std::vector<uint8_t> &d, const OpContext &) {
-        Function f;
-        f.Brightness(d, value);
-    });
+    if (CommitPreview("亮度调整", ui->lineEdit_brightness, value)) {
+        return;
+    }
+    ApplyOperator("亮度调整", MakeBrightnessOp(value));
 }
 
 void MainWindow::on_btn_contrast_clicked()
@@ -789,10 +1105,10 @@ void MainWindow::on_btn_contrast_clicked()
         return;
     }
     const double_t value = returnValue.value;
-    ApplyOperator("对比度调整", [value](std::vector<uint8_t> &d, const OpContext &) {
-        Function f;
-        f.Contrast(d, value);
-    });
+    if (CommitPreview("对比度调整", ui->lineEdit_contrast, value)) {
+        return;
+    }
+    ApplyOperator("对比度调整", MakeContrastOp(value));
 }
 
 void MainWindow::on_btn_saturation_clicked()
@@ -806,11 +1122,15 @@ void MainWindow::on_btn_saturation_clicked()
         function.CreateMessagebox("提示", "输入数字");
         return;
     }
+    if (returnValue.value < -100 || returnValue.value > 100) {
+        function.CreateMessagebox("提示", "超出范围，范围是[-100,100]");
+        return;
+    }
     const double_t value = returnValue.value;
-    ApplyOperator("饱和度调整", [value](std::vector<uint8_t> &d, const OpContext &ctx) {
-        Function f;
-        f.Saturation(d, ctx.width, ctx.height, value);
-    });
+    if (CommitPreview("饱和度调整", ui->lineEdit_saturation, value)) {
+        return;
+    }
+    ApplyOperator("饱和度调整", MakeSaturationOp(value));
 }
 
 void MainWindow::on_actioncolorBalance_triggered()
@@ -951,13 +1271,15 @@ void MainWindow::on_btn_shadow_ok_clicked()
         function.CreateMessagebox("提示", "输入数字");
         return;
     }
+    if (returnValue.value < 0 || returnValue.value > 100) {
+        function.CreateMessagebox("提示", "超出范围，范围是[0,100]");
+        return;
+    }
     const double_t value = returnValue.value;
-    ApplyOperator("阴影调整", [value](std::vector<uint8_t> &d, const OpContext &) {
-        Function f;
-        std::vector<uint8_t> out;
-        f.MakeShadow(d, out, value);
-        d.swap(out);
-    });
+    if (CommitPreview("阴影调整", ui->lineEdit_shadow, value)) {
+        return;
+    }
+    ApplyOperator("阴影调整", MakeShadowOp(value));
 }
 
 void MainWindow::on_btn_highlight_ok_clicked()
@@ -971,13 +1293,15 @@ void MainWindow::on_btn_highlight_ok_clicked()
         function.CreateMessagebox("提示", "输入数字");
         return;
     }
+    if (returnValue.value < 0 || returnValue.value > 255) {
+        function.CreateMessagebox("提示", "超出范围，范围是[0,255]");
+        return;
+    }
     const double_t value = returnValue.value;
-    ApplyOperator("高光调整", [value](std::vector<uint8_t> &d, const OpContext &) {
-        Function f;
-        std::vector<uint8_t> out;
-        f.HighLight(d, out, value);
-        d.swap(out);
-    });
+    if (CommitPreview("高光调整", ui->lineEdit_highlight, value)) {
+        return;
+    }
+    ApplyOperator("高光调整", MakeHighlightOp(value));
 }
 
 void MainWindow::on_btn_sharpen_clicked()
@@ -992,25 +1316,15 @@ void MainWindow::on_btn_sharpen_clicked()
         function.CreateMessagebox("提示", "输入数字");
         return;
     }
+    if (returnValue.value < 0 || returnValue.value > 200) {
+        function.CreateMessagebox("提示", "超出范围，范围是[0,200]");
+        return;
+    }
     const double_t amount = returnValue.value;
-    ApplyOperator("锐化", [amount](std::vector<uint8_t> &d, const OpContext &ctx) {
-        Function f;
-        // 1) 高斯模糊
-        std::promise<std::vector<uint8_t>> blurPromise;
-        std::future<std::vector<uint8_t>> blurFuture = blurPromise.get_future();
-        f.Gauss(d, blurPromise, ctx.width, ctx.height, amount);
-        const std::vector<uint8_t> blurred = blurFuture.get();
-        // 2) 高反差保留
-        std::promise<std::vector<uint8_t>> highPromise;
-        std::future<std::vector<uint8_t>> highFuture = highPromise.get_future();
-        f.HighContrast(d, highPromise, blurred);
-        const std::vector<uint8_t> highContrast = highFuture.get();
-        // 3) 锐化
-        std::promise<std::vector<uint8_t>> sharpPromise;
-        std::future<std::vector<uint8_t>> sharpFuture = sharpPromise.get_future();
-        f.Sharpen(d, sharpPromise, highContrast);
-        d = sharpFuture.get();
-    });
+    if (CommitPreview("锐化", ui->lineEdit_sharpen, amount)) {
+        return;
+    }
+    ApplyOperator("锐化", MakeSharpenOp(amount));
 }
 
 void MainWindow::on_actionsobel_triggered()
@@ -1036,11 +1350,10 @@ void MainWindow::on_btn_threshold_ok_clicked()
         return;
     }
     const double_t threshold = returnValue.value;
-    ApplyOperator("阈值处理", [this, threshold](std::vector<uint8_t> &d, const OpContext &ctx) {
-        RunSegmented(ctx, [this, &d, threshold](size_t s, size_t e) {
-            this->function.ApplyThreshold(d, threshold, s, e);
-        });
-    });
+    if (CommitPreview("阈值处理", ui->lineEdit_threshold, threshold)) {
+        return;
+    }
+    ApplyOperator("阈值处理", MakeThresholdOp(threshold));
 }
 
 void MainWindow::on_actionscale_triggered()
