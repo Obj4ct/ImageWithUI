@@ -13,6 +13,8 @@
 #include <QApplication>
 #include <QMouseEvent>
 #include <QTabBar>
+#include <QAction>
+#include <cmath>
 #include <cstdio>
 
 namespace {
@@ -1792,6 +1794,83 @@ int Run(const QString &imagePath)
         } else {
             ++g_fail;
             out() << "[FAIL] 移动/粘贴像素 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
+    // ---------- 19. 磁性吸附 + 多边形套索工具 ----------
+    {
+        QString failReason;
+
+        // (1) 吸附：垂直亮线附近的点应被吸到线条上，平坦区域保持不动
+        {
+            std::vector<uint8_t> px(static_cast<size_t>(80) * 60 * 3, 20);
+            for (int y = 0; y < 60; ++y) {
+                const size_t i = (static_cast<size_t>(59 - y) * 80 + 40) * 3;
+                px[i] = px[i + 1] = px[i + 2] = 240;   // 视觉 x=40 处一条竖线
+            }
+            auto luma = [&px](int xx, int yy) -> int {
+                xx = qBound(0, xx, 79);
+                yy = qBound(0, yy, 59);
+                const size_t i = (static_cast<size_t>(59 - yy) * 80 + xx) * 3;
+                return (static_cast<int>(px[i]) + px[i + 1] + px[i + 2]) / 3;
+            };
+            auto edgeAt = [&luma](int x, int y) -> int {
+                return std::abs(luma(x + 1, y) - luma(x - 1, y)) +
+                       std::abs(luma(x, y + 1) - luma(x, y - 1));
+            };
+
+            const QPoint snapped = MainWindow::SnapSelectionEdge(edgeAt, QPoint(46, 30), 8);
+            if (qAbs(snapped.x() - 40) > 1 || snapped.y() != 30) {
+                failReason = QString("顶点没有吸附到边缘上(实际 %1,%2)")
+                                 .arg(snapped.x()).arg(snapped.y());
+            }
+            const QPoint flat = MainWindow::SnapSelectionEdge(edgeAt, QPoint(5, 50), 8);
+            if (failReason.isEmpty() && flat != QPoint(5, 50)) {
+                failReason = "平坦区域不应该发生吸附";
+            }
+        }
+
+        // (2) 工具项存在、互斥勾选
+        if (failReason.isEmpty()) {
+            const QString toolPath = QDir::tempPath() + "/imagewithui_selftest_tool.png";
+            {
+                QImage img(80, 60, QImage::Format_RGB32);
+                img.fill(qRgb(40, 120, 200));
+                img.save(toolPath, "PNG");
+            }
+            MainWindow win;
+            if (!win.OpenImage(toolPath)) {
+                failReason = "无法打开测试图";
+            } else {
+                QAction *poly = nullptr;
+                QAction *magnet = nullptr;
+                QAction *lasso = nullptr;
+                for (QAction *a : win.findChildren<QAction *>()) {
+                    if (a->text() == QString("多边形套索")) poly = a;
+                    else if (a->text() == QString("磁性套索")) magnet = a;
+                    else if (a->text() == QString("自由套索")) lasso = a;
+                }
+                if (!poly || !magnet || !lasso) {
+                    failReason = "工具栏/菜单里找不到多边形或磁性套索";
+                } else if (!poly->isCheckable() || !magnet->isCheckable()) {
+                    failReason = "套索工具项不可勾选";
+                } else {
+                    poly->setChecked(true);
+                    if (magnet->isChecked() || lasso->isChecked()) {
+                        failReason = "选区工具没有互斥(同时勾选了多个)";
+                    }
+                }
+            }
+            QFile::remove(toolPath);
+        }
+
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 多边形/磁性套索 : 边缘吸附正确，工具互斥勾选\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 多边形/磁性套索 : " << failReason << "\n";
         }
         out().flush();
     }

@@ -174,6 +174,9 @@ public:
     void ShrinkSelection(int radius);       // 收缩选区(向内收 radius 像素)
     void SmoothSelection(int radius);       // 边界平滑(取半径内平均覆盖度后二值化)
     void TranslateSelection(int dx, int dy);
+    // 磁性吸附：在 p 周围 radius 内找边缘强度最高的像素(edgeAt 返回梯度，0 视为非边缘)
+    static QPoint SnapSelectionEdge(const std::function<int(int, int)> &edgeAt,
+                                    const QPoint &p, int radius);
     // 把选区内像素整体搬到新位置(原位置按覆盖度刷白)，作为一步历史提交
     void MoveSelectionContent(int dx, int dy);
     // 把剪贴板图像粘贴到选区(等比缩放到包围盒内并居中)
@@ -442,6 +445,8 @@ private:
     QRect m_selection;                     // 掩码包围盒(供复制/裁剪/绘制使用)
     QAction *m_selectionToolAction = nullptr;
     QAction *m_lassoToolAction = nullptr;
+    QAction *m_polyToolAction = nullptr;
+    QAction *m_magnetToolAction = nullptr;
     QMenu *m_selectionMenu = nullptr;
 
     // ---- 图层 ----

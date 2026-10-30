@@ -369,12 +369,14 @@ public:
         update();
     }
 
-    // 切换工具类型：0 = 矩形选框，1 = 自由套索
+    // 切换工具类型：0 矩形选框 / 1 自由套索 / 2 多边形套索 / 3 磁性套索
     void setToolKind(int kind)
     {
-        m_tool = kind;
+        m_tool = qBound(0, kind, 3);
         m_drag = None;
         m_points.clear();
+        m_poly.clear();
+        m_hoverValid = false;
         update();
     }
 
@@ -383,8 +385,13 @@ public:
         m_toolActive = active;
         m_drag = None;
         m_points.clear();
+        m_poly.clear();
+        m_hoverValid = false;
         setAttribute(Qt::WA_TransparentForMouseEvents, !active);
         setCursor(active ? Qt::CrossCursor : Qt::ArrowCursor);
+        if (active) {
+            setFocus();   // 多边形套索要靠键盘 Enter 闭合、Esc 取消
+        }
         update();
     }
 
@@ -394,42 +401,128 @@ public:
     std::function<void(int, int, bool)> onSelectionMoved;
     // 套索松开后回调(add = Shift 加选，subtract = Alt 减选)
     std::function<void(const QPolygon &, bool, bool)> onLassoFinished;
+    // 图像边缘强度查询(供磁性套索吸附，返回 0 表示不是边缘)
+    std::function<int(int, int)> edgeAt;
 
 protected:
+    // 磁性吸附：把点吸到半径内梯度最强的像素
+    QPoint snapPoint(const QPoint &p) const
+    {
+        return MainWindow::SnapSelectionEdge(edgeAt, p, 8);
+    }
+
+    // 多边形套索闭合：交给主窗口栅格化成掩码
+    void finishPolygon()
+    {
+        const QPolygon poly = m_poly;
+        m_poly.clear();
+        m_hoverValid = false;
+        if (poly.size() >= 3 && onLassoFinished) {
+            onLassoFinished(poly, m_addMode, m_subtractMode);
+        }
+        update();
+    }
+
+    void keyPressEvent(QKeyEvent *event) override
+    {
+        if (m_tool == 2 && !m_poly.isEmpty()) {
+            const int key = event->key();
+            if (key == Qt::Key_Return || key == Qt::Key_Enter) {
+                finishPolygon();
+                return;
+            }
+            if (key == Qt::Key_Escape) {
+                m_poly.clear();
+                m_hoverValid = false;
+                update();
+                return;
+            }
+            if (key == Qt::Key_Backspace) {
+                m_poly.removeLast();
+                update();
+                return;
+            }
+        }
+        QWidget::keyPressEvent(event);
+    }
+
+    void mouseDoubleClickEvent(QMouseEvent *event) override
+    {
+        Q_UNUSED(event);
+        if (m_tool == 2 && m_poly.size() >= 3) {
+            finishPolygon();
+        }
+    }
+
+    // 黑白虚线轨迹(套索/多边形套索共用)
+    void drawTrail(QPainter &p, const QPolygon &imagePoints) const
+    {
+        QPolygon trail;
+        for (const QPoint &ip : imagePoints) {
+            trail << toWidgetPoint(ip);
+        }
+        if (trail.size() < 2) {
+            return;
+        }
+        QPen dark(QColor(0, 0, 0, 210));
+        dark.setStyle(Qt::CustomDashLine);
+        dark.setDashPattern(QVector<qreal>{4, 4});
+        dark.setDashOffset(m_dashOffset);
+        p.setPen(dark);
+        p.drawPolyline(trail);
+
+        QPen light(QColor(255, 255, 255, 230));
+        light.setStyle(Qt::CustomDashLine);
+        light.setDashPattern(QVector<qreal>{4, 4});
+        light.setDashOffset(m_dashOffset + 4);
+        p.setPen(light);
+        p.drawPolyline(trail);
+    }
+
     void paintEvent(QPaintEvent *) override
     {
-        if (m_sel.isEmpty() || m_imgW <= 0 || m_imgH <= 0) {
+        if (m_imgW <= 0 || m_imgH <= 0) {
+            return;
+        }
+        QPainter p(this);
+
+        // 多边形套索正在取点：画已确定的边 + 到光标的橡皮筋
+        if (m_tool == 2 && !m_poly.isEmpty()) {
+            QPolygon trail = m_poly;
+            if (m_hoverValid) {
+                trail << m_hover;
+            }
+            drawTrail(p, trail);
+            p.setPen(QPen(QColor(34, 211, 238), 1));
+            p.setBrush(QColor(34, 211, 238));
+            for (const QPoint &ip : m_poly) {
+                const QPoint w = toWidgetPoint(ip);
+                p.drawRect(QRect(w.x() - 2, w.y() - 2, 4, 4));
+            }
+            // 悬停回首点：提示可以闭合
+            const QPoint first = toWidgetPoint(m_poly.first());
+            if (m_poly.size() >= 3 && m_hoverValid &&
+                (toWidgetPoint(m_hover) - first).manhattanLength() <= 8) {
+                p.setPen(QPen(QColor(255, 255, 255), 2));
+                p.setBrush(Qt::NoBrush);
+                p.drawEllipse(first, 5, 5);
+            }
+            return;
+        }
+
+        if (m_sel.isEmpty()) {
             return;
         }
         const QRect wr = toWidget(m_sel);
         if (wr.isEmpty()) {
             return;
         }
-        QPainter p(this);
 
-        // 套索正在绘制：只显示轨迹，不显示旧掩码与矩形框
-        if (m_tool == 1 && m_drag == Creating) {
-            QPolygon trail;
-            for (const QPoint &pt : m_points) {
-                trail << toWidgetPoint(pt);
-            }
-            if (trail.size() >= 2) {
-                QPen dark(QColor(0, 0, 0, 210));
-                dark.setStyle(Qt::CustomDashLine);
-                dark.setDashPattern(QVector<qreal>{4, 4});
-                dark.setDashOffset(m_dashOffset);
-                p.setPen(dark);
-                p.drawPolyline(trail);
-                QPen light(QColor(255, 255, 255, 230));
-                light.setStyle(Qt::CustomDashLine);
-                light.setDashPattern(QVector<qreal>{4, 4});
-                light.setDashOffset(m_dashOffset + 4);
-                p.setPen(light);
-                p.drawPolyline(trail);
-            }
+        // 套索/磁性套索正在绘制：只显示轨迹，不显示旧掩码与矩形框
+        if ((m_tool == 1 || m_tool == 3) && m_drag == Creating) {
+            drawTrail(p, m_points);
             return;
         }
-
         // 掩码高亮：把半透明缩略图拉伸到图像显示区域；
         // 拖动移动选区时按像素位移同步平移，建立新选区时先隐藏旧掩码
         if (!m_maskImage.isNull() && m_drag != Creating) {
@@ -514,13 +607,36 @@ protected:
             return;
         }
         m_moveContent = false;
-        if (m_tool == 1) {   // 自由套索：按下开始记录轨迹
+        if (m_tool == 2) {   // 多边形套索：单击落点；点回首点/双击/Enter 闭合
+            setFocus();
+            const QPoint ip = toImage(event->pos());
+            if (m_poly.isEmpty()) {
+                m_addMode = (event->modifiers() & Qt::ShiftModifier);
+                m_subtractMode = (event->modifiers() & Qt::AltModifier);
+            } else if (m_poly.size() >= 3 &&
+                       (ip - m_poly.first()).manhattanLength() <= 6) {
+                finishPolygon();
+                return;
+            } else if ((ip - m_poly.last()).manhattanLength() <= 1) {
+                return;   // 重复落点，忽略
+            }
+            m_poly.append(ip);
+            m_hover = ip;
+            m_hoverValid = true;
+            update();
+            return;
+        }
+        if (m_tool == 1 || m_tool == 3) {   // 自由/磁性套索：按下开始记录轨迹
             m_drag = Creating;
             m_points.clear();
-            m_points.append(toImage(event->pos()));
+            QPoint ip = toImage(event->pos());
+            if (m_tool == 3) {
+                ip = snapPoint(ip);   // 磁性吸附到附近强边缘
+            }
+            m_points.append(ip);
             m_addMode = (event->modifiers() & Qt::ShiftModifier);
             m_subtractMode = (event->modifiers() & Qt::AltModifier);
-            m_sel = QRect(m_points.first(), QSize(1, 1));
+            m_sel = QRect(ip, QSize(1, 1));
             update();
             return;
         }
@@ -545,12 +661,21 @@ protected:
         }
         const QPoint pos = event->pos();
         if (m_drag == None) {
+            if (m_tool == 2 && !m_poly.isEmpty()) {
+                m_hover = toImage(pos);
+                m_hoverValid = true;
+                update();
+                return;
+            }
             setCursor((!m_sel.isEmpty() && toWidget(m_sel).contains(pos)) ? Qt::SizeAllCursor
                                                                           : Qt::CrossCursor);
             return;
         }
-        if (m_drag == Creating && m_tool == 1) {
-            const QPoint ip = toImage(pos);
+        if (m_drag == Creating && (m_tool == 1 || m_tool == 3)) {
+            QPoint ip = toImage(pos);
+            if (m_tool == 3) {
+                ip = snapPoint(ip);
+            }
             if (!m_points.isEmpty() && (m_points.last() - ip).manhattanLength() < 2) {
                 return;   // 轨迹点太密，忽略
             }
@@ -589,7 +714,7 @@ protected:
         m_drag = None;
         setCursor(Qt::CrossCursor);
 
-        if (wasCreating && m_tool == 1) {
+        if (wasCreating && (m_tool == 1 || m_tool == 3)) {
             const QPolygon poly = m_points;
             m_points.clear();
             if (poly.size() >= 3 && onLassoFinished) {
@@ -681,8 +806,11 @@ private:
     QRect m_sel;                 // 选区(图像像素坐标)
     QImage m_maskImage;          // 掩码半透明缩略图(由主窗口生成)
     DragMode m_drag = None;
-    int m_tool = 0;              // 0 = 矩形选框，1 = 自由套索
+    int m_tool = 0;              // 0 矩形 / 1 自由套索 / 2 多边形套索 / 3 磁性套索
     QPolygon m_points;           // 套索轨迹(图像像素坐标)
+    QPolygon m_poly;             // 多边形套索已确定的顶点(图像像素坐标)
+    QPoint m_hover;              // 多边形套索的橡皮筋终点
+    bool m_hoverValid = false;
     bool m_addMode = false;      // 本次拖拽是否为加选(Shift)
     bool m_subtractMode = false; // 本次套索是否为减选(Alt)
     bool m_moveContent = false;  // 本次拖动是否同时搬动选区内像素(Ctrl)
@@ -913,9 +1041,27 @@ void MainWindow::SetupSelectionTool()
     m_overlay->onLassoFinished = [this](const QPolygon &poly, bool add, bool subtract) {
         SetSelectionPolygon(poly, add, subtract);
     };
+    // 磁性套索吸附用的边缘强度：像素亮度梯度的曼哈顿幅值
+    m_overlay->edgeAt = [this](int x, int y) -> int {
+        const int32_t w = myValue.bmpInfo.GetWidth();
+        const int32_t h = myValue.bmpInfo.GetHeight();
+        if (imageData.empty() || w <= 0 || h <= 0) {
+            return 0;
+        }
+        auto luma = [w, h](const std::vector<uint8_t> &px, int xx, int yy) -> int {
+            xx = qBound(0, xx, w - 1);
+            yy = qBound(0, yy, h - 1);
+            const size_t i = (static_cast<size_t>(h - 1 - yy) * static_cast<size_t>(w) +
+                              static_cast<size_t>(xx)) * 3;
+            return (static_cast<int>(px[i]) + px[i + 1] + px[i + 2]) / 3;
+        };
+        const int gx = luma(imageData, x + 1, y) - luma(imageData, x - 1, y);
+        const int gy = luma(imageData, x, y + 1) - luma(imageData, x, y - 1);
+        return qAbs(gx) + qAbs(gy);
+    };
     ui->imageLabel->installEventFilter(this);
 
-    // 工具栏：矩形选框 / 自由套索(勾选后才在图像上拖拽，避免误触)
+    // 工具栏：矩形选框 / 自由套索 / 多边形套索 / 磁性套索(勾选后才在图像上拖拽，避免误触)
     QActionGroup *toolGroup = new QActionGroup(this);
     toolGroup->setExclusive(true);
 
@@ -928,15 +1074,30 @@ void MainWindow::SetupSelectionTool()
     m_lassoToolAction->setCheckable(true);
     m_lassoToolAction->setToolTip(QString("选中后沿图像拖动描出边界，松开建立不规则选区；Shift 加选，Alt 减选"));
 
-    // 两个工具共用一套状态同步：任一被勾选时启用覆盖层，并切换工具类型
+    m_polyToolAction = new QAction(QString("多边形套索"), this);
+    m_polyToolAction->setCheckable(true);
+    m_polyToolAction->setToolTip(QString("依次单击落点描边，点回首点 / 双击 / 按 Enter 闭合；Backspace 撤销上一点，Esc 取消；Shift 加选，Alt 减选"));
+
+    m_magnetToolAction = new QAction(QString("磁性套索"), this);
+    m_magnetToolAction->setCheckable(true);
+    m_magnetToolAction->setToolTip(QString("沿目标边缘拖动，轨迹点会自动吸附到 8 px 内最强的边缘上；松开闭合；Shift 加选，Alt 减选"));
+
+    // 四个工具共用一套状态同步：任一被勾选时启用覆盖层，并切换工具类型
     auto applyToolState = [this]() {
-        const bool lasso = m_lassoToolAction->isChecked();
         const bool rect = m_selectionToolAction->isChecked();
+        const bool lasso = m_lassoToolAction->isChecked();
+        const bool poly = m_polyToolAction->isChecked();
+        const bool magnet = m_magnetToolAction->isChecked();
+        const int kind = magnet ? 3 : poly ? 2 : lasso ? 1 : 0;
         if (m_overlay != nullptr) {
-            m_overlay->setToolKind(lasso ? 1 : 0);
-            m_overlay->setToolActive(lasso || rect);
+            m_overlay->setToolKind(kind);
+            m_overlay->setToolActive(rect || lasso || poly || magnet);
         }
-        if (lasso) {
+        if (magnet) {
+            UpdateStatus(QString("磁性套索：沿边缘拖动，轨迹自动吸附；Shift 加选、Alt 减选"));
+        } else if (poly) {
+            UpdateStatus(QString("多边形套索：单击落点，点回首点/双击/Enter 闭合；Backspace 退点、Esc 取消"));
+        } else if (lasso) {
             UpdateStatus(QString("自由套索：沿图像拖动描边，松开后建立选区；Shift 加选、Alt 减选"));
         } else if (rect) {
             UpdateStatus(QString("矩形选框：在图像上拖动建立选区；Shift 加选"));
@@ -945,16 +1106,24 @@ void MainWindow::SetupSelectionTool()
         }
     };
     toolGroup->addAction(m_lassoToolAction);
+    toolGroup->addAction(m_polyToolAction);
+    toolGroup->addAction(m_magnetToolAction);
     connect(m_selectionToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
     connect(m_lassoToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
+    connect(m_polyToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
+    connect(m_magnetToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
     ui->toolBar->addSeparator();
     ui->toolBar->addAction(m_selectionToolAction);
     ui->toolBar->addAction(m_lassoToolAction);
+    ui->toolBar->addAction(m_polyToolAction);
+    ui->toolBar->addAction(m_magnetToolAction);
 
     // "选择"菜单(放在"编辑"之后、"图像模糊"之前)
     m_selectionMenu = new QMenu(QString("选择"), this);
     m_selectionMenu->addAction(m_selectionToolAction);
     m_selectionMenu->addAction(m_lassoToolAction);
+    m_selectionMenu->addAction(m_polyToolAction);
+    m_selectionMenu->addAction(m_magnetToolAction);
     m_selectionMenu->addSeparator();
 
     auto addItem = [this](const QString &text, const QKeySequence &shortcut,
@@ -1433,6 +1602,37 @@ void MainWindow::TranslateSelection(int dx, int dy)
         m_mask.clear();
     }
     UpdateSelectionOverlay();
+}
+
+QPoint MainWindow::SnapSelectionEdge(const std::function<int(int, int)> &edgeAt,
+                                     const QPoint &p, int radius)
+{
+    if (!edgeAt || radius < 1) {
+        return p;
+    }
+    int bestScore = 0;
+    QPoint best = p;
+    bool found = false;
+    for (int dy = -radius; dy <= radius; ++dy) {
+        for (int dx = -radius; dx <= radius; ++dx) {
+            const int dist = qAbs(dx) + qAbs(dy);
+            if (dist > radius) {
+                continue;   // 圆形搜索窗口
+            }
+            const int mag = edgeAt(p.x() + dx, p.y() + dy);
+            if (mag <= 0) {
+                continue;
+            }
+            // 强度优先，同时惩罚距离，避免为了强边缘跳得太远
+            const int score = mag * 4 - dist * 3;
+            if (!found || score > bestScore) {
+                found = true;
+                bestScore = score;
+                best = QPoint(p.x() + dx, p.y() + dy);
+            }
+        }
+    }
+    return found ? best : p;
 }
 
 void MainWindow::MoveSelectionContent(int dx, int dy)
