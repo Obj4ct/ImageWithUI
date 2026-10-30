@@ -944,6 +944,31 @@ void MainWindow::SetupSelectionTool()
             FeatherSelection(radius);
         }
     });
+    auto promptRefine = [this](int mode) {
+        if (!HasSelection()) {
+            UpdateStatus("请先建立选区");
+            return;
+        }
+        const QString label = (mode == 0) ? QString("扩展选区") : (mode == 1) ? QString("收缩选区")
+                                                                             : QString("平滑选区");
+        bool ok = false;
+        const int radius = QInputDialog::getInt(this, label,
+                                                QString("半径(像素 1 ~ 200)："),
+                                                2, 1, 200, 1, &ok);
+        if (!ok) {
+            return;
+        }
+        if (mode == 0) {
+            GrowSelection(radius);
+        } else if (mode == 1) {
+            ShrinkSelection(radius);
+        } else {
+            SmoothSelection(radius);
+        }
+    };
+    QAction *growAction = addItem(QString("扩展选区…"), QKeySequence(), [promptRefine]() { promptRefine(0); });
+    QAction *shrinkAction = addItem(QString("收缩选区…"), QKeySequence(), [promptRefine]() { promptRefine(1); });
+    QAction *smoothAction = addItem(QString("平滑边界…"), QKeySequence(), [promptRefine]() { promptRefine(2); });
     addItem(QString("取消选区"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_D), [this]() {
         ClearSelection();
         UpdateStatus("已取消选区");
@@ -951,12 +976,16 @@ void MainWindow::SetupSelectionTool()
 
     // 没有选区时禁用需要选区的操作
     connect(m_selectionMenu, &QMenu::aboutToShow, this,
-            [this, copyAction, cropAction, eraseAction, featherAction]() {
+            [this, copyAction, cropAction, eraseAction, featherAction,
+             growAction, shrinkAction, smoothAction]() {
         const bool has = HasSelection();
         copyAction->setEnabled(has);
         cropAction->setEnabled(has);
         eraseAction->setEnabled(has);
         featherAction->setEnabled(has);
+        growAction->setEnabled(has);
+        shrinkAction->setEnabled(has);
+        smoothAction->setEnabled(has);
     });
 
     menuBar()->insertMenu(ui->menu_blur->menuAction(), m_selectionMenu);
@@ -1288,6 +1317,60 @@ void MainWindow::FeatherSelection(double radius)
                      .arg(radius)
                      .arg(m_selection.width())
                      .arg(m_selection.height()));
+}
+
+void MainWindow::GrowSelection(int radius)
+{
+    RefineSelection(radius, 0);
+}
+
+void MainWindow::ShrinkSelection(int radius)
+{
+    RefineSelection(radius, 1);
+}
+
+void MainWindow::SmoothSelection(int radius)
+{
+    RefineSelection(radius, 2);
+}
+
+// 扩展/收缩/平滑统一实现：先用半径 r 的盒式模糊得到"半径内覆盖度"，
+// 再按阈值二值化 —— 有任何覆盖即选中(扩展)、全窗口覆盖才选中(收缩)、
+// 过半覆盖才选中(平滑)。模糊对整幅掩码做 O(1)/像素，不做逐像素圆盘采样。
+void MainWindow::RefineSelection(int radius, int mode)
+{
+    if (m_mask.isEmpty()) {
+        UpdateStatus("请先建立选区");
+        return;
+    }
+    const int r = radius;
+    if (r < 1) {
+        UpdateStatus("半径太小(至少 1 像素)");
+        return;
+    }
+    const QString label = (mode == 0) ? QString("扩展") : (mode == 1) ? QString("收缩") : QString("平滑");
+
+    BoxBlurMask(m_mask.data, m_mask.width, m_mask.height, r);
+    for (uint8_t &v : m_mask.data) {
+        if (mode == 0) {
+            v = (v > 0) ? 255 : 0;
+        } else if (mode == 1) {
+            v = (v == 255) ? 255 : 0;
+        } else {
+            v = (v >= 128) ? 255 : 0;
+        }
+    }
+
+    m_selection = MaskBoundingRect();
+    if (m_selection.isEmpty()) {
+        m_mask.clear();
+        UpdateSelectionOverlay();
+        UpdateStatus(QString("%1 %2 px 后选区为空，已取消选区").arg(label).arg(r));
+        return;
+    }
+    UpdateSelectionOverlay();
+    UpdateStatus(QString("%1选区 %2 px：选区 %3 × %4 px")
+                     .arg(label).arg(r).arg(m_selection.width()).arg(m_selection.height()));
 }
 
 void MainWindow::TranslateSelection(int dx, int dy)

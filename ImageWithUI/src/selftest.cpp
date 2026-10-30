@@ -1641,6 +1641,73 @@ int Run(const QString &imagePath)
         out().flush();
     }
 
+    // ---------- 17. 选区扩展 / 收缩 / 边界平滑 ----------
+    {
+        const QString refinePath = QDir::tempPath() + "/imagewithui_selftest_refine.png";
+        {
+            QImage img(80, 60, QImage::Format_RGB32);
+            img.fill(qRgb(40, 120, 200));
+            img.save(refinePath, "PNG");
+        }
+
+        QString failReason;
+        auto maskValue = [](MainWindow &win, int x, int y) -> int {
+            const SelectionMask &m = win.CurrentSelectionMask();
+            const int32_t w = win.myValue.bmpInfo.GetWidth();
+            if (m.isEmpty() || w <= 0 || x < 0 || y < 0 || x >= m.width || y >= m.height) {
+                return -1;
+            }
+            return m.data[static_cast<size_t>(y) * static_cast<size_t>(w) + static_cast<size_t>(x)];
+        };
+
+        MainWindow win;
+        if (!win.OpenImage(refinePath)) {
+            failReason = "无法打开测试图";
+        } else {
+            // (1) 扩展 3 px：边界从 20 外扩到 17
+            win.SetSelection(QRect(20, 20, 20, 20));
+            win.GrowSelection(3);
+            if (win.SelectionRect() != QRect(17, 17, 26, 26)) {
+                failReason = "扩展 3 px 后包围盒不对";
+            } else if (maskValue(win, 18, 20) != 255 || maskValue(win, 16, 20) != 0) {
+                failReason = "扩展后边界位置不对";
+            }
+        }
+
+        // (2) 再收缩 3 px 应回到原矩形
+        if (failReason.isEmpty()) {
+            win.ShrinkSelection(3);
+            if (win.SelectionRect() != QRect(20, 20, 20, 20)) {
+                failReason = "收缩 3 px 后没有回到原矩形";
+            } else if (maskValue(win, 20, 20) != 255 || maskValue(win, 19, 20) != 0) {
+                failReason = "收缩后边界位置不对";
+            }
+        }
+
+        // (3) 边界平滑：直角被削圆，中心保持选中
+        if (failReason.isEmpty()) {
+            win.SetSelection(QRect(20, 20, 20, 20));
+            win.SmoothSelection(2);
+            if (maskValue(win, 20, 20) != 0) {
+                failReason = "平滑后直角没有被削掉";
+            } else if (maskValue(win, 30, 30) != 255) {
+                failReason = "平滑后选区中心被误删";
+            } else if (!win.HasSelection()) {
+                failReason = "平滑后选区不应消失";
+            }
+        }
+        QFile::remove(refinePath);
+
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 选区扩展/收缩/平滑 : 扩 3 px 到 17、缩 3 px 复原、平滑削直角\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 选区扩展/收缩/平滑 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
     out() << "------------------------------------------------\n";
     out() << "通过 " << g_pass << " 项，失败 " << g_fail << " 项\n";
     out().flush();

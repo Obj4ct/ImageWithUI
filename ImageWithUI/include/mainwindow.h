@@ -170,6 +170,9 @@ public:
     void SelectAll();
     void InvertSelection();                 // 反选：有选区时取补集
     void FeatherSelection(double radius);   // 羽化：按半径做两次盒式模糊
+    void GrowSelection(int radius);         // 扩展选区(向外扩 radius 像素)
+    void ShrinkSelection(int radius);       // 收缩选区(向内收 radius 像素)
+    void SmoothSelection(int radius);       // 边界平滑(取半径内平均覆盖度后二值化)
     void TranslateSelection(int dx, int dy);
     void ClearSelection();
     void CopySelection();
@@ -426,6 +429,8 @@ private:
     QImage BuildMaskPreview() const;
     // 按整数步长抽样得到缩略图尺寸的掩码(供低分辨率预览使用)
     static SelectionMask DownsampleMask(const SelectionMask &mask, int step);
+    // 选区形态学处理：mode 0 扩展 / 1 收缩 / 2 平滑(复用盒式模糊后二值化)
+    void RefineSelection(int radius, int mode);
     SelectionOverlay *m_overlay = nullptr;
     SelectionMask m_mask;                  // 选区掩码(唯一真值)
     QRect m_selection;                     // 掩码包围盒(供复制/裁剪/绘制使用)
