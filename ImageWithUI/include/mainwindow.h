@@ -48,6 +48,22 @@ struct Layer {
     int blend = 0;          // 0 正常 / 1 正片叠底 / 2 滤色
 };
 
+// 选区掩码：0~255 表示覆盖度(0 = 完全不在选区内，255 = 完全在选区内)
+// 与图像同尺寸，按【视觉坐标】行优先存储(y 向下)；
+// data 为空表示"没有选区"(此时调整类算子作用于整幅图)
+struct SelectionMask {
+    int32_t width = 0;
+    int32_t height = 0;
+    std::vector<uint8_t> data;
+
+    bool isEmpty() const { return width <= 0 || height <= 0 || data.empty(); }
+    void clear() {
+        width = 0;
+        height = 0;
+        std::vector<uint8_t>().swap(data);
+    }
+};
+
 // 历史快照：必须连同尺寸一起保存，
 // 因为旋转等算子会改变画布宽高，只存像素会导致撤销/保存时尺寸对不上。
 // data 保存【当前活动图层】的像素；layers 保存整份图层栈(活动图层的像素留空，
@@ -94,7 +110,7 @@ struct Document {
     ContentQuad rotBaseQuad;
     double rotTotal = 0.0;
     bool canSave = false;
-    QRect selection;                          // 矩形选区(图像像素坐标，视觉，y 向下)
+    SelectionMask mask;                       // 选区掩码(图像像素坐标，视觉，y 向下)
     std::vector<Layer> layers;                // 图层栈(自底向上)
     int activeLayer = 0;
 };
@@ -140,11 +156,18 @@ public:
     int DocumentCount() const { return static_cast<int>(m_docs.size()); }
     int ActiveDocumentIndex() const { return m_activeDoc; }
 
-    // ---- 矩形选区(图像像素坐标，视觉坐标，y 向下) ----
-    void SetSelection(const QRect &imageRect);
-    QRect SelectionRect() const { return m_selection; }
-    bool HasSelection() const { return !m_selection.isEmpty(); }
+    // ---- 选区(图像像素坐标，视觉坐标，y 向下；内部用掩码保存，支持羽化/反选/加选) ----
+    // add=true 表示把新矩形并入已有选区(Shift 加选)
+    void SetSelection(const QRect &imageRect, bool add = false);
+    // 直接替换整份掩码(尺寸不符或为空时视为取消选区)
+    void SetSelectionMask(const SelectionMask &mask);
+    const SelectionMask &CurrentSelectionMask() const { return m_mask; }
+    QRect SelectionRect() const { return m_selection; }   // 掩码的包围盒
+    bool HasSelection() const { return !m_mask.isEmpty(); }
     void SelectAll();
+    void InvertSelection();                 // 反选：有选区时取补集
+    void FeatherSelection(double radius);   // 羽化：按半径做两次盒式模糊
+    void TranslateSelection(int dx, int dy);
     void ClearSelection();
     void CopySelection();
     void CropToSelection();
@@ -389,13 +412,20 @@ private:
     std::vector<Document> m_docs;
     int m_activeDoc = -1;
 
-    // ---- 矩形选区 ----
+    // ---- 选区 ----
     void SetupSelectionTool();
     // 图像尺寸变化后把选区夹到图像范围内，并同步覆盖层
     void SyncSelectionToImage();
     void UpdateSelectionOverlay();
+    // 掩码的包围盒(视觉坐标)；空掩码返回空矩形
+    QRect MaskBoundingRect() const;
+    // 生成给覆盖层显示的半透明掩码缩略图(长边不超过 512)
+    QImage BuildMaskPreview() const;
+    // 按整数步长抽样得到缩略图尺寸的掩码(供低分辨率预览使用)
+    static SelectionMask DownsampleMask(const SelectionMask &mask, int step);
     SelectionOverlay *m_overlay = nullptr;
-    QRect m_selection;                     // 选区(图像像素坐标，视觉，y 向下)
+    SelectionMask m_mask;                  // 选区掩码(唯一真值)
+    QRect m_selection;                     // 掩码包围盒(供复制/裁剪/绘制使用)
     QAction *m_selectionToolAction = nullptr;
     QMenu *m_selectionMenu = nullptr;
 

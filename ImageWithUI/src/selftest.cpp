@@ -1412,6 +1412,160 @@ int Run(const QString &imagePath)
         out().flush();
     }
 
+    // ---------- 15. 选区掩码：反选 / Shift 加选 / 羽化 ----------
+    {
+        const QString maskPath = QDir::tempPath() + "/imagewithui_selftest_mask.png";
+        {
+            QImage img(80, 60, QImage::Format_RGB32);
+            img.fill(qRgb(40, 120, 200));   // 内存里是 BGR(200,120,40)
+            img.save(maskPath, "PNG");
+        }
+
+        QString failReason;
+        auto waitOp = []() {
+            QEventLoop loop;
+            QTimer::singleShot(1500, &loop, &QEventLoop::quit);
+            loop.exec();
+        };
+        auto applyBrightness = [](MainWindow &win, const QString &value) {
+            QLineEdit *edit = win.findChild<QLineEdit *>("lineEdit_brightness");
+            QPushButton *btn = win.findChild<QPushButton *>("btn_brightness");
+            if (edit == nullptr || btn == nullptr) {
+                return false;
+            }
+            edit->setText(value);
+            btn->click();
+            return true;
+        };
+        auto maskAt = [](MainWindow &win, int x, int y) -> int {
+            const SelectionMask &m = win.CurrentSelectionMask();
+            const int32_t w = win.myValue.bmpInfo.GetWidth();
+            if (m.isEmpty() || w <= 0 || x < 0 || y < 0 || x >= m.width || y >= m.height) {
+                return -1;
+            }
+            return m.data[static_cast<size_t>(y) * static_cast<size_t>(w) + static_cast<size_t>(x)];
+        };
+        auto pixelAt = [](MainWindow &win, int x, int y, int out[3]) -> bool {
+            const std::vector<uint8_t> &px = win.CurrentImageData();
+            const int32_t w = win.myValue.bmpInfo.GetWidth();
+            const int32_t h = win.myValue.bmpInfo.GetHeight();
+            if (w <= 0 || h <= 0 || x < 0 || y < 0 || x >= w || y >= h) {
+                return false;
+            }
+            const size_t i = (static_cast<size_t>(h - 1 - y) * static_cast<size_t>(w)
+                              + static_cast<size_t>(x)) * 3;
+            if (i + 2 >= px.size()) {
+                return false;
+            }
+            out[0] = px[i];
+            out[1] = px[i + 1];
+            out[2] = px[i + 2];
+            return true;
+        };
+        const int kOrig[3] = {200, 120, 40};
+
+        // (1) 反选：原选区外变成选区(被调整)，原选区内被排除(保持原样)
+        if (failReason.isEmpty()) {
+            MainWindow win;
+            if (!win.OpenImage(maskPath)) {
+                failReason = "无法打开测试图";
+            } else {
+                win.SetSelection(QRect(10, 10, 20, 20));
+                win.InvertSelection();
+                if (!win.HasSelection()) {
+                    failReason = "反选后应仍有选区";
+                } else if (maskAt(win, 5, 5) != 255) {
+                    failReason = "反选后原选区外未被选中";
+                } else if (maskAt(win, 20, 20) != 0) {
+                    failReason = "反选后原选区内未被排除";
+                } else if (!applyBrightness(win, "50")) {
+                    failReason = "找不到亮度输入框/应用按钮";
+                } else {
+                    waitOp();
+                    int inside[3] = {0, 0, 0};
+                    int outside[3] = {0, 0, 0};
+                    if (!pixelAt(win, 20, 20, inside) || !pixelAt(win, 5, 5, outside)) {
+                        failReason = "像素索引越界";
+                    } else if (inside[0] != kOrig[0] || inside[1] != kOrig[1] || inside[2] != kOrig[2]) {
+                        failReason = "反选后原选区内的像素被改动了";
+                    } else if (outside[0] == kOrig[0] && outside[1] == kOrig[1] && outside[2] == kOrig[2]) {
+                        failReason = "反选后原选区外的像素没有被调整";
+                    }
+                }
+            }
+        }
+
+        // (2) Shift 加选：两块都生效，两块之间不变
+        if (failReason.isEmpty()) {
+            MainWindow win;
+            if (!win.OpenImage(maskPath)) {
+                failReason = "无法打开测试图";
+            } else {
+                win.SetSelection(QRect(10, 10, 10, 10));
+                win.SetSelection(QRect(30, 10, 10, 10), true);
+                if (win.SelectionRect() != QRect(10, 10, 30, 10)) {
+                    failReason = "加选后包围盒不对";
+                } else if (maskAt(win, 15, 15) != 255 || maskAt(win, 35, 15) != 255) {
+                    failReason = "加选后没有覆盖两块矩形";
+                } else if (maskAt(win, 25, 15) != 0) {
+                    failReason = "加选后两块之间的像素不应被选中";
+                } else {
+                    win.ClearSelectionContent();
+                    waitOp();
+                    int first[3] = {0, 0, 0};
+                    int second[3] = {0, 0, 0};
+                    int middle[3] = {0, 0, 0};
+                    if (!pixelAt(win, 15, 15, first) || !pixelAt(win, 35, 15, second) ||
+                        !pixelAt(win, 25, 15, middle)) {
+                        failReason = "像素索引越界";
+                    } else if (first[0] != 255 || second[0] != 255) {
+                        failReason = "加选的两个矩形没有被清除";
+                    } else if (middle[0] != kOrig[0] || middle[1] != kOrig[1] || middle[2] != kOrig[2]) {
+                        failReason = "加选两块之间的像素被改动了";
+                    }
+                }
+            }
+        }
+
+        // (3) 羽化：边界出现中间覆盖度，清除后得到半透明白
+        if (failReason.isEmpty()) {
+            MainWindow win;
+            if (!win.OpenImage(maskPath)) {
+                failReason = "无法打开测试图";
+            } else {
+                win.SetSelection(QRect(10, 10, 20, 20));
+                win.FeatherSelection(3.0);
+                const int edge = maskAt(win, 20, 8);   // 选区上边界外 2 px
+                if (maskAt(win, 20, 20) != 255) {
+                    failReason = "羽化后选区中心应保持完全选中";
+                } else if (edge <= 0 || edge >= 255) {
+                    failReason = "羽化后边界没有出现中间覆盖度";
+                } else {
+                    win.ClearSelectionContent();
+                    waitOp();
+                    int c[3] = {0, 0, 0};
+                    if (!pixelAt(win, 20, 8, c)) {
+                        failReason = "像素索引越界";
+                    } else if (c[0] != kOrig[0] && c[1] != kOrig[1] && c[2] != kOrig[2] && c[0] < 255) {
+                        // 半透明白：B 通道应大于原值，但整体没有变成纯白
+                    } else {
+                        failReason = "羽化边界没有产生半透明过渡";
+                    }
+                }
+            }
+        }
+        QFile::remove(maskPath);
+
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 选区掩码 : 反选/Shift 加选/羽化边界过渡\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 选区掩码 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
     out() << "------------------------------------------------\n";
     out() << "通过 " << g_pass << " 项，失败 " << g_fail << " 项\n";
     out().flush();
