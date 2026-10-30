@@ -107,6 +107,36 @@ QToolBar QToolButton:hover {
 QToolBar QToolButton:pressed { background-color: #12333f; border-color: #1f5d70; color: #8be9f9; }
 QToolBar::separator { background: #232830; width: 1px; margin: 4px 8px; }
 
+/* ================= 文档标签栏 ================= */
+QTabBar#documentTabBar { background: transparent; }
+QTabBar#documentTabBar::tab {
+    background: #14171c;
+    border: 1px solid #232830;
+    border-bottom: none;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    padding: 5px 12px;
+    margin-right: 3px;
+    color: #8b96a5;
+    min-width: 88px;
+}
+QTabBar#documentTabBar::tab:hover { background: #1a2028; color: #c8d2de; }
+QTabBar#documentTabBar::tab:selected {
+    background: #0e1116;
+    border-color: #22d3ee;
+    color: #67e8f9;
+}
+QTabBar#documentTabBar QToolButton#tabCloseButton {
+    background: transparent;
+    border: none;
+    padding: 0;
+    min-width: 14px;
+    max-width: 14px;
+    color: #7b8794;
+    font-size: 12px;
+}
+QTabBar#documentTabBar QToolButton#tabCloseButton:hover { color: #22d3ee; }
+
 /* ================= 按钮 ================= */
 QPushButton {
     background-color: #1a1e25;
@@ -362,6 +392,35 @@ QToolBar QToolButton {
 QToolBar QToolButton:hover { background-color: #f0f4f8; border-color: #dfe3e8; }
 QToolBar QToolButton:pressed { background-color: #dff3f8; border-color: #9edbe6; color: #0b7285; }
 QToolBar::separator { background: #e7eaee; width: 1px; margin: 4px 8px; }
+/* ================= 文档标签栏 ================= */
+QTabBar#documentTabBar { background: transparent; }
+QTabBar#documentTabBar::tab {
+    background: #ffffff;
+    border: 1px solid #dfe3e8;
+    border-bottom: none;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    padding: 5px 12px;
+    margin-right: 3px;
+    color: #6b7785;
+    min-width: 88px;
+}
+QTabBar#documentTabBar::tab:hover { background: #f2f6fa; color: #354252; }
+QTabBar#documentTabBar::tab:selected {
+    background: #eef8fb;
+    border-color: #22b8cf;
+    color: #0b7285;
+}
+QTabBar#documentTabBar QToolButton#tabCloseButton {
+    background: transparent;
+    border: none;
+    padding: 0;
+    min-width: 14px;
+    max-width: 14px;
+    color: #77828d;
+    font-size: 12px;
+}
+QTabBar#documentTabBar QToolButton#tabCloseButton:hover { color: #0b7285; }
 QPushButton {
     background-color: #ffffff;
     border: 1px solid #d9dee5;

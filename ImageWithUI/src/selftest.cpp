@@ -12,6 +12,7 @@
 #include <QLabel>
 #include <QApplication>
 #include <QMouseEvent>
+#include <QTabBar>
 #include <cstdio>
 
 namespace {
@@ -1027,6 +1028,96 @@ int Run(const QString &imagePath)
         } else {
             ++g_fail;
             out() << "[FAIL] 大图预览降采样 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
+    // ---------- 11. 多文档标签页：每个文档的像素/尺寸/历史互不干扰 ----------
+    {
+        const QString docAPath = QDir::tempPath() + "/imagewithui_doc_a.png";
+        const QString docBPath = QDir::tempPath() + "/imagewithui_doc_b.png";
+        {
+            QImage a(64, 48, QImage::Format_RGB32);
+            a.fill(qRgb(200, 60, 60));
+            a.save(docAPath, "PNG");
+            QImage b(80, 60, QImage::Format_RGB32);
+            b.fill(qRgb(60, 60, 200));
+            b.save(docBPath, "PNG");
+        }
+
+        QString failReason;
+        {
+            MainWindow win;
+            if (!win.OpenImage(docAPath) || !win.OpenImage(docBPath)) {
+                failReason = "无法打开测试图";
+            } else if (win.DocumentCount() != 2 || win.ActiveDocumentIndex() != 1) {
+                failReason = "打开两张图后文档数/活动文档不对";
+            } else {
+                const std::vector<uint8_t> bPixels = win.CurrentImageData();
+                const int32_t bWidth = win.myValue.bmpInfo.GetWidth();
+                const int32_t bHeight = win.myValue.bmpInfo.GetHeight();
+
+                QTabBar *bar = win.findChild<QTabBar *>("documentTabBar");
+                if (bar == nullptr || bar->count() != 2) {
+                    failReason = "标签栏没有正确创建";
+                } else {
+                    bar->setCurrentIndex(0);   // 切到文档 A
+                    if (win.ActiveDocumentIndex() != 0) {
+                        failReason = "切换标签后活动文档下标不对";
+                    } else if (win.myValue.bmpInfo.GetWidth() != 64 ||
+                               win.myValue.bmpInfo.GetHeight() != 48) {
+                        failReason = "切换标签后尺寸没有跟着换";
+                    } else if (win.imageDataHistory.size() != 1) {
+                        failReason = "切换标签后历史没有跟着换";
+                    } else {
+                        // 在文档 A 上做一次亮度调整，不能影响文档 B
+                        QLineEdit *edit = win.findChild<QLineEdit *>("lineEdit_brightness");
+                        QPushButton *apply = win.findChild<QPushButton *>("btn_brightness");
+                        if (edit != nullptr && apply != nullptr) {
+                            edit->setText("30");
+                            QEventLoop loop;
+                            QTimer::singleShot(1200, &loop, &QEventLoop::quit);
+                            loop.exec();
+                            apply->click();
+                            if (win.imageDataHistory.size() != 2) {
+                                failReason = "文档 A 应用调整后历史未增加";
+                            }
+                        }
+
+                        bar->setCurrentIndex(1);   // 切回文档 B
+                        if (!failReason.isEmpty()) {
+                            // 已有失败原因，保持
+                        } else if (win.ActiveDocumentIndex() != 1) {
+                            failReason = "切回文档 B 失败";
+                        } else if (win.myValue.bmpInfo.GetWidth() != bWidth ||
+                                   win.myValue.bmpInfo.GetHeight() != bHeight) {
+                            failReason = "文档 B 的尺寸被破坏";
+                        } else if (win.CurrentImageData() != bPixels) {
+                            failReason = "文档 B 的像素被文档 A 的修改影响";
+                        } else if (win.imageDataHistory.size() != 1) {
+                            failReason = "文档 B 的历史被污染";
+                        } else {
+                            // 关闭当前标签，应回到文档 A
+                            QMetaObject::invokeMethod(bar, "tabCloseRequested", Q_ARG(int, 1));
+                            if (win.DocumentCount() != 1 || win.ActiveDocumentIndex() != 0) {
+                                failReason = "关闭标签后文档数/活动文档不对";
+                            } else if (win.myValue.bmpInfo.GetWidth() != 64) {
+                                failReason = "关闭标签后没有切回文档 A";
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        QFile::remove(docAPath);
+        QFile::remove(docBPath);
+
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 多文档标签页 : 标签切换保持各自像素/尺寸/历史，关闭后自动切换\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 多文档标签页 : " << failReason << "\n";
         }
         out().flush();
     }

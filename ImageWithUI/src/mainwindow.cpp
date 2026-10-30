@@ -11,6 +11,8 @@
 #include <QFont>
 #include <QKeyEvent>
 #include <QApplication>
+#include <QVBoxLayout>
+#include <QAction>
 
 namespace {
 
@@ -144,6 +146,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     _SetShortCut();
     _SetVisible(false);
+    SetupDocumentTabs();   // 多文档标签页
     SetupLivePreview();   // 右侧调整参数的实时预览
 
     // 工具栏：常用操作快捷入口(原先工具栏为空)
@@ -738,44 +741,257 @@ bool MainWindow::LoadImage(const QString &path)
         UpdateStatus("打开失败：" + errMsg);
         return false;
     }
+    if (loaded.imageData.empty() || loaded.bmpInfo.GetWidth() <= 0 || loaded.bmpInfo.GetHeight() <= 0) {
+        function.CreateMessagebox("打开失败", "图像内容为空");
+        UpdateStatus("打开失败：图像内容为空");
+        return false;
+    }
+    qDebug() << "image size is:" << loaded.imageData.size()
+             << "pixel count:" << loaded.imageData.size() / 3;
 
-    _SetVisible(true);
-    BMPPath = path.toStdString();
-    myValue = loaded;
-    imageSize = myValue.imageData.size();
-    pixelCount = imageSize / 3;
-    segmentSize = pixelCount / static_cast<size_t>(std::max(1, num_threads));
-    if (segmentSize == 0) segmentSize = 1;
-    qDebug() << "image size is:" << imageSize << "pixel count:" << pixelCount;
-
-    imageData = myValue.imageData;
-    originalImageData = myValue.imageData;
-
-    imageDataHistory.clear();
-    redoImageDataHistory.clear();
+    // 每打开一张图就新建一个文档(标签页)
+    Document doc;
+    doc.path = path;
+    doc.value = loaded;
+    doc.imageData = loaded.imageData;
+    doc.originalImageData = loaded.imageData;
+    doc.originalWidth = loaded.bmpInfo.GetWidth();
+    doc.originalHeight = loaded.bmpInfo.GetHeight();
+    doc.quad.setRect(doc.originalWidth, doc.originalHeight);
+    doc.canSave = true;
     {
+        // 打开后的状态就是历史第 1 步
         ImageSnapshot snap;
-        snap.data = imageData;
-        snap.width = myValue.bmpInfo.GetWidth();
-        snap.height = myValue.bmpInfo.GetHeight();
-        snap.quad.setRect(snap.width, snap.height);
-        m_originalWidth = snap.width;
-        m_originalHeight = snap.height;
-        m_contentQuad = snap.quad;
-        InvalidateRotateBase();
-        SaveImageDataToHistory(snap);
+        snap.data = doc.imageData;
+        snap.width = doc.originalWidth;
+        snap.height = doc.originalHeight;
+        snap.quad = doc.quad;
+        doc.history.push_back(snap);
     }
 
-    m_bmpImage = Function::ToDisplayImage(imageData,
-                                          myValue.bmpInfo.GetWidth(),
-                                          myValue.bmpInfo.GetHeight());
-    ShowImage(imageData, myValue, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
-    canSave = true;
+    m_docs.push_back(std::move(doc));
+    _SetVisible(true);
+    ActivateDocument(static_cast<int>(m_docs.size()) - 1);
     UpdateStatus(QString("已打开 %1").arg(QFileInfo(path).fileName()));
-    UpdateStatusInfo();
-    UpdateHistoryPanel();
     return true;
 }
+
+// ------------------------------------------------------------------
+// 多文档标签页
+// ------------------------------------------------------------------
+
+void MainWindow::SetupDocumentTabs()
+{
+    m_tabBar = new QTabBar(this);
+    m_tabBar->setObjectName("documentTabBar");
+    m_tabBar->setTabsClosable(true);
+    // 标签顺序与 m_docs 一一对应，不允许拖动重排(否则下标会和文档错位)
+    m_tabBar->setMovable(false);
+    m_tabBar->setExpanding(false);
+    m_tabBar->setDrawBase(false);
+    m_tabBar->setVisible(false);
+    connect(m_tabBar, &QTabBar::currentChanged, this, [this](int index) {
+        ActivateDocument(index);
+    });
+    connect(m_tabBar, &QTabBar::tabCloseRequested, this, [this](int index) {
+        CloseDocument(index);
+    });
+
+    // 显示区改为 "标签栏 + 图像" 的纵向布局(不改 .ui，运行时重排即可)
+    QWidget *viewBox = new QWidget(this);
+    viewBox->setObjectName("viewBox");
+    QVBoxLayout *viewLayout = new QVBoxLayout(viewBox);
+    viewLayout->setContentsMargins(0, 0, 0, 0);
+    viewLayout->setSpacing(6);
+    ui->horizontalLayout_4->removeWidget(ui->imageLabel);
+    viewLayout->addWidget(m_tabBar);
+    viewLayout->addWidget(ui->imageLabel, 1);
+    ui->horizontalLayout_4->insertWidget(0, viewBox, 1);
+
+    // 文件菜单增加"关闭当前图像"
+    QAction *closeAction = new QAction(QString("关闭当前图像"), this);
+    closeAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_W));
+    ui->menu->addSeparator();
+    ui->menu->addAction(closeAction);
+    connect(closeAction, &QAction::triggered, this, [this]() {
+        CloseDocument(m_activeDoc);
+    });
+}
+
+void MainWindow::UpdateTabBar()
+{
+    if (m_tabBar == nullptr) {
+        return;
+    }
+    // 重建期间屏蔽信号，避免 setCurrentIndex 反过来触发切换
+    m_tabBar->blockSignals(true);
+    while (m_tabBar->count() > 0) {
+        m_tabBar->removeTab(0);
+    }
+    for (size_t i = 0; i < m_docs.size(); ++i) {
+        const QString name = m_docs[i].path.isEmpty()
+                                 ? QString("未命名 %1").arg(static_cast<int>(i) + 1)
+                                 : QFileInfo(m_docs[i].path).fileName();
+        const int tabIndex = m_tabBar->addTab(name);
+        m_tabBar->setTabToolTip(tabIndex, m_docs[i].path);
+
+        // 自绘关闭按钮：QSS 会覆盖 Qt 默认的关闭图标，这里用文字"✕"保证可见
+        QToolButton *closeBtn = new QToolButton(m_tabBar);
+        closeBtn->setObjectName("tabCloseButton");
+        closeBtn->setText(QString::fromUtf8("\xE2\x9C\x95"));
+        closeBtn->setToolTip(QString("关闭该图像"));
+        closeBtn->setCursor(Qt::ArrowCursor);
+        closeBtn->setAutoRaise(true);
+        closeBtn->setFixedSize(16, 16);
+        connect(closeBtn, &QToolButton::clicked, this, [this, tabIndex]() {
+            CloseDocument(tabIndex);
+        });
+        m_tabBar->setTabButton(tabIndex, QTabBar::RightSide, closeBtn);
+    }
+    if (m_activeDoc >= 0 && m_activeDoc < m_tabBar->count()) {
+        m_tabBar->setCurrentIndex(m_activeDoc);
+    }
+    m_tabBar->blockSignals(false);
+    m_tabBar->setVisible(!m_docs.empty());
+}
+
+// 清空当前活动文档的全部成员状态
+void MainWindow::ResetDocumentState()
+{
+    CancelPreview();
+    BMPPath.clear();
+    imageData.clear();
+    originalImageData.clear();
+    myValue = MyValue();
+    imageDataHistory.clear();
+    redoImageDataHistory.clear();
+    m_originalWidth = 0;
+    m_originalHeight = 0;
+    m_contentQuad = ContentQuad();
+    m_rotBaseValid = false;
+    m_rotBase.clear();
+    m_rotBaseW = 0;
+    m_rotBaseH = 0;
+    m_rotBaseQuad = ContentQuad();
+    m_rotTotal = 0.0;
+    canSave = false;
+    imageSize = 0;
+    pixelCount = 0;
+    segmentSize = 0;
+}
+
+// 切换标签：把当前状态整体换出、把目标文档状态换入(移动语义，不拷贝像素)
+void MainWindow::ActivateDocument(int index)
+{
+    if (m_busy) {
+        UpdateStatus("正在处理中，请稍后再切换文档");
+        UpdateTabBar();   // 把标签选中状态恢复成当前文档
+        return;
+    }
+    if (index < 0 || index >= static_cast<int>(m_docs.size())) {
+        return;
+    }
+    if (index == m_activeDoc) {
+        UpdateTabBar();
+        return;
+    }
+    CancelPreview();
+
+    if (m_activeDoc >= 0 && m_activeDoc < static_cast<int>(m_docs.size())) {
+        Document &cur = m_docs[static_cast<size_t>(m_activeDoc)];
+        cur.path = QString::fromStdString(BMPPath);
+        cur.value = std::move(myValue);
+        cur.imageData = std::move(imageData);
+        cur.originalImageData = std::move(originalImageData);
+        cur.history = std::move(imageDataHistory);
+        cur.redoHistory = std::move(redoImageDataHistory);
+        cur.originalWidth = m_originalWidth;
+        cur.originalHeight = m_originalHeight;
+        cur.quad = m_contentQuad;
+        cur.rotBaseValid = m_rotBaseValid;
+        cur.rotBase = std::move(m_rotBase);
+        cur.rotBaseW = m_rotBaseW;
+        cur.rotBaseH = m_rotBaseH;
+        cur.rotBaseQuad = m_rotBaseQuad;
+        cur.rotTotal = m_rotTotal;
+        cur.canSave = canSave;
+        ResetDocumentState();   // 成员里不再保留旧文档的副本
+    }
+
+    m_activeDoc = index;
+    Document &doc = m_docs[static_cast<size_t>(index)];
+    BMPPath = doc.path.toStdString();
+    myValue = std::move(doc.value);
+    imageData = std::move(doc.imageData);
+    originalImageData = std::move(doc.originalImageData);
+    imageDataHistory = std::move(doc.history);
+    redoImageDataHistory = std::move(doc.redoHistory);
+    m_originalWidth = doc.originalWidth;
+    m_originalHeight = doc.originalHeight;
+    m_contentQuad = doc.quad;
+    m_rotBaseValid = doc.rotBaseValid;
+    m_rotBase = std::move(doc.rotBase);
+    m_rotBaseW = doc.rotBaseW;
+    m_rotBaseH = doc.rotBaseH;
+    m_rotBaseQuad = doc.rotBaseQuad;
+    m_rotTotal = doc.rotTotal;
+    canSave = doc.canSave;
+
+    imageSize = imageData.size();
+    pixelCount = imageSize / 3;
+    segmentSize = pixelCount / static_cast<size_t>(std::max(1, num_threads));
+    if (segmentSize == 0) {
+        segmentSize = 1;
+    }
+
+    _SetVisible(!imageData.empty());
+    if (imageData.empty()) {
+        ui->imageLabel->setText(QString("双击此处，或按 Ctrl+N 打开图片"));
+        ui->imageLabel->setPixmap(QPixmap());
+    } else {
+        SetDisplayPixmap(imageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+    }
+    UpdateStatusInfo();
+    UpdateHistoryPanel();
+    UpdateTabBar();
+}
+
+void MainWindow::CloseDocument(int index)
+{
+    if (index < 0 || index >= static_cast<int>(m_docs.size())) {
+        return;
+    }
+    if (m_busy) {
+        UpdateStatus("正在处理中，暂不能关闭图像");
+        return;
+    }
+
+    const bool wasActive = (index == m_activeDoc);
+    if (wasActive) {
+        ResetDocumentState();
+        m_activeDoc = -1;
+    }
+    m_docs.erase(m_docs.begin() + index);
+    if (m_activeDoc > index) {
+        --m_activeDoc;
+    }
+
+    if (m_docs.empty()) {
+        ui->imageLabel->setText(QString("双击此处，或按 Ctrl+N 打开图片"));
+        ui->imageLabel->setPixmap(QPixmap());
+        _SetVisible(false);
+        UpdateStatus("已关闭全部图像");
+        UpdateStatusInfo();
+        UpdateHistoryPanel();
+        UpdateTabBar();
+        return;
+    }
+    const int target = wasActive ? std::min(index, static_cast<int>(m_docs.size()) - 1)
+                                 : m_activeDoc;
+    UpdateTabBar();
+    ActivateDocument(target);
+}
+
 
 void MainWindow::on_openImage_triggered()
 {
@@ -804,7 +1020,8 @@ void MainWindow::on_actionsave_triggered()
     // 保存当前正在显示的图像(而不是历史栈里的旧数据)
     const QString filter = QString("BMP 图像 (*.bmp);;PNG 图像 (*.png);;JPEG 图像 (*.jpg *.jpeg);;"
                                    "TIFF 图像 (*.tif *.tiff);;WebP 图像 (*.webp)");
-    QString filePath = QFileDialog::getSaveFileName(this, "保存图像", "", filter);
+    QString filePath = QFileDialog::getSaveFileName(this, "保存图像",
+                                                    QString::fromStdString(BMPPath), filter);
     if (filePath.isEmpty()) {
         qDebug() << "保存操作已取消。";
         return;
@@ -825,6 +1042,8 @@ void MainWindow::on_actionsave_triggered()
         BMPInfo outInfo = myValue.bmpInfo;
         MYFunction::SetBMPHeaderValues(outBmp, outInfo, width, height, outInfo.GetBitsPerPixel());
         if (MYFunction::WriteBMPFile(filePath.toStdString(), imageData, outBmp, outInfo)) {
+            BMPPath = filePath.toStdString();
+            UpdateTabBar();
             UpdateStatus(QString("已保存到 %1").arg(QFileInfo(filePath).fileName()));
         } else {
             function.CreateMessagebox("保存失败", "无法写入文件，请检查路径是否有效");
@@ -843,6 +1062,8 @@ void MainWindow::on_actionsave_triggered()
         writer.setQuality(92);
     }
     if (writer.write(image)) {
+        BMPPath = filePath.toStdString();
+        UpdateTabBar();
         UpdateStatus(QString("已导出 %1").arg(QFileInfo(filePath).fileName()));
     } else {
         function.CreateMessagebox("保存失败",
@@ -889,6 +1110,10 @@ void MainWindow::RunSegmented(const OpContext &ctx,
 void MainWindow::SetBusy(bool busy)
 {
     m_busy = busy;
+    // 处理中禁止切换/关闭文档，避免结果写进错误的文档
+    if (m_tabBar != nullptr) {
+        m_tabBar->setEnabled(!busy);
+    }
     // 处理中禁用主控区域，避免并发修改同一份像素数据
     ui->widget->setEnabled(!busy);
     ui->menu_edit->setEnabled(!busy);

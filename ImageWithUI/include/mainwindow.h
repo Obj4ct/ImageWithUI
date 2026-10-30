@@ -3,6 +3,7 @@
 #include"QTHeader.h"
 #include <QListWidgetItem>
 #include <QTimer>
+#include <QTabBar>
 #include "BMPFile.h"
 #include "Function.h"
 #include "blendwindow.h"
@@ -54,6 +55,28 @@ struct PreviewField {
     OpFn (*makeOp)(double) = nullptr;   // 把输入值变成一次算子调用
 };
 
+// 一个打开的文档(一个标签页)：
+// 只有"当前活动文档"的状态会放在 MainWindow 的成员里直接使用，
+// 其余文档以这份结构保存，切换标签时把两边状态整体交换(移动语义，不拷贝像素)
+struct Document {
+    QString path;                             // 文件路径(空表示未命名)
+    MyValue value;                            // 文件头信息 + 原始像素
+    std::vector<uint8_t> imageData;           // 当前像素
+    std::vector<uint8_t> originalImageData;   // 打开时的原始像素(重置用)
+    std::list<ImageSnapshot> history;         // 撤销栈
+    std::list<ImageSnapshot> redoHistory;     // 重做栈
+    int32_t originalWidth = 0;
+    int32_t originalHeight = 0;
+    ContentQuad quad;
+    bool rotBaseValid = false;
+    std::vector<uint8_t> rotBase;
+    int32_t rotBaseW = 0;
+    int32_t rotBaseH = 0;
+    ContentQuad rotBaseQuad;
+    double rotTotal = 0.0;
+    bool canSave = false;
+};
+
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
@@ -89,6 +112,9 @@ public:
     void UpdateStatus(const QString &text);
     // 供外部(命令行)载入图片
     bool OpenImage(const QString &path) { return LoadImage(path); }
+    // 当前打开的文档数 / 活动文档下标(供自检使用)
+    int DocumentCount() const { return static_cast<int>(m_docs.size()); }
+    int ActiveDocumentIndex() const { return m_activeDoc; }
 
 public:
     std::string BMPPath;
@@ -299,5 +325,18 @@ private:
     void UpdateStatusInfo();
     // 刷新右侧"历史记录"面板：列出每一步的尺寸，并选中当前步
     void UpdateHistoryPanel();
+
+    // ---- 多文档标签页 ----
+    // 标签页状态以"移动交换"实现：当前文档用成员变量，其余文档存 m_docs
+    void SetupDocumentTabs();
+    void ActivateDocument(int index);
+    void CloseDocument(int index);
+    void UpdateTabBar();
+    // 清空当前活动文档的全部成员状态(关闭最后一个文档时用)
+    void ResetDocumentState();
+    QTabBar *m_tabBar = nullptr;
+    std::vector<Document> m_docs;
+    int m_activeDoc = -1;
+
 };
 #endif // MAINWINDOW_H
