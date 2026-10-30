@@ -13,6 +13,8 @@
 #include <QApplication>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QScrollArea>
+#include <QScreen>
 #include <QAction>
 #include <QPainter>
 #include <QClipboard>
@@ -471,6 +473,31 @@ MainWindow::MainWindow(QWidget *parent)
     UpdateStatusInfo();
     SetupSelectionTool();   // 矩形选区覆盖层 + "选择"菜单
     SetupLayerPanel();      // 右侧图层面板 + "图层"菜单
+
+    // ---- 右侧面板放进滚动区 ----
+    // 窗口变矮时面板可以滚动，而不是把控件压扁或把窗口撑出屏幕
+    QScrollArea *panelScroll = new QScrollArea(ui->widget);
+    panelScroll->setObjectName("panelScroll");
+    panelScroll->setWidgetResizable(true);
+    panelScroll->setFrameShape(QFrame::NoFrame);
+    panelScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    QLayout *panelLayout = ui->widget->layout();
+    if (panelLayout != nullptr) {
+        panelLayout->removeWidget(ui->widget_14);
+        panelScroll->setWidget(ui->widget_14);
+        panelLayout->addWidget(panelScroll);
+    }
+
+    // ---- 窗口自适应 ----
+    // 初始尺寸取"设计尺寸"与"可用屏幕 92%"的较小值，并居中；
+    // 最小尺寸随屏幕收缩，保证小屏/高缩放下窗口能完整放进屏幕
+    const QRect avail = QGuiApplication::primaryScreen()->availableGeometry();
+    const QSize design(1091, 800);
+    const int fitW = qMin(design.width(), static_cast<int>(avail.width() * 0.92));
+    const int fitH = qMin(design.height(), static_cast<int>(avail.height() * 0.92));
+    resize(fitW, fitH);
+    setMinimumSize(qMin(760, fitW), qMin(520, fitH));
+    move(avail.left() + (avail.width() - fitW) / 2, avail.top() + (avail.height() - fitH) / 2);
 }
 
 
