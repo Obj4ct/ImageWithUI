@@ -20,6 +20,7 @@
 #include <QPainter>
 #include <QClipboard>
 #include <QColorDialog>
+#include <QTransform>
 #include <QFontMetrics>
 #include <QInputDialog>
 
@@ -1169,6 +1170,26 @@ void MainWindow::SetupSelectionTool()
             StrokeSelection(color, width);
         }
     });
+    QAction *transformAction = addItem(QString("自由变换…"), QKeySequence(), [this]() {
+        if (!HasSelection()) {
+            UpdateStatus("请先建立选区");
+            return;
+        }
+        bool ok = false;
+        const double scale = QInputDialog::getDouble(this, QString("自由变换"),
+                                                    QString("缩放百分比(10 ~ 400)："),
+                                                    100.0, 10.0, 400.0, 0, &ok);
+        if (!ok) {
+            return;
+        }
+        const double angle = QInputDialog::getDouble(this, QString("自由变换"),
+                                                     QString("旋转角度(-180 ~ 180 度)："),
+                                                     0.0, -180.0, 180.0, 0, &ok);
+        if (!ok) {
+            return;
+        }
+        FreeTransformSelection(scale, angle);
+    });
     QAction *cropAction = addItem(QString("裁剪到选区"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_X),
                                   [this]() { CropToSelection(); });
     QAction *eraseAction = addItem(QString("清除选区内容"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Delete),
@@ -1220,13 +1241,14 @@ void MainWindow::SetupSelectionTool()
 
     // 没有选区时禁用需要选区的操作
     connect(m_selectionMenu, &QMenu::aboutToShow, this,
-            [this, copyAction, pasteAction, fillAction, strokeAction, cropAction, eraseAction,
-             featherAction, growAction, shrinkAction, smoothAction]() {
+            [this, copyAction, pasteAction, fillAction, strokeAction, transformAction, cropAction,
+             eraseAction, featherAction, growAction, shrinkAction, smoothAction]() {
         const bool has = HasSelection();
         copyAction->setEnabled(has);
         pasteAction->setEnabled(has);
         fillAction->setEnabled(has);
         strokeAction->setEnabled(has);
+        transformAction->setEnabled(has);
         cropAction->setEnabled(has);
         eraseAction->setEnabled(has);
         featherAction->setEnabled(has);
@@ -1993,6 +2015,118 @@ void MainWindow::StrokeSelection(const QColor &color, int width)
     }, nullptr, [this, color, thick]() {
         UpdateStatus(QString("已用 %1 描边 %2 px").arg(color.name()).arg(thick));
     }, false);
+}
+
+void MainWindow::FreeTransformSelection(double scalePercent, double angleDegrees)
+{
+    if (m_busy) {
+        UpdateStatus("上一个操作还在处理中，请稍候");
+        return;
+    }
+    const int32_t w = myValue.bmpInfo.GetWidth();
+    const int32_t h = myValue.bmpInfo.GetHeight();
+    if (imageData.empty() || w <= 0 || h <= 0) {
+        UpdateStatus("请先打开一张图像");
+        return;
+    }
+    if (!HasSelection() || m_mask.width != w || m_mask.height != h) {
+        UpdateStatus("请先建立选区");
+        return;
+    }
+    const double s = qBound(0.01, scalePercent / 100.0, 20.0);
+    const double angle = angleDegrees;
+    if (std::abs(s - 1.0) < 1e-6 && std::abs(angle) < 1e-6) {
+        return;   // 没有变换参数
+    }
+
+    const QRect sel = m_selection.intersected(QRect(0, 0, w, h));
+    if (sel.isEmpty()) {
+        UpdateStatus("选区超出画布范围，无法变换");
+        return;
+    }
+
+    const std::vector<uint8_t> orig = imageData;   // 内容来源永远是变换前的像素
+    std::vector<uint8_t> result = orig;
+
+    // 1) 原选区按覆盖度刷白
+    for (int32_t y = 0; y < h; ++y) {
+        const uint8_t *mrow = m_mask.data.data() + static_cast<size_t>(y) * static_cast<size_t>(w);
+        const size_t rowBase = static_cast<size_t>(h - 1 - y) * static_cast<size_t>(w);
+        for (int32_t x = 0; x < w; ++x) {
+            const int a = mrow[x];
+            if (a == 0) {
+                continue;
+            }
+            uint8_t *p = result.data() + (rowBase + static_cast<size_t>(x)) * 3;
+            for (int c = 0; c < 3; ++c) {
+                p[c] = static_cast<uint8_t>((255 * a + static_cast<int>(p[c]) * (255 - a)) / 255);
+            }
+        }
+    }
+
+    // 2) 把选区内容抽成带 alpha(掩码覆盖度)的图像，供整体变换
+    QImage content(sel.width(), sel.height(), QImage::Format_ARGB32);
+    content.fill(Qt::transparent);
+    for (int y = 0; y < sel.height(); ++y) {
+        const int vy = sel.y() + y;
+        const uint8_t *mrow = m_mask.data.data() + static_cast<size_t>(vy) * static_cast<size_t>(w);
+        QRgb *line = reinterpret_cast<QRgb *>(content.scanLine(y));
+        for (int x = 0; x < sel.width(); ++x) {
+            const int vx = sel.x() + x;
+            const int a = mrow[vx];
+            if (a == 0) {
+                continue;
+            }
+            const size_t idx = (static_cast<size_t>(h - 1 - vy) * static_cast<size_t>(w) +
+                                static_cast<size_t>(vx)) * 3;
+            line[x] = qRgba(orig[idx + 2], orig[idx + 1], orig[idx], a);
+        }
+    }
+
+    // 3) 以选区中心为锚点缩放 + 旋转，画到与画布同尺寸的透明层
+    QImage canvas(w, h, QImage::Format_ARGB32);
+    canvas.fill(Qt::transparent);
+    {
+        QPainter p(&canvas);
+        p.setRenderHint(QPainter::SmoothPixmapTransform, true);
+        const double cx = sel.x() + sel.width() / 2.0;
+        const double cy = sel.y() + sel.height() / 2.0;
+        QTransform t;
+        t.translate(cx, cy);
+        t.rotate(angle);
+        t.scale(s, s);
+        t.translate(-cx, -cy);
+        p.setTransform(t);
+        p.drawImage(QPointF(sel.x(), sel.y()), content);
+    }
+
+    // 4) 按变换后 alpha 合成到画布，同时得到新的选区掩码
+    SelectionMask newMask;
+    newMask.width = w;
+    newMask.height = h;
+    newMask.data.assign(static_cast<size_t>(w) * static_cast<size_t>(h), 0);
+    for (int32_t y = 0; y < h; ++y) {
+        const QRgb *line = reinterpret_cast<const QRgb *>(canvas.constScanLine(y));
+        const size_t rowBase = static_cast<size_t>(h - 1 - y) * static_cast<size_t>(w);
+        uint8_t *mrow = newMask.data.data() + static_cast<size_t>(y) * static_cast<size_t>(w);
+        for (int32_t x = 0; x < w; ++x) {
+            const int a = qAlpha(line[x]);
+            if (a == 0) {
+                continue;
+            }
+            mrow[x] = static_cast<uint8_t>(a);
+            uint8_t *p = result.data() + (rowBase + static_cast<size_t>(x)) * 3;
+            p[0] = static_cast<uint8_t>((qBlue(line[x]) * a + static_cast<int>(p[0]) * (255 - a)) / 255);
+            p[1] = static_cast<uint8_t>((qGreen(line[x]) * a + static_cast<int>(p[1]) * (255 - a)) / 255);
+            p[2] = static_cast<uint8_t>((qRed(line[x]) * a + static_cast<int>(p[2]) * (255 - a)) / 255);
+        }
+    }
+
+    m_mask = std::move(newMask);
+    m_selection = MaskBoundingRect();
+    ApplySnapshot(MakeSnapshot(std::move(result), w, h, m_contentQuad));
+    UpdateStatus(QString("已自由变换选区内容：缩放 %1% · 旋转 %2°")
+                     .arg(scalePercent).arg(angle));
 }
 
 void MainWindow::SetupLayerPanel()

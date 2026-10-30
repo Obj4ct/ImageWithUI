@@ -1971,6 +1971,91 @@ int Run(const QString &imagePath)
         out().flush();
     }
 
+    // ---------- 21. 自由变换(缩放 / 旋转) ----------
+    {
+        const QString tfPath = QDir::tempPath() + "/imagewithui_selftest_transform.png";
+        {
+            QImage img(80, 60, QImage::Format_RGB32);
+            img.fill(qRgb(40, 120, 200));   // 内存里是 BGR(200,120,40)
+            img.save(tfPath, "PNG");
+        }
+
+        QString failReason;
+        auto pixelAt = [](MainWindow &win, int x, int y, int out[3]) -> bool {
+            const std::vector<uint8_t> &px = win.CurrentImageData();
+            const int32_t w = win.myValue.bmpInfo.GetWidth();
+            const int32_t h = win.myValue.bmpInfo.GetHeight();
+            if (w <= 0 || h <= 0 || x < 0 || y < 0 || x >= w || y >= h) {
+                return false;
+            }
+            const size_t i = (static_cast<size_t>(h - 1 - y) * static_cast<size_t>(w)
+                              + static_cast<size_t>(x)) * 3;
+            if (i + 2 >= px.size()) {
+                return false;
+            }
+            out[0] = px[i];
+            out[1] = px[i + 1];
+            out[2] = px[i + 2];
+            return true;
+        };
+        const int kOrig[3] = {200, 120, 40};
+
+        // (1) 缩小到 50%：内容收缩到中心附近，原位置留白
+        {
+            MainWindow win;
+            if (!win.OpenImage(tfPath)) {
+                failReason = "无法打开测试图";
+            } else {
+                win.SetSelection(QRect(10, 10, 20, 20));
+                win.FreeTransformSelection(50.0, 0.0);
+                int center[3] = {0, 0, 0};
+                int oldCorner[3] = {0, 0, 0};
+                if (!pixelAt(win, 20, 20, center) || !pixelAt(win, 10, 10, oldCorner)) {
+                    failReason = "像素索引越界";
+                } else if (center[0] != kOrig[0] || center[1] != kOrig[1] || center[2] != kOrig[2]) {
+                    failReason = "缩小后中心没有保留内容";
+                } else if (oldCorner[0] != 255 || oldCorner[1] != 255 || oldCorner[2] != 255) {
+                    failReason = "缩小后原选区位置没有留白";
+                } else if (qAbs(win.SelectionRect().width() - 10) > 1 ||
+                           qAbs(win.SelectionRect().height() - 10) > 1) {
+                    failReason = QString("缩放后选区尺寸不对(实际 %1 × %2)")
+                                     .arg(win.SelectionRect().width()).arg(win.SelectionRect().height());
+                }
+            }
+        }
+
+        // (2) 旋转 90°：非正方形选区换成长宽互换，中心仍有内容
+        if (failReason.isEmpty()) {
+            MainWindow win;
+            if (!win.OpenImage(tfPath)) {
+                failReason = "无法打开测试图";
+            } else {
+                win.SetSelection(QRect(10, 10, 20, 10));
+                win.FreeTransformSelection(100.0, 90.0);
+                int center[3] = {0, 0, 0};
+                if (!pixelAt(win, 20, 15, center)) {
+                    failReason = "像素索引越界";
+                } else if (center[0] != kOrig[0] || center[1] != kOrig[1] || center[2] != kOrig[2]) {
+                    failReason = "旋转后中心没有保留内容";
+                } else if (qAbs(win.SelectionRect().width() - 10) > 2 ||
+                           qAbs(win.SelectionRect().height() - 20) > 2) {
+                    failReason = QString("旋转 90° 后长宽没有互换(实际 %1 × %2)")
+                                     .arg(win.SelectionRect().width()).arg(win.SelectionRect().height());
+                }
+            }
+        }
+        QFile::remove(tfPath);
+
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 自由变换 : 50% 缩放居中收缩，90° 旋转后长宽互换\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 自由变换 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
     out() << "------------------------------------------------\n";
     out() << "通过 " << g_pass << " 项，失败 " << g_fail << " 项\n";
     out().flush();
