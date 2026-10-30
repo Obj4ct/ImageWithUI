@@ -269,6 +269,30 @@ QWidget#widget QLabel#label_layers_hint {
     max-width: 16777215px;
     padding: 8px 0;
 }
+/* 图层面板：标签/按钮不套用面板的固定宽度规则 */
+QWidget#widget QLabel#layerBlendLabel, QWidget#widget QLabel#layerOpacityLabel {
+    color: #9dabb8;
+    min-width: 64px;
+    max-width: 64px;
+}
+QWidget#widget QLabel#layerInfoLabel {
+    color: #67e8f9;
+    font-family: "Consolas", "Microsoft YaHei UI", monospace;
+    min-width: 42px;
+    max-width: 42px;
+}
+QWidget#widget QListWidget#layerList {
+    background-color: #0e1116;
+    min-height: 140px;
+    padding: 4px;
+    selection-background-color: #1b3a47;
+    selection-color: #8be9f9;
+}
+QWidget#widget QPushButton#layerBtn {
+    min-width: 0;
+    max-width: 16777215px;
+    min-height: 26px;
+}
 QDialog { background-color: #0b0d10; }
 /* 画布：接近纯黑 + 极细外框，让图片本身成为视觉中心 */
 QLabel#imageLabel {
@@ -489,6 +513,21 @@ QWidget#widget QListWidget#historyList {
 QWidget#widget QLabel#label_layers_hint {
     color: #8a96a4; font-size: 12px;
     min-width: 0; max-width: 16777215px; padding: 8px 0;
+}
+/* 图层面板：标签/按钮不套用面板的固定宽度规则 */
+QWidget#widget QLabel#layerBlendLabel, QWidget#widget QLabel#layerOpacityLabel {
+    color: #5b6876; min-width: 64px; max-width: 64px;
+}
+QWidget#widget QLabel#layerInfoLabel {
+    color: #0b7285; min-width: 42px; max-width: 42px;
+    font-family: "Consolas", "Microsoft YaHei UI", monospace;
+}
+QWidget#widget QListWidget#layerList {
+    background-color: #ffffff; min-height: 140px; padding: 4px;
+    selection-background-color: #e3f4f8; selection-color: #0b7285;
+}
+QWidget#widget QPushButton#layerBtn {
+    min-width: 0; max-width: 16777215px; min-height: 26px;
 }
 QDialog { background-color: #f6f7f9; }
 

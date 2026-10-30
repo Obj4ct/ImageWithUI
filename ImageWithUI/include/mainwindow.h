@@ -2,6 +2,11 @@
 #define MAINWINDOW_H
 #include"QTHeader.h"
 #include <QListWidgetItem>
+#include <QListWidget>
+#include <QSlider>
+#include <QComboBox>
+#include <QLabel>
+#include <QMenu>
 #include <QTimer>
 #include <QTabBar>
 #include "BMPFile.h"
@@ -33,13 +38,27 @@ struct OpContext {
     ContentQuad quad;         // 内容区域(旋转会更新它)
 };
 
+// 图层：与画布同尺寸的 BGR 像素 + 叠放属性
+// 约定：所有图层尺寸都与文档画布一致；imageData 始终是【当前活动图层】的像素
+struct Layer {
+    QString name;
+    std::vector<uint8_t> data;
+    bool visible = true;
+    double opacity = 1.0;   // 0.0 ~ 1.0
+    int blend = 0;          // 0 正常 / 1 正片叠底 / 2 滤色
+};
+
 // 历史快照：必须连同尺寸一起保存，
-// 因为旋转等算子会改变画布宽高，只存像素会导致撤销/保存时尺寸对不上
+// 因为旋转等算子会改变画布宽高，只存像素会导致撤销/保存时尺寸对不上。
+// data 保存【当前活动图层】的像素；layers 保存整份图层栈(活动图层的像素留空，
+// 恢复时用 data 填回，避免同一份像素存两遍)
 struct ImageSnapshot {
     std::vector<uint8_t> data;
     int32_t width = 0;
     int32_t height = 0;
     ContentQuad quad;         // 内容区域(撤销/重做要一起恢复)
+    std::vector<Layer> layers;
+    int activeLayer = 0;
 };
 
 // 算子函数：输入像素与执行上下文(可修改画布尺寸)
@@ -76,6 +95,8 @@ struct Document {
     double rotTotal = 0.0;
     bool canSave = false;
     QRect selection;                          // 矩形选区(图像像素坐标，视觉，y 向下)
+    std::vector<Layer> layers;                // 图层栈(自底向上)
+    int activeLayer = 0;
 };
 
 class SelectionOverlay;
@@ -128,6 +149,22 @@ public:
     void CopySelection();
     void CropToSelection();
     void ClearSelectionContent();
+
+    // ---- 图层(自底向上，索引 0 为最底层) ----
+    int LayerCount() const { return static_cast<int>(m_layers.size()); }
+    int ActiveLayerIndex() const { return m_activeLayer; }
+    bool SetActiveLayer(int index);
+    void AddLayer();                // 在当前图层上方新建(纯白)
+    void DuplicateLayer();          // 复制当前图层
+    void DeleteActiveLayer();
+    void MergeAllLayers();          // 合并所有图层为一张
+    void MoveActiveLayerUp();
+    void MoveActiveLayerDown();
+    void SetLayerVisible(int index, bool visible);
+    void SetLayerOpacity(int index, double opacity);   // 0.0 ~ 1.0
+    void SetLayerBlend(int index, int blend);          // 0 正常 / 1 正片叠底 / 2 滤色
+    // 当前各图层合成后的像素(供保存与自检使用)
+    std::vector<uint8_t> CompositePixels();
 
 public:
     std::string BMPPath;
@@ -360,5 +397,32 @@ private:
     QRect m_selection;                     // 选区(图像像素坐标，视觉，y 向下)
     QAction *m_selectionToolAction = nullptr;
     QMenu *m_selectionMenu = nullptr;
+
+    // ---- 图层 ----
+    void SetupLayerPanel();      // 右侧图层面板(替换"开发中"占位)
+    void UpdateLayerPanel();     // 刷新列表/不透明度/混合模式(不触发信号)
+    void RepaintComposite();     // 重新合成并刷新画面(不改历史)
+    // 重新合成所有图层；返回可直接显示的像素(单图层时就是 imageData 本身)
+    const std::vector<uint8_t> &BuildComposite();
+    // 保存/导出用像素：多图层时为合成结果
+    const std::vector<uint8_t> &DisplayPixels();
+    // 用"当前图层栈 + 新像素"构造快照(活动图层像素单独存 data)
+    ImageSnapshot MakeSnapshot(std::vector<uint8_t> pixels, int32_t width, int32_t height,
+                               const ContentQuad &quad) const;
+    // 从快照恢复图层栈与像素(撤销/重做/应用快照共用)
+    void RestoreSnapshot(const ImageSnapshot &snap);
+    // 图层结构变化(增删/合并/排序)写一步历史
+    void CommitLayerStructure(const QString &title);
+    // 需要保持"单图层"的几何操作守卫(多图层时提示先合并)
+    bool RequireSingleLayer(const QString &opName);
+
+    std::vector<Layer> m_layers;             // 图层栈(自底向上)
+    int m_activeLayer = 0;
+    std::vector<uint8_t> m_composite;        // 多图层时的合成缓存
+    QListWidget *m_layerList = nullptr;
+    QSlider *m_layerOpacitySlider = nullptr;
+    QLabel *m_layerOpacityLabel = nullptr;
+    QComboBox *m_layerBlendCombo = nullptr;
+    QMenu *m_layerMenu = nullptr;
 };
 #endif // MAINWINDOW_H

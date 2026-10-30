@@ -1230,6 +1230,124 @@ int Run(const QString &imagePath)
         out().flush();
     }
 
+    // ---------- 13. 图层：新建/不透明度/可见性/复制/删除/合并 ----------
+    {
+        const QString layerPath = QDir::tempPath() + "/imagewithui_selftest_layers.png";
+        {
+            QImage img(80, 60, QImage::Format_RGB32);
+            img.fill(qRgb(40, 120, 200));   // 内存里是 BGR(200,120,40)
+            img.save(layerPath, "PNG");
+        }
+
+        QString failReason;
+        {
+            MainWindow win;
+            if (!win.OpenImage(layerPath)) {
+                failReason = "无法打开测试图";
+            } else if (win.LayerCount() != 1 || win.ActiveLayerIndex() != 0) {
+                failReason = "打开图片后应为单图层";
+            } else {
+                const int32_t w = win.myValue.bmpInfo.GetWidth();
+                const int32_t h = win.myValue.bmpInfo.GetHeight();
+                const size_t mid = (static_cast<size_t>(h / 2) * static_cast<size_t>(w)
+                                    + static_cast<size_t>(w / 2)) * 3;
+
+                // 新建空白图层：叠在当前图层之上并成为活动图层，合成应被白色覆盖
+                const size_t histBeforeAdd = win.imageDataHistory.size();
+                win.AddLayer();
+                if (win.LayerCount() != 2 || win.ActiveLayerIndex() != 1) {
+                    failReason = "新建图层后图层数/活动图层不对";
+                } else if (win.imageDataHistory.size() != histBeforeAdd + 1) {
+                    failReason = "新建图层后历史未增加";
+                } else {
+                    const std::vector<uint8_t> flat = win.CompositePixels();
+                    if (flat.size() != static_cast<size_t>(w) * static_cast<size_t>(h) * 3) {
+                        failReason = "合成像素尺寸不对";
+                    } else if (flat[mid] != 255 || flat[mid + 1] != 255 || flat[mid + 2] != 255) {
+                        failReason = "新建的白色图层没有覆盖底层";
+                    }
+                }
+
+                // 不透明度 0：顶层完全透明，合成回落到原图(属性变化不写历史)
+                if (failReason.isEmpty()) {
+                    const size_t histBeforeOpacity = win.imageDataHistory.size();
+                    win.SetLayerOpacity(1, 0.0);
+                    const std::vector<uint8_t> flat = win.CompositePixels();
+                    if (win.imageDataHistory.size() != histBeforeOpacity) {
+                        failReason = "不透明度改变不应写入历史";
+                    } else if (flat[mid] != 200 || flat[mid + 1] != 120 || flat[mid + 2] != 40) {
+                        failReason = "不透明度 0 时合成没有回落到原图";
+                    }
+                }
+
+                // 隐藏顶层：同样回落到原图，且不写历史
+                if (failReason.isEmpty()) {
+                    const size_t histBeforeHide = win.imageDataHistory.size();
+                    win.SetLayerVisible(1, false);
+                    const std::vector<uint8_t> flat = win.CompositePixels();
+                    if (win.imageDataHistory.size() != histBeforeHide) {
+                        failReason = "可见性改变不应写入历史";
+                    } else if (flat[mid] != 200 || flat[mid + 1] != 120 || flat[mid + 2] != 40) {
+                        failReason = "隐藏顶层后合成没有回落到原图";
+                    }
+                }
+
+                if (failReason.isEmpty()) {   // 恢复显示与不透明度，供后续步骤
+                    win.SetLayerVisible(1, true);
+                    win.SetLayerOpacity(1, 1.0);
+                }
+
+                // 复制图层：在活动图层之上插入副本
+                const size_t histBeforeDup = win.imageDataHistory.size();
+                win.DuplicateLayer();
+                if (failReason.isEmpty()) {
+                    if (win.LayerCount() != 3 || win.ActiveLayerIndex() != 2) {
+                        failReason = "复制图层后图层数/活动图层不对";
+                    } else if (win.imageDataHistory.size() != histBeforeDup + 1) {
+                        failReason = "复制图层后历史未增加";
+                    }
+                }
+
+                // 删除活动图层：回到两层
+                const size_t histBeforeDel = win.imageDataHistory.size();
+                win.DeleteActiveLayer();
+                if (failReason.isEmpty()) {
+                    if (win.LayerCount() != 2) {
+                        failReason = "删除图层后图层数不对";
+                    } else if (win.imageDataHistory.size() != histBeforeDel + 1) {
+                        failReason = "删除图层后历史未增加";
+                    } else if (win.ActiveLayerIndex() != 1) {
+                        failReason = "删除图层后活动图层不对";
+                    }
+                }
+
+                // 合并所有图层：回到单图层，画面不变
+                const std::vector<uint8_t> beforeMerge = win.CompositePixels();
+                const size_t histBeforeMerge = win.imageDataHistory.size();
+                win.MergeAllLayers();
+                if (failReason.isEmpty()) {
+                    if (win.LayerCount() != 1 || win.ActiveLayerIndex() != 0) {
+                        failReason = "合并后应为单图层";
+                    } else if (win.imageDataHistory.size() != histBeforeMerge + 1) {
+                        failReason = "合并图层后历史未增加";
+                    } else if (win.CompositePixels() != beforeMerge) {
+                        failReason = "合并后合成结果发生变化";
+                    }
+                }
+            }
+        }
+        QFile::remove(layerPath);
+
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 图层系统 : 新建/不透明度/可见性/复制/删除/合并\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 图层系统 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
     out() << "------------------------------------------------\n";
     out() << "通过 " << g_pass << " 项，失败 " << g_fail << " 项\n";
     out().flush();

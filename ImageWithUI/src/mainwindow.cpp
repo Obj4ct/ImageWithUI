@@ -12,6 +12,7 @@
 #include <QKeyEvent>
 #include <QApplication>
 #include <QVBoxLayout>
+#include <QHBoxLayout>
 #include <QAction>
 #include <QPainter>
 #include <QClipboard>
@@ -125,6 +126,48 @@ std::vector<uint8_t> DownsampleBgr(const std::vector<uint8_t> &src, int32_t w, i
 
 // 预览超过这个像素数就先缩小再算，避免大图拖动参数卡顿
 constexpr size_t kPreviewMaxPixels = 2000000;
+
+// 把一个图层按不透明度/混合模式叠到合成缓冲上(dst 初始为白，尺寸与图层一致)
+void BlendLayerInto(std::vector<uint8_t> &dst, const std::vector<uint8_t> &src,
+                    double opacity, int blend)
+{
+    const size_t bytes = std::min(dst.size(), src.size());
+    const int op = qBound(0, static_cast<int>(opacity * 255.0 + 0.5), 255);
+    if (op == 0) {
+        return;
+    }
+    if (op == 255 && blend == 0) {
+        dst.assign(src.begin(), src.begin() + static_cast<ptrdiff_t>(bytes));
+        return;
+    }
+    for (size_t i = 0; i < bytes; ++i) {
+        const int d = dst[i];
+        const int s = src[i];
+        int blended = s;
+        if (blend == 1) {           // 正片叠底
+            blended = d * s / 255;
+        } else if (blend == 2) {    // 滤色
+            blended = 255 - (255 - d) * (255 - s) / 255;
+        }
+        dst[i] = static_cast<uint8_t>((blended * op + d * (255 - op)) / 255);
+    }
+}
+
+// 两份图层栈是否完全一致(用于历史去重)
+bool SameLayerStack(const std::vector<Layer> &a, const std::vector<Layer> &b)
+{
+    if (a.size() != b.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < a.size(); ++i) {
+        if (a[i].name != b[i].name || a[i].visible != b[i].visible ||
+            a[i].blend != b[i].blend || std::abs(a[i].opacity - b[i].opacity) > 1e-9 ||
+            a[i].data != b[i].data) {
+            return false;
+        }
+    }
+    return true;
+}
 
 }   // namespace
 
@@ -427,6 +470,7 @@ MainWindow::MainWindow(QWidget *parent)
     statusBar()->showMessage("就绪 · 请先打开一张图片");
     UpdateStatusInfo();
     SetupSelectionTool();   // 矩形选区覆盖层 + "选择"菜单
+    SetupLayerPanel();      // 右侧图层面板 + "图层"菜单
 }
 
 
@@ -492,7 +536,9 @@ void MainWindow::ShowImage(const std::vector<uint8_t> &inImageData, MyValue valu
     imageData = inImageData;
     myValue = value;
 
-    SetDisplayPixmap(inImageData, width, height);
+    // 多图层时显示合成结果；单图层时就是 imageData 本身
+    const std::vector<uint8_t> &shown = BuildComposite();
+    SetDisplayPixmap(shown, width, height);
     SyncSelectionToImage();
     UpdateStatusInfo();
 }
@@ -527,7 +573,8 @@ void MainWindow::RefreshDisplay()
     if (imageData.empty()) {
         return;
     }
-    SetDisplayPixmap(imageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+    const std::vector<uint8_t> &shown = BuildComposite();
+    SetDisplayPixmap(shown, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
     SyncSelectionToImage();
 }
 
@@ -703,6 +750,9 @@ void MainWindow::CropToSelection()
         UpdateStatus("选区太小(至少 4 × 4)，已取消裁剪");
         return;
     }
+    if (!RequireSingleLayer("裁剪到选区")) {
+        return;
+    }
     ApplyOperator("裁剪到选区", [sel](std::vector<uint8_t> &d, OpContext &ctx) {
         Function f;
         f.CropImage(d, ctx.width, ctx.height,
@@ -739,6 +789,479 @@ void MainWindow::ClearSelectionContent()
             std::fill(p, p + static_cast<size_t>(cols) * 3, static_cast<uint8_t>(255));
         }
     }, nullptr, [this]() { UpdateStatus("已清除选区内容"); });
+}
+
+void MainWindow::SetupLayerPanel()
+{
+    // 把占位标签换成真正的图层面板
+    QWidget *panel = new QWidget(ui->group_layers);
+    panel->setObjectName("layerPanel");
+    QVBoxLayout *box = new QVBoxLayout(panel);
+    box->setContentsMargins(0, 0, 0, 0);
+    box->setSpacing(8);
+
+    // 混合模式
+    QWidget *blendRow = new QWidget(panel);
+    QHBoxLayout *blendLay = new QHBoxLayout(blendRow);
+    blendLay->setContentsMargins(0, 0, 0, 0);
+    blendLay->setSpacing(8);
+    QLabel *blendLabel = new QLabel(QString("混合模式"), blendRow);
+    blendLabel->setObjectName("layerBlendLabel");
+    m_layerBlendCombo = new QComboBox(blendRow);
+    m_layerBlendCombo->addItems(QStringList() << QString("正常") << QString("正片叠底")
+                                             << QString("滤色"));
+    blendLay->addWidget(blendLabel);
+    blendLay->addWidget(m_layerBlendCombo, 1);
+    box->addWidget(blendRow);
+
+    // 不透明度
+    QWidget *opacityRow = new QWidget(panel);
+    QHBoxLayout *opacityLay = new QHBoxLayout(opacityRow);
+    opacityLay->setContentsMargins(0, 0, 0, 0);
+    opacityLay->setSpacing(8);
+    QLabel *opacityLabel = new QLabel(QString("不透明度"), opacityRow);
+    opacityLabel->setObjectName("layerOpacityLabel");
+    m_layerOpacitySlider = new QSlider(Qt::Horizontal, opacityRow);
+    m_layerOpacitySlider->setRange(0, 100);
+    m_layerOpacitySlider->setValue(100);
+    m_layerOpacityLabel = new QLabel(QString("100%"), opacityRow);
+    m_layerOpacityLabel->setObjectName("layerInfoLabel");
+    m_layerOpacityLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    opacityLay->addWidget(opacityLabel);
+    opacityLay->addWidget(m_layerOpacitySlider, 1);
+    opacityLay->addWidget(m_layerOpacityLabel);
+    box->addWidget(opacityRow);
+
+    // 图层列表：最上层显示在最上面
+    m_layerList = new QListWidget(panel);
+    m_layerList->setObjectName("layerList");
+    m_layerList->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_layerList->setMinimumHeight(140);
+    m_layerList->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    box->addWidget(m_layerList, 1);
+
+    auto addButton = [this, panel](QHBoxLayout *lay, const QString &text,
+                                   std::function<void()> handler) {
+        QPushButton *btn = new QPushButton(text, panel);
+        btn->setObjectName("layerBtn");
+        btn->setCursor(Qt::PointingHandCursor);
+        btn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        connect(btn, &QPushButton::clicked, this, handler);
+        lay->addWidget(btn);
+    };
+    QHBoxLayout *row1 = new QHBoxLayout();
+    row1->setContentsMargins(0, 0, 0, 0);
+    row1->setSpacing(6);
+    addButton(row1, QString("新建"), [this]() { AddLayer(); });
+    addButton(row1, QString("复制"), [this]() { DuplicateLayer(); });
+    addButton(row1, QString("删除"), [this]() { DeleteActiveLayer(); });
+    box->addLayout(row1);
+
+    QHBoxLayout *row2 = new QHBoxLayout();
+    row2->setContentsMargins(0, 0, 0, 0);
+    row2->setSpacing(6);
+    addButton(row2, QString("上移"), [this]() { MoveActiveLayerUp(); });
+    addButton(row2, QString("下移"), [this]() { MoveActiveLayerDown(); });
+    addButton(row2, QString("合并"), [this]() { MergeAllLayers(); });
+    box->addLayout(row2);
+
+    QLayout *groupLayout = ui->group_layers->layout();
+    if (groupLayout != nullptr) {
+        delete groupLayout->replaceWidget(ui->label_layers_hint, panel);
+    }
+    ui->label_layers_hint->hide();
+
+    // 列表点击切换活动图层(行序与图层栈相反)
+    connect(m_layerList, &QListWidget::currentRowChanged, this, [this](int row) {
+        if (row < 0 || m_layerList == nullptr) {
+            return;
+        }
+        SetActiveLayer(LayerCount() - 1 - row);
+    });
+    // 勾选框 = 图层可见性
+    connect(m_layerList, &QListWidget::itemChanged, this, [this](QListWidgetItem *item) {
+        if (item == nullptr || m_layerList == nullptr) {
+            return;
+        }
+        const int row = m_layerList->row(item);
+        if (row < 0) {
+            return;
+        }
+        SetLayerVisible(LayerCount() - 1 - row, item->checkState() == Qt::Checked);
+    });
+    connect(m_layerOpacitySlider, &QSlider::valueChanged, this, [this](int value) {
+        m_layerOpacityLabel->setText(QString("%1%").arg(value));
+        SetLayerOpacity(m_activeLayer, value / 100.0);
+    });
+    connect(m_layerBlendCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [this](int index) { SetLayerBlend(m_activeLayer, index); });
+
+    // "图层"菜单(放在"选择"之前)
+    m_layerMenu = new QMenu(QString("图层"), this);
+    auto addAction = [this](const QString &text, const QKeySequence &shortcut,
+                            std::function<void()> handler) {
+        QAction *action = new QAction(text, this);
+        if (!shortcut.isEmpty()) {
+            action->setShortcut(shortcut);
+        }
+        connect(action, &QAction::triggered, this, handler);
+        m_layerMenu->addAction(action);
+    };
+    addAction(QString("新建图层"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N),
+              [this]() { AddLayer(); });
+    addAction(QString("复制图层"), QKeySequence(Qt::CTRL | Qt::Key_J),
+              [this]() { DuplicateLayer(); });
+    addAction(QString("删除图层"), QKeySequence(Qt::CTRL | Qt::Key_Delete),
+              [this]() { DeleteActiveLayer(); });
+    m_layerMenu->addSeparator();
+    addAction(QString("上移图层"), QKeySequence(Qt::CTRL | Qt::Key_BracketRight),
+              [this]() { MoveActiveLayerUp(); });
+    addAction(QString("下移图层"), QKeySequence(Qt::CTRL | Qt::Key_BracketLeft),
+              [this]() { MoveActiveLayerDown(); });
+    m_layerMenu->addSeparator();
+    addAction(QString("合并所有图层"), QKeySequence(Qt::CTRL | Qt::Key_E),
+              [this]() { MergeAllLayers(); });
+
+    if (m_selectionMenu != nullptr) {
+        menuBar()->insertMenu(m_selectionMenu->menuAction(), m_layerMenu);
+    } else {
+        menuBar()->insertMenu(ui->menu_blur->menuAction(), m_layerMenu);
+    }
+    m_layerMenu->menuAction()->setVisible(!imageData.empty());
+
+    UpdateLayerPanel();
+}
+
+void MainWindow::UpdateLayerPanel()
+{
+    if (m_layerList == nullptr) {
+        return;
+    }
+    // 重建列表期间必须屏蔽信号，否则会反过来触发切换/可见性
+    QSignalBlocker blockList(m_layerList);
+    QSignalBlocker blockSlider(m_layerOpacitySlider);
+    QSignalBlocker blockCombo(m_layerBlendCombo);
+
+    m_layerList->clear();
+    const int n = LayerCount();
+    for (int index = n - 1; index >= 0; --index) {   // 顶层排在最上面
+        const Layer &layer = m_layers[static_cast<size_t>(index)];
+        QListWidgetItem *item = new QListWidgetItem(layer.name, m_layerList);
+        item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+        item->setCheckState(layer.visible ? Qt::Checked : Qt::Unchecked);
+    }
+
+    if (n <= 0) {
+        m_layerOpacitySlider->setValue(100);
+        m_layerOpacityLabel->setText(QString("100%"));
+        m_layerBlendCombo->setCurrentIndex(0);
+        return;
+    }
+
+    const int active = qBound(0, m_activeLayer, n - 1);
+    const Layer &layer = m_layers[static_cast<size_t>(active)];
+    m_layerList->setCurrentRow(n - 1 - active);
+    m_layerOpacitySlider->setValue(qBound(0, static_cast<int>(layer.opacity * 100.0 + 0.5), 100));
+    m_layerOpacityLabel->setText(QString("%1%").arg(m_layerOpacitySlider->value()));
+    m_layerBlendCombo->setCurrentIndex(qBound(0, layer.blend, 2));
+}
+
+// ------------------------------------------------------------------
+// 图层
+// 约定：imageData 永远是【当前活动图层】的像素；画面与保存都走合成结果
+// ------------------------------------------------------------------
+
+const std::vector<uint8_t> &MainWindow::BuildComposite()
+{
+    const int32_t w = myValue.bmpInfo.GetWidth();
+    const int32_t h = myValue.bmpInfo.GetHeight();
+    if (m_layers.size() <= 1 || w <= 0 || h <= 0 || imageData.empty()) {
+        m_composite.clear();
+        return imageData;
+    }
+    const size_t bytes = static_cast<size_t>(w) * static_cast<size_t>(h) * 3;
+    m_composite.assign(bytes, 255);   // 没有透明度通道：空白按白底处理
+    for (int i = 0; i < static_cast<int>(m_layers.size()); ++i) {
+        const Layer &layer = m_layers[static_cast<size_t>(i)];
+        if (!layer.visible) {
+            continue;
+        }
+        // 活动图层以 imageData 为准(其余图层用各自保存的像素)
+        const std::vector<uint8_t> &src = (i == m_activeLayer) ? imageData : layer.data;
+        if (src.size() != bytes) {
+            continue;
+        }
+        BlendLayerInto(m_composite, src, layer.opacity, layer.blend);
+    }
+    return m_composite;
+}
+
+const std::vector<uint8_t> &MainWindow::DisplayPixels()
+{
+    if (m_layers.size() > 1) {
+        return BuildComposite();
+    }
+    return imageData;
+}
+
+ImageSnapshot MainWindow::MakeSnapshot(std::vector<uint8_t> pixels, int32_t width, int32_t height,
+                                       const ContentQuad &quad) const
+{
+    ImageSnapshot snap;
+    snap.width = width;
+    snap.height = height;
+    snap.quad = quad;
+    snap.layers = m_layers;
+    snap.activeLayer = m_activeLayer;
+    if (!snap.layers.empty()) {
+        const int idx = qBound(0, snap.activeLayer, static_cast<int>(snap.layers.size()) - 1);
+        snap.layers[static_cast<size_t>(idx)].data.clear();   // 像素统一存在 snap.data 里
+        snap.activeLayer = idx;
+    }
+    snap.data = std::move(pixels);
+    return snap;
+}
+
+void MainWindow::RestoreSnapshot(const ImageSnapshot &snap)
+{
+    imageData = snap.data;
+    if (snap.layers.empty()) {
+        // 老快照(单图层)：直接用像素建一个图层
+        m_layers.clear();
+        m_layers.push_back(Layer{QString("图层 1"), snap.data});
+        m_activeLayer = 0;
+        return;
+    }
+    m_layers = snap.layers;
+    m_activeLayer = qBound(0, snap.activeLayer, static_cast<int>(m_layers.size()) - 1);
+    Layer &active = m_layers[static_cast<size_t>(m_activeLayer)];
+    if (active.data.empty()) {
+        active.data = snap.data;   // 快照里活动图层的像素单独存在 data
+    }
+}
+
+// 重新合成并刷新画面(不改历史)，用于可见性/不透明度/混合模式这类显示属性变更
+void MainWindow::RepaintComposite()
+{
+    if (imageData.empty()) {
+        return;
+    }
+    const std::vector<uint8_t> &shown = BuildComposite();
+    SetDisplayPixmap(shown, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+}
+
+bool MainWindow::RequireSingleLayer(const QString &opName)
+{
+    if (m_layers.size() <= 1) {
+        return true;
+    }
+    UpdateStatus(opName + "：多图层下需要先合并图层");
+    function.CreateMessagebox("提示",
+                              opName + " 会改变画布几何，多图层下暂不支持。\n"
+                              "请先执行「图层 → 合并所有图层」后再试。");
+    return false;
+}
+
+// 图层结构变化(新建/删除/复制/排序/合并)记一步历史
+void MainWindow::CommitLayerStructure(const QString &title)
+{
+    if (imageData.empty()) {
+        return;
+    }
+    if (m_activeLayer >= 0 && m_activeLayer < static_cast<int>(m_layers.size())) {
+        m_layers[static_cast<size_t>(m_activeLayer)].data = imageData;
+    }
+    ImageSnapshot snap = MakeSnapshot(imageData, myValue.bmpInfo.GetWidth(),
+                                      myValue.bmpInfo.GetHeight(), m_contentQuad);
+    ApplySnapshot(snap);
+    UpdateStatus(title + " 完成");
+}
+
+bool MainWindow::SetActiveLayer(int index)
+{
+    if (index < 0 || index >= static_cast<int>(m_layers.size()) || index == m_activeLayer) {
+        return false;
+    }
+    // 写回当前活动图层，再切到目标图层
+    if (m_activeLayer >= 0 && m_activeLayer < static_cast<int>(m_layers.size())) {
+        m_layers[static_cast<size_t>(m_activeLayer)].data = imageData;
+    }
+    m_activeLayer = index;
+    imageData = m_layers[static_cast<size_t>(index)].data;
+    UpdateLayerPanel();
+    UpdateStatus(QString("当前图层：%1").arg(m_layers[static_cast<size_t>(index)].name));
+    return true;
+}
+
+void MainWindow::AddLayer()
+{
+    if (m_busy) {
+        UpdateStatus("上一个操作还在处理中，请稍候");
+        return;
+    }
+    if (imageData.empty() || myValue.bmpInfo.GetWidth() <= 0) {
+        UpdateStatus("请先打开一张图像");
+        return;
+    }
+    CancelPreview();
+    m_layers[static_cast<size_t>(m_activeLayer)].data = imageData;
+    const size_t bytes = static_cast<size_t>(myValue.bmpInfo.GetWidth()) *
+                         static_cast<size_t>(myValue.bmpInfo.GetHeight()) * 3;
+    Layer layer;
+    layer.name = QString("图层 %1").arg(static_cast<int>(m_layers.size()) + 1);
+    layer.data.assign(bytes, 255);   // 新建图层为纯白
+    const int insertAt = m_activeLayer + 1;
+    m_layers.insert(m_layers.begin() + insertAt, std::move(layer));
+    m_activeLayer = insertAt;
+    imageData = m_layers[static_cast<size_t>(m_activeLayer)].data;
+    UpdateLayerPanel();
+    CommitLayerStructure("新建图层");
+}
+
+void MainWindow::DuplicateLayer()
+{
+    if (m_busy || imageData.empty()) {
+        UpdateStatus("请先打开一张图像");
+        return;
+    }
+    CancelPreview();
+    m_layers[static_cast<size_t>(m_activeLayer)].data = imageData;
+    Layer copy = m_layers[static_cast<size_t>(m_activeLayer)];   // 连属性一起复制
+    copy.name = copy.name + " 副本";
+    const int insertAt = m_activeLayer + 1;
+    m_layers.insert(m_layers.begin() + insertAt, std::move(copy));
+    m_activeLayer = insertAt;
+    imageData = m_layers[static_cast<size_t>(m_activeLayer)].data;
+    UpdateLayerPanel();
+    CommitLayerStructure("复制图层");
+}
+
+void MainWindow::DeleteActiveLayer()
+{
+    if (m_busy || imageData.empty()) {
+        UpdateStatus("请先打开一张图像");
+        return;
+    }
+    if (m_layers.size() <= 1) {
+        UpdateStatus("至少需要保留一个图层");
+        return;
+    }
+    CancelPreview();
+    m_layers.erase(m_layers.begin() + m_activeLayer);
+    m_activeLayer = qBound(0, m_activeLayer, static_cast<int>(m_layers.size()) - 1);
+    imageData = m_layers[static_cast<size_t>(m_activeLayer)].data;
+    UpdateLayerPanel();
+    CommitLayerStructure("删除图层");
+}
+
+void MainWindow::MergeAllLayers()
+{
+    if (m_busy || imageData.empty()) {
+        UpdateStatus("请先打开一张图像");
+        return;
+    }
+    if (m_layers.size() <= 1) {
+        UpdateStatus("当前已经是单图层");
+        return;
+    }
+    CancelPreview();
+    m_layers[static_cast<size_t>(m_activeLayer)].data = imageData;
+    // 合并成"看到的画面"(隐藏图层不参与)
+    const std::vector<uint8_t> flat = BuildComposite();
+    m_layers.clear();
+    m_layers.push_back(Layer{QString("合并图层"), flat});
+    m_activeLayer = 0;
+    imageData = flat;
+    UpdateLayerPanel();
+    CommitLayerStructure("合并所有图层");
+}
+
+void MainWindow::MoveActiveLayerUp()
+{
+    if (m_busy || imageData.empty() || m_layers.size() <= 1) {
+        return;
+    }
+    if (m_activeLayer >= static_cast<int>(m_layers.size()) - 1) {
+        UpdateStatus("已经在最上层");
+        return;
+    }
+    CancelPreview();
+    m_layers[static_cast<size_t>(m_activeLayer)].data = imageData;
+    std::swap(m_layers[static_cast<size_t>(m_activeLayer)],
+              m_layers[static_cast<size_t>(m_activeLayer + 1)]);
+    ++m_activeLayer;
+    imageData = m_layers[static_cast<size_t>(m_activeLayer)].data;
+    UpdateLayerPanel();
+    CommitLayerStructure("上移图层");
+}
+
+void MainWindow::MoveActiveLayerDown()
+{
+    if (m_busy || imageData.empty() || m_layers.size() <= 1) {
+        return;
+    }
+    if (m_activeLayer <= 0) {
+        UpdateStatus("已经在最下层");
+        return;
+    }
+    CancelPreview();
+    m_layers[static_cast<size_t>(m_activeLayer)].data = imageData;
+    std::swap(m_layers[static_cast<size_t>(m_activeLayer)],
+              m_layers[static_cast<size_t>(m_activeLayer - 1)]);
+    --m_activeLayer;
+    imageData = m_layers[static_cast<size_t>(m_activeLayer)].data;
+    UpdateLayerPanel();
+    CommitLayerStructure("下移图层");
+}
+
+void MainWindow::SetLayerVisible(int index, bool visible)
+{
+    if (index < 0 || index >= static_cast<int>(m_layers.size())) {
+        return;
+    }
+    Layer &layer = m_layers[static_cast<size_t>(index)];
+    if (layer.visible == visible) {
+        return;
+    }
+    layer.visible = visible;
+    RepaintComposite();
+    UpdateStatus(QString("%1 %2").arg(layer.name, visible ? "显示" : "已隐藏"));
+}
+
+void MainWindow::SetLayerOpacity(int index, double opacity)
+{
+    if (index < 0 || index >= static_cast<int>(m_layers.size())) {
+        return;
+    }
+    const double value = qBound(0.0, opacity, 1.0);
+    Layer &layer = m_layers[static_cast<size_t>(index)];
+    if (std::abs(layer.opacity - value) < 1e-9) {
+        return;
+    }
+    layer.opacity = value;
+    RepaintComposite();
+}
+
+void MainWindow::SetLayerBlend(int index, int blend)
+{
+    if (index < 0 || index >= static_cast<int>(m_layers.size())) {
+        return;
+    }
+    const int value = qBound(0, blend, 2);
+    Layer &layer = m_layers[static_cast<size_t>(index)];
+    if (layer.blend == value) {
+        return;
+    }
+    layer.blend = value;
+    RepaintComposite();
+}
+
+std::vector<uint8_t> MainWindow::CompositePixels()
+{
+    if (m_layers.size() <= 1) {
+        return imageData;
+    }
+    return BuildComposite();
 }
 
 // ------------------------------------------------------------------
@@ -815,6 +1338,10 @@ void MainWindow::OnPreviewTextChanged(int fieldIndex)
     if (imageData.empty() || m_busy) {
         return;
     }
+    // 多图层时打开实时预览会与"只改活动图层"的提交结果不一致，直接跳过预览
+    if (m_layers.size() > 1) {
+        return;
+    }
     m_pendingFieldIndex = fieldIndex;
     m_previewTimer->start();   // 防抖：连续输入时不断重新计时
 }
@@ -830,6 +1357,10 @@ void MainWindow::RunPreview()
         return;
     }
     if (imageData.empty() || myValue.bmpInfo.GetWidth() <= 0 || myValue.bmpInfo.GetHeight() <= 0) {
+        CancelPreview();
+        return;
+    }
+    if (m_layers.size() > 1) {   // 多图层不做实时预览，提交时直接作用于活动图层
         CancelPreview();
         return;
     }
@@ -985,6 +1516,10 @@ void MainWindow::ResetAll(MyValue &myValue)
 {
     CancelPreview();
     imageData = myValue.imageData;
+    // 重置后回到单图层
+    m_layers.clear();
+    m_layers.push_back(Layer{QString("图层 1"), imageData});
+    m_activeLayer = 0;
     // 恢复原始尺寸(旋转等算子可能改过画布大小)
     if (m_originalWidth > 0 && m_originalHeight > 0) {
         myValue.bmpInfo.SetWidth(m_originalWidth);
@@ -1007,16 +1542,16 @@ void MainWindow::ResetAll(MyValue &myValue)
     redoImageDataHistory.clear();
     {
         // 重置后把"原图"作为历史第 1 步，历史面板与撤销行为保持一致
-        ImageSnapshot snap;
-        snap.data = imageData;
-        snap.width = myValue.bmpInfo.GetWidth();
-        snap.height = myValue.bmpInfo.GetHeight();
-        snap.quad = m_contentQuad;
+        ImageSnapshot snap = MakeSnapshot(imageData,
+                                          myValue.bmpInfo.GetWidth(),
+                                          myValue.bmpInfo.GetHeight(),
+                                          m_contentQuad);
         SaveImageDataToHistory(snap);
     }
     InvalidateRotateBase();
     UpdateStatus("已重置为原始图像");
     UpdateStatusInfo();
+    UpdateLayerPanel();
     UpdateHistoryPanel();
 }
 
@@ -1057,7 +1592,10 @@ OperationType MainWindow::SaveImageDataToHistory(const ImageSnapshot &snap)
     // 保存当前图像数据到链表
     if (!imageDataHistory.empty()) {
         const ImageSnapshot &back = imageDataHistory.back();
-        if (snap.data != back.data || snap.width != back.width || snap.height != back.height) {
+        const bool samePixels = (snap.data == back.data && snap.width == back.width &&
+                                 snap.height == back.height);
+        // 像素相同但图层结构不同(新建/删除/排序/合并)也算一步
+        if (!samePixels || !SameLayerStack(snap.layers, back.layers)) {
             imageDataHistory.push_back(snap);
             // 控制历史长度，避免大图下内存无限增长
             while (static_cast<int>(imageDataHistory.size()) > m_historyLimit) {
@@ -1098,7 +1636,9 @@ void MainWindow::ApplySnapshot(const ImageSnapshot &snap, bool keepRotateBase)
     myValue.bmpInfo.SetImageSize(static_cast<uint32_t>(snap.width) * static_cast<uint32_t>(snap.height) * 3);
     myValue.bmp.SetFileSize(sizeof(BMP) + sizeof(BMPInfo) +
                             static_cast<uint32_t>(snap.width) * static_cast<uint32_t>(snap.height) * 3);
-    ShowImage(snap.data, myValue, snap.width, snap.height);
+    RestoreSnapshot(snap);
+    ShowImage(imageData, myValue, snap.width, snap.height);
+    UpdateLayerPanel();
     UpdateHistoryPanel();
 }
 
@@ -1116,7 +1656,7 @@ void MainWindow::UndoImageProcessing()
     imageDataHistory.pop_back();
 
     const ImageSnapshot &snap = imageDataHistory.back();
-    imageData = snap.data;
+    RestoreSnapshot(snap);
     m_contentQuad = snap.quad;
     myValue.bmpInfo.SetWidth(snap.width);
     myValue.bmpInfo.SetHeight(snap.height);
@@ -1124,6 +1664,7 @@ void MainWindow::UndoImageProcessing()
     InvalidateRotateBase();   // 撤销后以当前图像作为新的旋转基准
     qDebug() << "Undo operation";
     UpdateStatus("已撤销");
+    UpdateLayerPanel();
     UpdateHistoryPanel();
 }
 
@@ -1140,7 +1681,7 @@ void MainWindow::RedoImageProcessing()
     redoImageDataHistory.pop_back();
 
     // 恢复图像数据
-    imageData = snap.data;
+    RestoreSnapshot(snap);
     m_contentQuad = snap.quad;
     myValue.bmpInfo.SetWidth(snap.width);
     myValue.bmpInfo.SetHeight(snap.height);
@@ -1148,6 +1689,7 @@ void MainWindow::RedoImageProcessing()
     InvalidateRotateBase();   // 重做后以当前图像作为新的旋转基准
     qDebug() << "Redo operation";
     UpdateStatus("已重做");
+    UpdateLayerPanel();
     UpdateHistoryPanel();
 }
 
@@ -1227,6 +1769,8 @@ bool MainWindow::LoadImage(const QString &path)
     doc.originalHeight = loaded.bmpInfo.GetHeight();
     doc.quad.setRect(doc.originalWidth, doc.originalHeight);
     doc.canSave = true;
+    doc.layers.push_back(Layer{QString("图层 1"), doc.imageData});
+    doc.activeLayer = 0;
     {
         // 打开后的状态就是历史第 1 步
         ImageSnapshot snap;
@@ -1347,7 +1891,11 @@ void MainWindow::ResetDocumentState()
     pixelCount = 0;
     segmentSize = 0;
     m_selection = QRect();
+    m_layers.clear();
+    m_activeLayer = 0;
+    m_composite.clear();
     UpdateSelectionOverlay();
+    UpdateLayerPanel();
 }
 
 // 切换标签：把当前状态整体换出、把目标文档状态换入(移动语义，不拷贝像素)
@@ -1386,6 +1934,8 @@ void MainWindow::ActivateDocument(int index)
         cur.rotTotal = m_rotTotal;
         cur.canSave = canSave;
         cur.selection = m_selection;
+        cur.layers = std::move(m_layers);
+        cur.activeLayer = m_activeLayer;
         ResetDocumentState();   // 成员里不再保留旧文档的副本
     }
 
@@ -1408,6 +1958,12 @@ void MainWindow::ActivateDocument(int index)
     m_rotTotal = doc.rotTotal;
     canSave = doc.canSave;
     m_selection = doc.selection;
+    m_layers = std::move(doc.layers);
+    m_activeLayer = doc.activeLayer;
+    if (m_layers.empty() && !imageData.empty()) {
+        m_layers.push_back(Layer{QString("图层 1"), imageData});
+        m_activeLayer = 0;
+    }
 
     imageSize = imageData.size();
     pixelCount = imageSize / 3;
@@ -1421,11 +1977,13 @@ void MainWindow::ActivateDocument(int index)
         ui->imageLabel->setText(QString("双击此处，或按 Ctrl+N 打开图片"));
         ui->imageLabel->setPixmap(QPixmap());
     } else {
-        SetDisplayPixmap(imageData, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+        const std::vector<uint8_t> &shown = BuildComposite();
+        SetDisplayPixmap(shown, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
     }
     SyncSelectionToImage();
     UpdateStatusInfo();
     UpdateHistoryPanel();
+    UpdateLayerPanel();
     UpdateTabBar();
 }
 
@@ -1509,13 +2067,15 @@ void MainWindow::on_actionsave_triggered()
 
     const int32_t width = myValue.bmpInfo.GetWidth();
     const int32_t height = myValue.bmpInfo.GetHeight();
+    // 保存的是"看到的画面"：多图层时先合成，单图层时就是当前图层
+    const std::vector<uint8_t> &pixels = DisplayPixels();
 
     // BMP：沿用项目自己的读写实现，保证自底向上的内存布局不被破坏
     if (suffix == "bmp") {
         BMP outBmp = myValue.bmp;
         BMPInfo outInfo = myValue.bmpInfo;
         MYFunction::SetBMPHeaderValues(outBmp, outInfo, width, height, outInfo.GetBitsPerPixel());
-        if (MYFunction::WriteBMPFile(filePath.toStdString(), imageData, outBmp, outInfo)) {
+        if (MYFunction::WriteBMPFile(filePath.toStdString(), pixels, outBmp, outInfo)) {
             BMPPath = filePath.toStdString();
             UpdateTabBar();
             UpdateStatus(QString("已保存到 %1").arg(QFileInfo(filePath).fileName()));
@@ -1526,7 +2086,7 @@ void MainWindow::on_actionsave_triggered()
     }
 
     // 其它格式：交给 Qt 图像插件（PNG / JPEG / TIFF / WebP）
-    const QImage image = Function::ToDisplayImage(imageData, width, height);
+    const QImage image = Function::ToDisplayImage(pixels, width, height);
     if (image.isNull()) {
         function.CreateMessagebox("保存失败", "当前图像数据无效");
         return;
@@ -1599,6 +2159,9 @@ void MainWindow::SetBusy(bool busy)
     ui->menu_morph->setEnabled(!busy);
     if (m_selectionMenu != nullptr) {
         m_selectionMenu->setEnabled(!busy);
+    }
+    if (m_layerMenu != nullptr) {
+        m_layerMenu->setEnabled(!busy);
     }
     if (m_overlay != nullptr) {
         m_overlay->setEnabled(!busy);   // 处理中不接受选区拖拽
@@ -1674,6 +2237,9 @@ void MainWindow::ApplyOperator(const QString &title,
     ctx.quad = inQuad;
 
     const std::vector<uint8_t> source = *input;   // 在 UI 线程取快照，避免数据竞争
+    // 图层栈也取一份快照：结果写回"当前活动图层"，其余图层保持不变
+    const std::vector<Layer> stack = m_layers;
+    const int stackActive = m_activeLayer;
     const bool fromRotation = (sourceOverride != nullptr);
     SetBusy(true);
     UpdateStatus(title + " 处理中…");
@@ -1681,9 +2247,16 @@ void MainWindow::ApplyOperator(const QString &title,
     auto result = std::make_shared<ImageSnapshot>();
     auto *watcher = new QFutureWatcher<void>(this);
     connect(watcher, &QFutureWatcher<void>::finished, this,
-            [this, watcher, result, title, fromRotation, onDone]() {
+            [this, watcher, result, title, fromRotation, stack, stackActive, onDone]() {
         watcher->deleteLater();
         if (result && !result->data.empty()) {
+            // 把结果作为活动图层的像素(活动图层的 data 单独存在 data 里，避免重复)
+            result->layers = stack;
+            if (!result->layers.empty()) {
+                result->activeLayer = qBound(0, stackActive,
+                                             static_cast<int>(result->layers.size()) - 1);
+                result->layers[result->activeLayer].data.clear();
+            }
             ApplySnapshot(*result, fromRotation);
             UpdateStatus(title + " 完成");
         } else {
@@ -1720,6 +2293,9 @@ void MainWindow::ApplyRotation(double deltaDegrees, const QString &title)
 {
     if (m_busy) {
         UpdateStatus("上一个操作还在处理中，请稍候");
+        return;
+    }
+    if (!RequireSingleLayer(title)) {
         return;
     }
     if (imageData.empty() || myValue.bmpInfo.GetWidth() <= 0 || myValue.bmpInfo.GetHeight() <= 0) {
@@ -1788,13 +2364,8 @@ void MainWindow::ApplyResult(std::vector<uint8_t> &result)
     if (!m_contentQuad.isValid()) {
         m_contentQuad.setRect(width, height);
     }
-    ImageSnapshot snap;
-    snap.data = result;
-    snap.width = width;
-    snap.height = height;
-    // 子窗口只改像素、不改画布几何；必须沿用当前内容区域，
-    // 否则 quad 被重置为全 0 后，下一次旋转会退化成 1x1 黑图。
-    snap.quad = m_contentQuad;
+    // 子窗口只改像素、不改画布几何；结果写回当前活动图层
+    ImageSnapshot snap = MakeSnapshot(result, width, height, m_contentQuad);
     ApplySnapshot(snap);
     UpdateStatus("已应用子窗口结果");
 }
@@ -2139,6 +2710,9 @@ void MainWindow::on_btn_threshold_ok_clicked()
 void MainWindow::on_actionscale_triggered()
 {
     qDebug() << "I am in a inter window!";
+    if (!RequireSingleLayer("缩放图像")) {
+        return;
+    }
     Interpolation *inter = new Interpolation(this, myValue);
     inter->show();
 }
@@ -2177,6 +2751,9 @@ void MainWindow::_SetVisible(bool set)
     ui->menu_morph->menuAction()->setVisible(set);
     if (m_selectionMenu != nullptr) {
         m_selectionMenu->menuAction()->setVisible(set);
+    }
+    if (m_layerMenu != nullptr) {
+        m_layerMenu->menuAction()->setVisible(set);
     }
     ui->widget->setVisible(set);
 }
@@ -2221,6 +2798,9 @@ static bool AskScaleFactors(QWidget *parent, int &heightFactor, int &widthFactor
 void MainWindow::on_actionlarge_near_triggered()
 {
     int h = 1, w = 1;
+    if (!RequireSingleLayer("放大图像")) {
+        return;
+    }
     if (!AskScaleFactors(this, h, w)) {
         qDebug() << "用户取消输入";
         return;
@@ -2232,6 +2812,9 @@ void MainWindow::on_actionlarge_near_triggered()
 void MainWindow::on_actionsmall_near_triggered()
 {
     int h = 1, w = 1;
+    if (!RequireSingleLayer("缩小图像")) {
+        return;
+    }
     if (!AskScaleFactors(this, h, w)) {
         qDebug() << "用户取消输入";
         return;
@@ -2243,6 +2826,9 @@ void MainWindow::on_actionsmall_near_triggered()
 void MainWindow::on_actionlarge_bilinear_triggered()
 {
     int h = 1, w = 1;
+    if (!RequireSingleLayer("放大图像")) {
+        return;
+    }
     if (!AskScaleFactors(this, h, w)) {
         qDebug() << "用户取消输入";
         return;
@@ -2254,6 +2840,9 @@ void MainWindow::on_actionlarge_bilinear_triggered()
 void MainWindow::on_actionsmall_bilinear_triggered()
 {
     int h = 1, w = 1;
+    if (!RequireSingleLayer("缩小图像")) {
+        return;
+    }
     if (!AskScaleFactors(this, h, w)) {
         qDebug() << "用户取消输入";
         return;
@@ -2265,6 +2854,9 @@ void MainWindow::on_actionsmall_bilinear_triggered()
 void MainWindow::on_actionlarge_bicubic_triggered()
 {
     int h = 1, w = 1;
+    if (!RequireSingleLayer("放大图像")) {
+        return;
+    }
     if (!AskScaleFactors(this, h, w)) {
         qDebug() << "用户取消输入";
         return;
@@ -2276,6 +2868,9 @@ void MainWindow::on_actionlarge_bicubic_triggered()
 void MainWindow::on_actionsmall_bicubic_triggered()
 {
     int h = 1, w = 1;
+    if (!RequireSingleLayer("缩小图像")) {
+        return;
+    }
     if (!AskScaleFactors(this, h, w)) {
         qDebug() << "用户取消输入";
         return;
@@ -2311,6 +2906,9 @@ void MainWindow::on_actionhighContrast_triggered()
 // ------------------------------------------------------------------
 void MainWindow::on_actionflipH_triggered()
 {
+    if (!RequireSingleLayer("水平翻转")) {
+        return;
+    }
     ApplyOperator("水平翻转", [](std::vector<uint8_t> &d, OpContext &ctx) {
         Function f;
         f.FlipImage(d, ctx.width, ctx.height, Function::FlipMode::Horizontal, ctx.quad);
@@ -2319,6 +2917,9 @@ void MainWindow::on_actionflipH_triggered()
 
 void MainWindow::on_actionflipV_triggered()
 {
+    if (!RequireSingleLayer("垂直翻转")) {
+        return;
+    }
     ApplyOperator("垂直翻转", [](std::vector<uint8_t> &d, OpContext &ctx) {
         Function f;
         f.FlipImage(d, ctx.width, ctx.height, Function::FlipMode::Vertical, ctx.quad);
@@ -2327,6 +2928,9 @@ void MainWindow::on_actionflipV_triggered()
 
 void MainWindow::on_actionrotate90_triggered()
 {
+    if (!RequireSingleLayer("旋转")) {
+        return;
+    }
     ApplyOperator("顺时针旋转 90°", [](std::vector<uint8_t> &d, OpContext &ctx) {
         Function f;
         f.RotateImage(d, ctx.width, ctx.height, 90.0, ctx.quad);
@@ -2335,6 +2939,9 @@ void MainWindow::on_actionrotate90_triggered()
 
 void MainWindow::on_actionrotate90ccw_triggered()
 {
+    if (!RequireSingleLayer("旋转")) {
+        return;
+    }
     ApplyOperator("逆时针旋转 90°", [](std::vector<uint8_t> &d, OpContext &ctx) {
         Function f;
         f.RotateImage(d, ctx.width, ctx.height, 270.0, ctx.quad);
@@ -2343,6 +2950,9 @@ void MainWindow::on_actionrotate90ccw_triggered()
 
 void MainWindow::on_actiontranspose_triggered()
 {
+    if (!RequireSingleLayer("转置")) {
+        return;
+    }
     ApplyOperator("沿主对角线镜像", [](std::vector<uint8_t> &d, OpContext &ctx) {
         Function f;
         f.FlipImage(d, ctx.width, ctx.height, Function::FlipMode::Transpose, ctx.quad);
@@ -2351,6 +2961,9 @@ void MainWindow::on_actiontranspose_triggered()
 
 void MainWindow::on_actionantitranspose_triggered()
 {
+    if (!RequireSingleLayer("反转置")) {
+        return;
+    }
     ApplyOperator("沿副对角线镜像", [](std::vector<uint8_t> &d, OpContext &ctx) {
         Function f;
         f.FlipImage(d, ctx.width, ctx.height, Function::FlipMode::AntiTranspose, ctx.quad);
@@ -2361,6 +2974,9 @@ void MainWindow::on_actiontailor_triggered()
 {
     if (m_busy) {
         UpdateStatus("上一个操作还在处理中，请稍候");
+        return;
+    }
+    if (!RequireSingleLayer("图像裁剪")) {
         return;
     }
     if (imageData.empty() || myValue.bmpInfo.GetWidth() <= 0) {
