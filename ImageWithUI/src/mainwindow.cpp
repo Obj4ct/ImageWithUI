@@ -155,6 +155,48 @@ void BlendLayerInto(std::vector<uint8_t> &dst, const std::vector<uint8_t> &src,
     }
 }
 
+// 把选区(视觉坐标，y 向下)之外的部分恢复成 src：
+// 调整类算子先作用于整幅图，这里把选区外还原，实现"只处理选区"
+void RestoreOutsideSelection(std::vector<uint8_t> &dst, const std::vector<uint8_t> &src,
+                             int32_t w, int32_t h, const QRect &selection)
+{
+    if (w <= 0 || h <= 0 || selection.isEmpty()) {
+        return;
+    }
+    const size_t bytes = static_cast<size_t>(w) * static_cast<size_t>(h) * 3;
+    if (dst.size() < bytes || src.size() < bytes) {
+        return;
+    }
+    const int32_t x0 = qMax(0, selection.x());
+    const int32_t x1 = qMin(w, selection.x() + selection.width());
+    const int32_t top = qMax(0, selection.y());
+    const int32_t bottom = qMin(h, selection.y() + selection.height());
+    if (x1 <= x0 || bottom <= top) {
+        return;
+    }
+    const size_t rowBytes = static_cast<size_t>(w) * 3;
+    for (int32_t y = 0; y < h; ++y) {
+        // 视觉行 y 对应内存行 h-1-y(内存第 0 行是画面最底行)
+        const size_t off = static_cast<size_t>(h - 1 - y) * rowBytes;
+        if (y < top || y >= bottom) {
+            std::copy_n(src.begin() + static_cast<ptrdiff_t>(off), rowBytes,
+                        dst.begin() + static_cast<ptrdiff_t>(off));
+            continue;
+        }
+        const size_t left = static_cast<size_t>(x0) * 3;
+        if (left > 0) {
+            std::copy_n(src.begin() + static_cast<ptrdiff_t>(off), left,
+                        dst.begin() + static_cast<ptrdiff_t>(off));
+        }
+        const size_t rightLen = static_cast<size_t>(w - x1) * 3;
+        if (rightLen > 0) {
+            const size_t rightOff = off + static_cast<size_t>(x1) * 3;
+            std::copy_n(src.begin() + static_cast<ptrdiff_t>(rightOff), rightLen,
+                        dst.begin() + static_cast<ptrdiff_t>(rightOff));
+        }
+    }
+}
+
 // 两份图层栈是否完全一致(用于历史去重)
 bool SameLayerStack(const std::vector<Layer> &a, const std::vector<Layer> &b)
 {
@@ -619,7 +661,8 @@ void MainWindow::SetupSelectionTool()
         if (rect.isEmpty()) {
             UpdateStatus("已取消选区");
         } else {
-            UpdateStatus(QString("选区 %1 × %2 px").arg(rect.width()).arg(rect.height()));
+            UpdateStatus(QString("选区 %1 × %2 px · 调整类操作只在选区内生效")
+                             .arg(rect.width()).arg(rect.height()));
         }
     };
     ui->imageLabel->installEventFilter(this);
@@ -784,7 +827,7 @@ void MainWindow::CropToSelection()
         Function f;
         f.CropImage(d, ctx.width, ctx.height,
                     sel.x(), sel.y(), sel.width(), sel.height(), ctx.quad);
-    }, nullptr, [this]() { ClearSelection(); });
+    }, nullptr, [this]() { ClearSelection(); }, false);
 }
 
 void MainWindow::ClearSelectionContent()
@@ -815,7 +858,7 @@ void MainWindow::ClearSelectionContent()
                                      + static_cast<size_t>(sel.x())) * 3;
             std::fill(p, p + static_cast<size_t>(cols) * 3, static_cast<uint8_t>(255));
         }
-    }, nullptr, [this]() { UpdateStatus("已清除选区内容"); });
+    }, nullptr, [this]() { UpdateStatus("已清除选区内容"); }, false);
 }
 
 void MainWindow::SetupLayerPanel()
@@ -1426,6 +1469,7 @@ void MainWindow::RunPreview()
     }
 
     const ContentQuad quad = m_contentQuad;
+    const QRect selection = m_selection;   // 预览也只在选区内生效，与提交一致
     const int gen = ++m_previewGeneration;
     m_previewRunning = true;
 
@@ -1469,8 +1513,8 @@ void MainWindow::RunPreview()
         }
     });
 
-    watcher->setFuture(QtConcurrent::run([source, op, workW, workH, quad, result]() mutable {
-        std::vector<uint8_t> work = std::move(source);
+    watcher->setFuture(QtConcurrent::run([source, op, workW, workH, quad, result, selection, step]() mutable {
+        std::vector<uint8_t> work = source;
         OpContext ctx;
         ctx.width = workW;
         ctx.height = workH;
@@ -1479,6 +1523,14 @@ void MainWindow::RunPreview()
         ctx.segmentSize = ctx.pixelCount;
         ctx.quad = quad;
         op(work, ctx);
+        // 缩略图预览需把选区按步长换算；选区外恢复原像素
+        if (!selection.isEmpty() && ctx.width == workW && ctx.height == workH) {
+            const QRect scaled(qRound(selection.x() / double(step)),
+                               qRound(selection.y() / double(step)),
+                               qMax(1, qRound(selection.width() / double(step))),
+                               qMax(1, qRound(selection.height() / double(step))));
+            RestoreOutsideSelection(work, source, ctx.width, ctx.height, scaled);
+        }
         result->data = std::move(work);
         result->width = ctx.width;
         result->height = ctx.height;
@@ -2230,7 +2282,8 @@ void MainWindow::UpdateStatusInfo()
 void MainWindow::ApplyOperator(const QString &title,
                                std::function<void(std::vector<uint8_t> &, OpContext &)> op,
                                const ImageSnapshot *sourceOverride,
-                               std::function<void()> onDone)
+                               std::function<void()> onDone,
+                               bool restrictSelection)
 {
     if (m_busy) {
         UpdateStatus("上一个操作还在处理中，请稍候");
@@ -2268,6 +2321,8 @@ void MainWindow::ApplyOperator(const QString &title,
     const std::vector<Layer> stack = m_layers;
     const int stackActive = m_activeLayer;
     const bool fromRotation = (sourceOverride != nullptr);
+    // 有选区时只让调整类算子作用于选区(几何变换不走这条限制)
+    const QRect selection = (restrictSelection && !fromRotation) ? m_selection : QRect();
     SetBusy(true);
     UpdateStatus(title + " 处理中…");
 
@@ -2295,9 +2350,13 @@ void MainWindow::ApplyOperator(const QString &title,
             onDone();
         }
     });
-    watcher->setFuture(QtConcurrent::run([source, op, ctx, result]() mutable {
+    watcher->setFuture(QtConcurrent::run([source, op, ctx, result, selection, inWidth, inHeight]() mutable {
         std::vector<uint8_t> work = source;
         op(work, ctx);              // 算子可以通过 ctx 修改画布宽高与内容区域(例如旋转)
+        // 尺寸不变时把选区外还原为输入像素，从而"只处理选区"
+        if (!selection.isEmpty() && ctx.width == inWidth && ctx.height == inHeight) {
+            RestoreOutsideSelection(work, source, ctx.width, ctx.height, selection);
+        }
         result->data = std::move(work);
         result->width = ctx.width;
         result->height = ctx.height;
@@ -2375,7 +2434,8 @@ void MainWindow::ApplyRotation(double deltaDegrees, const QString &title)
                 // 基准作废，回到"以当前图像为基准"的状态，避免状态错位
                 InvalidateRotateBase();
             }
-        });
+        },
+        false);
 }
 
 // 子窗口结果写回主窗口
@@ -2390,6 +2450,10 @@ void MainWindow::ApplyResult(std::vector<uint8_t> &result)
     }
     if (!m_contentQuad.isValid()) {
         m_contentQuad.setRect(width, height);
+    }
+    // 有选区时只把结果写回选区内，选区外保持原样
+    if (!m_selection.isEmpty()) {
+        RestoreOutsideSelection(result, imageData, width, height, m_selection);
     }
     // 子窗口只改像素、不改画布几何；结果写回当前活动图层
     ImageSnapshot snap = MakeSnapshot(result, width, height, m_contentQuad);
@@ -2939,7 +3003,7 @@ void MainWindow::on_actionflipH_triggered()
     ApplyOperator("水平翻转", [](std::vector<uint8_t> &d, OpContext &ctx) {
         Function f;
         f.FlipImage(d, ctx.width, ctx.height, Function::FlipMode::Horizontal, ctx.quad);
-    });
+    }, nullptr, nullptr, false);
 }
 
 void MainWindow::on_actionflipV_triggered()
@@ -2950,7 +3014,7 @@ void MainWindow::on_actionflipV_triggered()
     ApplyOperator("垂直翻转", [](std::vector<uint8_t> &d, OpContext &ctx) {
         Function f;
         f.FlipImage(d, ctx.width, ctx.height, Function::FlipMode::Vertical, ctx.quad);
-    });
+    }, nullptr, nullptr, false);
 }
 
 void MainWindow::on_actionrotate90_triggered()
@@ -2961,7 +3025,7 @@ void MainWindow::on_actionrotate90_triggered()
     ApplyOperator("顺时针旋转 90°", [](std::vector<uint8_t> &d, OpContext &ctx) {
         Function f;
         f.RotateImage(d, ctx.width, ctx.height, 90.0, ctx.quad);
-    });
+    }, nullptr, nullptr, false);
 }
 
 void MainWindow::on_actionrotate90ccw_triggered()
@@ -2972,7 +3036,7 @@ void MainWindow::on_actionrotate90ccw_triggered()
     ApplyOperator("逆时针旋转 90°", [](std::vector<uint8_t> &d, OpContext &ctx) {
         Function f;
         f.RotateImage(d, ctx.width, ctx.height, 270.0, ctx.quad);
-    });
+    }, nullptr, nullptr, false);
 }
 
 void MainWindow::on_actiontranspose_triggered()
@@ -2983,7 +3047,7 @@ void MainWindow::on_actiontranspose_triggered()
     ApplyOperator("沿主对角线镜像", [](std::vector<uint8_t> &d, OpContext &ctx) {
         Function f;
         f.FlipImage(d, ctx.width, ctx.height, Function::FlipMode::Transpose, ctx.quad);
-    });
+    }, nullptr, nullptr, false);
 }
 
 void MainWindow::on_actionantitranspose_triggered()
@@ -2994,7 +3058,7 @@ void MainWindow::on_actionantitranspose_triggered()
     ApplyOperator("沿副对角线镜像", [](std::vector<uint8_t> &d, OpContext &ctx) {
         Function f;
         f.FlipImage(d, ctx.width, ctx.height, Function::FlipMode::AntiTranspose, ctx.quad);
-    });
+    }, nullptr, nullptr, false);
 }
 
 void MainWindow::on_actiontailor_triggered()
@@ -3026,7 +3090,7 @@ void MainWindow::on_actiontailor_triggered()
         Function f;
         f.CropImage(d, ctx.width, ctx.height,
                     sel.x(), sel.y(), sel.width(), sel.height(), ctx.quad);
-    });
+    }, nullptr, nullptr, false);
 }
 
 void MainWindow::on_actionequalize_triggered()

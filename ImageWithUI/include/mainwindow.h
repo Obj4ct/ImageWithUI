@@ -329,7 +329,8 @@ private:
     void ApplyOperator(const QString &title,
                        std::function<void(std::vector<uint8_t> &, OpContext &)> op,
                        const ImageSnapshot *sourceOverride = nullptr,
-                       std::function<void()> onDone = nullptr);
+                       std::function<void()> onDone = nullptr,
+                       bool restrictSelection = true);
     // 旋转：始终从"无损基准"按【累计角度】重新采样一次，
     // 避免每次都在上一次的插值结果上再插值，导致一直旋转越来越模糊
     void ApplyRotation(double deltaDegrees, const QString &title);

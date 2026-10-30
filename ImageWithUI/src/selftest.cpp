@@ -1348,6 +1348,70 @@ int Run(const QString &imagePath)
         out().flush();
     }
 
+    // ---------- 14. 选区限制：调整类算子只改选区内 ----------
+    {
+        const QString selOpPath = QDir::tempPath() + "/imagewithui_selftest_selop.png";
+        {
+            QImage img(80, 60, QImage::Format_RGB32);
+            img.fill(qRgb(40, 120, 200));   // 内存里是 BGR(200,120,40)
+            img.save(selOpPath, "PNG");
+        }
+
+        QString failReason;
+        {
+            MainWindow win;
+            if (!win.OpenImage(selOpPath)) {
+                failReason = "无法打开测试图";
+            } else {
+                win.SetSelection(QRect(10, 10, 20, 20));
+                QLineEdit *edit = win.findChild<QLineEdit *>("lineEdit_brightness");
+                QPushButton *btn = win.findChild<QPushButton *>("btn_brightness");
+                if (edit == nullptr || btn == nullptr) {
+                    failReason = "找不到亮度输入框/应用按钮";
+                } else {
+                    const size_t historyBefore = win.imageDataHistory.size();
+                    edit->setText("50");
+                    btn->click();
+                    QEventLoop loop;
+                    QTimer::singleShot(1500, &loop, &QEventLoop::quit);
+                    loop.exec();
+
+                    const int32_t w = win.myValue.bmpInfo.GetWidth();
+                    const int32_t h = win.myValue.bmpInfo.GetHeight();
+                    if (win.imageDataHistory.size() != historyBefore + 1) {
+                        failReason = "选区调整后历史未增加";
+                    } else if (w != 80 || h != 60) {
+                        failReason = "选区调整改变了画布尺寸";
+                    } else {
+                        const std::vector<uint8_t> pixels = win.CurrentImageData();
+                        // 选区内取样(视觉 20,20)，选区外取样(视觉 0,0)
+                        const size_t inside = (static_cast<size_t>(h - 1 - 20) * w + 20) * 3;
+                        const size_t outside = (static_cast<size_t>(h - 1) * w + 0) * 3;
+                        if (inside + 2 >= pixels.size() || outside + 2 >= pixels.size()) {
+                            failReason = "像素索引越界";
+                        } else if (pixels[inside] == 200 && pixels[inside + 1] == 120 &&
+                                   pixels[inside + 2] == 40) {
+                            failReason = "选区内像素没有被调整";
+                        } else if (pixels[outside] != 200 || pixels[outside + 1] != 120 ||
+                                   pixels[outside + 2] != 40) {
+                            failReason = "选区外像素被改动了";
+                        }
+                    }
+                }
+            }
+        }
+        QFile::remove(selOpPath);
+
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 选区限制 : 调整类算子只作用于选区，选区外保持原样\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 选区限制 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
     out() << "------------------------------------------------\n";
     out() << "通过 " << g_pass << " 项，失败 " << g_fail << " 项\n";
     out().flush();
