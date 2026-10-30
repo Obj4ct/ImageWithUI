@@ -12,6 +12,7 @@ eye::eye(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     setWindowIcon(QIcon(":/icon/logo.png"));
     //默认显示原始图像
     imageData = mainWindow->imageData;
+    previewData = imageData;
     newValue = myValue;
     const QImage image = Function::ToDisplayImage(imageData,
                                                   newValue.bmpInfo.GetWidth(),
@@ -19,6 +20,14 @@ eye::eye(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     // 显示原始图像在imageLabel上
     ui->imageLabel->setAlignment(Qt::AlignCenter);
     ui->imageLabel->setPixmap(QPixmap::fromImage(image));
+
+    // 参数或坐标变化后自动预览：停止输入 250ms 就从原图重算一次
+    previewTimer = new QTimer(this);
+    previewTimer->setSingleShot(true);
+    previewTimer->setInterval(250);
+    connect(previewTimer, &QTimer::timeout, this, [this]() { RunPreview(false); });
+    connect(ui->lineEdit_range, &QLineEdit::textChanged, this, &eye::SchedulePreview);
+    connect(ui->lineEdit_increase, &QLineEdit::textChanged, this, &eye::SchedulePreview);
 }
 
 void eye::mousePressEvent(QMouseEvent* event)
@@ -72,6 +81,62 @@ void eye::mousePressEvent(QMouseEvent* event)
         const QString str = QString("%1, %2").arg(secondX).arg(newValue.bmpInfo.GetHeight() - 1 - secondY);
         ui->label_second->setText(str);
     }
+    SchedulePreview();   // 坐标变了就重新预览
+}
+
+void eye::SchedulePreview()
+{
+    if (previewTimer != nullptr) {
+        previewTimer->start();
+    }
+}
+
+bool eye::RunPreview(bool reportErrors)
+{
+    if (previewTimer != nullptr) {
+        previewTimer->stop();
+    }
+
+    const ReturnValue returnRange = mainWindow->CheckOK(ui->lineEdit_range);
+    const ReturnValue returnNum = mainWindow->CheckOK(ui->lineEdit_increase);
+    QString error;
+    if (returnRange.isNull || returnNum.isNull) {
+        error = "请输入";
+    } else if (!returnRange.isNumeric || !returnNum.isNumeric) {
+        error = "输入数字";
+    } else if (returnRange.value <= 0) {
+        error = "半径必须大于 0";
+    } else if (returnNum.value <= 0 || returnNum.value > 1) {
+        error = "放大强度需在 0 和 1 之间（如 0.3 约放大 1.4 倍）";
+    } else if (reportErrors && !hasFirst) {
+        error = "还没成功获取坐标值";
+    }
+
+    if (!error.isEmpty()) {
+        if (reportErrors) {
+            function.CreateMessagebox("提示", error);
+        }
+        previewData = imageData;   // 参数不完整：回到原图
+        ShowImage(previewData);
+        return false;
+    }
+
+    const int32_t width = newValue.bmpInfo.GetWidth();
+    const int32_t height = newValue.bmpInfo.GetHeight();
+    const int32_t radius = static_cast<int32_t>(returnRange.value);
+    const double strength = returnNum.value;
+
+    // 每次都从原图重算，反复调参数不会层层叠加
+    previewData = imageData;
+    // 两次点击对应左右两只眼睛，逐个做径向放大(圆外像素不受影响)
+    if (hasFirst) {
+        Function::EnlargeEye(previewData, width, height, firstX, firstY, radius, strength);
+    }
+    if (hasSecond) {
+        Function::EnlargeEye(previewData, width, height, secondX, secondY, radius, strength);
+    }
+    ShowImage(previewData);
+    return true;
 }
 
 void eye::ShowImage(std::vector<uint8_t>&inImageData)
@@ -89,46 +154,17 @@ eye::~eye()
 
 void eye::on_btn_ok_clicked()
 {
-    qDebug() << "click ok";
-    ReturnValue returnRange = mainWindow->CheckOK(ui->lineEdit_range);
-    ReturnValue returnNum = mainWindow->CheckOK(ui->lineEdit_increase);
-    if (returnRange.isNull || returnNum.isNull) {
-        function.CreateMessagebox("提示", "请输入");
-        return;
-    }
-    if (!returnRange.isNumeric || !returnNum.isNumeric) {
-        function.CreateMessagebox("提示", "输入数字");
-        return;
-    }
-    if (returnRange.value <= 0) {
-        function.CreateMessagebox("提示", "半径必须大于 0");
-        return;
-    }
-    // 强度是"径向收缩比例"，取值 0~1；0.3 约放大 1/(1-0.3)=1.43 倍
-    if (returnNum.value <= 0 || returnNum.value > 1) {
-        function.CreateMessagebox("提示", "放大强度需在 0 和 1 之间（如 0.3 约放大 1.4 倍）");
-        return;
-    }
-    if (!hasFirst || !hasSecond) {
-        function.CreateMessagebox("提示", "还没成功获取两个坐标值");
-        return;
-    }
-
-    const int32_t width = newValue.bmpInfo.GetWidth();
-    const int32_t height = newValue.bmpInfo.GetHeight();
-    const int32_t radius = static_cast<int32_t>(returnRange.value);
-    const double strength = returnNum.value;
-
-    // 两次点击对应左右两只眼睛，逐个做径向放大(圆外像素不受影响)
-    Function::EnlargeEye(imageData, width, height, firstX, firstY, radius, strength);
-    Function::EnlargeEye(imageData, width, height, secondX, secondY, radius, strength);
-
-    ShowImage(imageData);
+    qDebug() << "click preview";
+    RunPreview(true);
 }
 
 void eye::on_btn_apply_clicked()
 {
     qDebug() << "apply";
+    // 先保证预览是最新参数的结果；参数非法时不写回主窗口
+    if (!RunPreview(true)) {
+        return;
+    }
     // 写回主窗口并记录历史(这样才能撤销)
-    mainWindow->ApplyResult(imageData);
+    mainWindow->ApplyResult(previewData);
 }

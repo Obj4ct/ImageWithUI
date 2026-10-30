@@ -2,12 +2,16 @@
 #include "BMPFile.h"
 #include "Function.h"
 #include "mainwindow.h"
+#include "eye.h"
 #include <QFileInfo>
 #include <QTextStream>
 #include <QEventLoop>
 #include <QTimer>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QLabel>
+#include <QApplication>
+#include <QMouseEvent>
 #include <cstdio>
 
 namespace {
@@ -888,6 +892,70 @@ int Run(const QString &imagePath)
         } else {
             ++g_fail;
             out() << "[FAIL] 参数实时预览 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
+    // ---------- 9. 子窗口实时预览(眼部放大)：改参数即预览，点"应用"才写回主窗口 ----------
+    {
+        QString failReason;
+        {
+            MainWindow win;
+            if (!win.OpenImage(path)) {
+                failReason = "无法打开样例图";
+            } else {
+                const size_t historyBefore = win.imageDataHistory.size();
+                eye eyeWin(&win, win.myValue);
+                eyeWin.resize(1000, 800);
+                eyeWin.show();
+                QApplication::processEvents();
+
+                // 在图上点两下，作为左右眼的中心
+                QLabel *view = eyeWin.findChild<QLabel *>("imageLabel");
+                QLineEdit *rangeEdit = eyeWin.findChild<QLineEdit *>("lineEdit_range");
+                QLineEdit *strengthEdit = eyeWin.findChild<QLineEdit *>("lineEdit_increase");
+                QPushButton *applyBtn = eyeWin.findChild<QPushButton *>("btn_apply");
+                if (view == nullptr || rangeEdit == nullptr ||
+                    strengthEdit == nullptr || applyBtn == nullptr) {
+                    failReason = "找不到子窗口控件";
+                } else {
+                    const QRect area = view->rect();
+                    const QPoint localCenter = area.center();
+                    for (int i = 0; i < 2; ++i) {
+                        const QPoint local = localCenter + QPoint(i == 0 ? -60 : 60, 0);
+                        QMouseEvent press(QEvent::MouseButtonPress,
+                                          eyeWin.mapFromGlobal(view->mapToGlobal(local)),
+                                          Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+                        QApplication::sendEvent(&eyeWin, &press);
+                    }
+                    rangeEdit->setText("40");
+                    strengthEdit->setText("0.5");
+
+                    // 等防抖 + 预览计算完成
+                    QEventLoop loop;
+                    QTimer::singleShot(800, &loop, &QEventLoop::quit);
+                    loop.exec();
+
+                    if (win.imageDataHistory.size() != historyBefore) {
+                        failReason = "子窗口预览写入了主窗口历史";
+                    } else if (eyeWin.PreviewData() == win.CurrentImageData()) {
+                        failReason = "子窗口预览没有生成";
+                    } else {
+                        applyBtn->click();   // 应用：结果写回主窗口
+                        if (win.imageDataHistory.size() != historyBefore + 1) {
+                            failReason = "应用后主窗口历史未增加";
+                        }
+                    }
+                }
+                eyeWin.hide();
+            }
+        }
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 子窗口实时预览(眼部放大) : 预览不写历史，应用后写回主窗口\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 子窗口实时预览(眼部放大) : " << failReason << "\n";
         }
         out().flush();
     }

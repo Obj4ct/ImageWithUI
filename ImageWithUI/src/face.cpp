@@ -14,6 +14,7 @@ Face::Face(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     setWindowTitle(QString("图像微调"));
     setWindowIcon(QIcon(":/icon/logo.png"));
     imageData = mainWindow->imageData;
+    previewData = imageData;
     newValue = myValue;
 
     const QImage image = Function::ToDisplayImage(imageData,
@@ -21,6 +22,13 @@ Face::Face(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
                                                   newValue.bmpInfo.GetHeight());
     ui->imageLabel->setAlignment(Qt::AlignCenter);
     ui->imageLabel->setPixmap(QPixmap::fromImage(image));
+
+    // 半径或中心点变化后自动预览：停止输入 250ms 就从原图重算一次
+    previewTimer = new QTimer(this);
+    previewTimer->setSingleShot(true);
+    previewTimer->setInterval(250);
+    connect(previewTimer, &QTimer::timeout, this, [this]() { RunPreview(false); });
+    connect(ui->lineEdit_radius, &QLineEdit::textChanged, this, &Face::SchedulePreview);
 }
 
 void Face::mousePressEvent(QMouseEvent* event)
@@ -79,6 +87,7 @@ void Face::mousePressEvent(QMouseEvent* event)
         const QString str = QString("%1, %2").arg(firstX).arg(firstY);
         ui->label_first->setText(str);
     }
+    SchedulePreview();   // 中心点变了就重新预览
 }
 
 Face::~Face()
@@ -88,34 +97,59 @@ Face::~Face()
 
 void Face::on_btn_ok_clicked()
 {
+    RunPreview(true);
+}
+
+void Face::SchedulePreview()
+{
+    if (previewTimer != nullptr) {
+        previewTimer->start();
+    }
+}
+
+bool Face::RunPreview(bool reportErrors)
+{
+    if (previewTimer != nullptr) {
+        previewTimer->stop();
+    }
+
     const QString inputText = ui->lineEdit_radius->text().trimmed();
     bool isNumeric = false;
     const double_t value = inputText.toDouble(&isNumeric);
 
-    if (!hasFirst) {
-        function.CreateMessagebox("提示", "还没成功获取坐标值");
-        return;
+    QString error;
+    if (inputText.isEmpty()) {
+        error = "请输入半径";
+    } else if (!isNumeric) {
+        error = "请输入数字";
+    } else if (value <= 0) {
+        error = "半径必须大于 0";
+    } else if (reportErrors && !hasFirst) {
+        error = "还没成功获取坐标值";
     }
-    if (!isNumeric) {
-        function.CreateMessagebox("提示", "请输入数字");
-        return;
-    }
-    if (value <= 0) {
-        function.CreateMessagebox("提示", "半径必须大于 0");
-        return;
+
+    if (!error.isEmpty()) {
+        if (reportErrors) {
+            function.CreateMessagebox("提示", error);
+        }
+        previewData = imageData;   // 参数不完整：回到原图
+        ShowImage(previewData);
+        return false;
     }
 
     const int32_t width = newValue.bmpInfo.GetWidth();
     const int32_t height = newValue.bmpInfo.GetHeight();
     const int32_t radius = static_cast<int32_t>(value);
 
-    // 读快照写新缓冲，避免原地覆盖像素造成拖影
-    const std::vector<uint8_t> src = imageData;
-    std::vector<uint8_t> dst(src.size(), 0);
-    _Face(src, dst, width, height, faceCenterX, faceCenterY, radius, warpIntensity);
-
-    imageData = dst;
-    ShowImage(imageData);
+    // 每次都从原图重算(读 src 写 dst)，反复预览不会出现拖影
+    previewData = imageData;
+    if (hasFirst) {
+        std::vector<uint8_t> dst(previewData.size(), 0);
+        _Face(previewData, dst, width, height, faceCenterX, faceCenterY, radius, warpIntensity);
+        previewData.swap(dst);
+    }
+    ShowImage(previewData);
+    return true;
 }
 
 
@@ -173,6 +207,10 @@ void Face::_Face(const std::vector<uint8_t> &src, std::vector<uint8_t> &dst,
 void Face::on_btn_apply_clicked()
 {
     qDebug() << "apply";
+    // 先保证预览是最新参数的结果；参数非法时不写回主窗口
+    if (!RunPreview(true)) {
+        return;
+    }
     // 写回主窗口并记录历史(这样才能撤销)
-    mainWindow->ApplyResult(imageData);
+    mainWindow->ApplyResult(previewData);
 }

@@ -1,6 +1,7 @@
 #ifndef FACE_H
 #define FACE_H
 #include "QTHeader.h"
+#include <QTimer>
 #include "Debug.h"
 #include "BMPFile.h"
 #include "Function.h"
@@ -48,6 +49,13 @@ private:
 private:
     void ResetImage();
     void ShowImage(std::vector<uint8_t>&inImageData);
+    // 参数/中心点变化后延时重算预览
+    void SchedulePreview();
+    // 以原图为基准重算一次预览；参数非法时回滚到原图
+    bool RunPreview(bool reportErrors);
+    // 预览结果(应用时写回它，原图 imageData 始终保持不变)
+    std::vector<uint8_t> previewData;
+    QTimer *previewTimer = nullptr;
     //瘦脸：读 src 写 dst，避免原地覆盖造成的伪影
     void _Face(const std::vector<uint8_t> &src, std::vector<uint8_t> &dst,
                int32_t width, int32_t height,
