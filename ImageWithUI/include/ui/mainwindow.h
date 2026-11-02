@@ -191,6 +191,9 @@ public:
     void StrokeSelection(const QColor &color, int width);
     // 自由变换：把选区内容按中心缩放(百分比)与旋转(角度)后贴回，原位置刷白
     void FreeTransformSelection(double scalePercent, double angleDegrees);
+    // 非等比缩放 + 旋转的自由变换(交互式手柄提交与自检复用)
+    void ApplyFreeTransform(double scaleX, double scaleY, double angleDegrees,
+                            const QString &label = QStringLiteral("自由变换"));
 
     // ---- 图层(自底向上，索引 0 为最底层) ----
     int LayerCount() const { return static_cast<int>(m_layers.size()); }
@@ -452,6 +455,11 @@ private:
     // 选区形态学处理：mode 0 扩展 / 1 收缩 / 2 平滑(复用盒式模糊后二值化)
     void RefineSelection(int radius, int mode);
     SelectionOverlay *m_overlay = nullptr;
+    // 交互式变换(拖拽手柄)：进入、提交/取消，以及撤销/裁剪时静默退出
+    void BeginInteractiveTransform();
+    void FinishInteractiveTransform(bool commit, double scaleX, double scaleY, double angleDegrees);
+    void CancelInteractiveTransform();
+    bool AnySelectionToolChecked() const;
     SelectionMask m_mask;                  // 选区掩码(唯一真值)
     QRect m_selection;                     // 掩码包围盒(供复制/裁剪/绘制使用)
     QAction *m_selectionToolAction = nullptr;

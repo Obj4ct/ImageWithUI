@@ -22,8 +22,11 @@
 #include <QClipboard>
 #include <QColorDialog>
 #include <QTransform>
+#include <QLineF>
+#include <QPolygonF>
 #include <QFontMetrics>
 #include <QSlider>
+#include <QtMath>
 #include <algorithm>
 
 namespace {
@@ -418,6 +421,9 @@ public:
 
     void setToolActive(bool active)
     {
+        if (!active && m_transform) {
+            endTransform();
+        }
         m_toolActive = active;
         m_drag = None;
         m_points.clear();
@@ -431,6 +437,36 @@ public:
         update();
     }
 
+    // ---- 交互式变换会话：画布上拖拽手柄完成缩放与旋转 ----
+    void beginTransform(const QRect &baseRect, const QImage &whiteFill, const QImage &content)
+    {
+        if (baseRect.isEmpty() || whiteFill.isNull() || content.isNull()) {
+            return;
+        }
+        m_transform = true;
+        m_transformBase = QRectF(baseRect);
+        m_transformWhite = whiteFill;
+        m_transformContent = content;
+        m_sx = m_sy = 1.0;
+        m_angle = 0.0;
+        m_drag = None;
+        m_handle = -1;
+        setCursor(Qt::ArrowCursor);
+        update();
+    }
+
+    void endTransform()
+    {
+        m_transform = false;
+        m_drag = None;
+        m_handle = -1;
+        m_transformWhite = QImage();
+        m_transformContent = QImage();
+        update();
+    }
+
+    bool isTransformActive() const { return m_transform; }
+
     // 用户拖拽建立选区后回调(add = 按住 Shift，表示并入已有选区)
     std::function<void(const QRect &, bool)> onSelectionChanged;
     // 用户拖动整体移动选区后回调(图像像素位移；content=true 表示同时搬动像素)
@@ -439,6 +475,10 @@ public:
     std::function<void(const QPolygon &, bool, bool)> onLassoFinished;
     // 图像边缘强度查询(供磁性套索吸附，返回 0 表示不是边缘)
     std::function<int(int, int)> edgeAt;
+    // 变换拖动中回调(缩放 x、缩放 y、旋转角度)，供状态栏实时提示
+    std::function<void(double, double, double)> onTransformChanged;
+    // 变换结束回调(commit=true 提交；否则取消)，参数为最终变换值
+    std::function<void(bool, double, double, double)> onTransformFinished;
 
 protected:
     // 磁性吸附：把点吸到半径内梯度最强的像素
@@ -461,6 +501,21 @@ protected:
 
     void keyPressEvent(QKeyEvent *event) override
     {
+        if (m_transform) {
+            const int key = event->key();
+            if (key == Qt::Key_Return || key == Qt::Key_Enter) {
+                if (onTransformFinished) {
+                    onTransformFinished(true, m_sx, m_sy, m_angle);
+                }
+                return;
+            }
+            if (key == Qt::Key_Escape) {
+                if (onTransformFinished) {
+                    onTransformFinished(false, 1.0, 1.0, 0.0);
+                }
+                return;
+            }
+        }
         if (m_tool == 2 && !m_poly.isEmpty()) {
             const int key = event->key();
             if (key == Qt::Key_Return || key == Qt::Key_Enter) {
@@ -485,6 +540,12 @@ protected:
     void mouseDoubleClickEvent(QMouseEvent *event) override
     {
         Q_UNUSED(event);
+        if (m_transform) {
+            if (onTransformFinished) {
+                onTransformFinished(true, m_sx, m_sy, m_angle);
+            }
+            return;
+        }
         if (m_tool == 2 && m_poly.size() >= 3) {
             finishPolygon();
         }
@@ -521,6 +582,12 @@ protected:
             return;
         }
         QPainter p(this);
+
+        // 变换会话：画"原位置刷白 + 变换后的内容 + 旋转后的手柄"
+        if (m_transform) {
+            paintTransform(p);
+            return;
+        }
 
         // 多边形套索正在取点：画已确定的边 + 到光标的橡皮筋
         if (m_tool == 2 && !m_poly.isEmpty()) {
@@ -623,7 +690,28 @@ protected:
 
     void mousePressEvent(QMouseEvent *event) override
     {
-        if (event->button() != Qt::LeftButton || !m_toolActive || m_imgW <= 0 || m_imgH <= 0) {
+        if (event->button() != Qt::LeftButton) {
+            return;
+        }
+        if (m_transform) {
+            const int handle = hitHandle(event->pos());
+            if (handle < 0) {
+                return;   // 变换模式下只响应手柄
+            }
+            m_handle = handle;
+            m_startSx = m_sx;
+            m_startSy = m_sy;
+            m_startAngle = m_angle;
+            m_drag = (handle == 8) ? TransformRotate : TransformScale;
+            const QPointF center(m_transformBase.x() + m_transformBase.width() / 2.0,
+                                 m_transformBase.y() + m_transformBase.height() / 2.0);
+            const QPointF ip = toImageF(event->pos());
+            m_startPointerAngle = qRadiansToDegrees(qAtan2(ip.y() - center.y(), ip.x() - center.x()));
+            setCursor(cursorForHandle(handle));
+            update();
+            return;
+        }
+        if (!m_toolActive || m_imgW <= 0 || m_imgH <= 0) {
             return;
         }
         const QRect dr = displayRect();
@@ -692,10 +780,63 @@ protected:
 
     void mouseMoveEvent(QMouseEvent *event) override
     {
+        const QPoint pos = event->pos();
+        if (m_transform) {
+            if (m_drag == None) {
+                const int handle = hitHandle(pos);
+                setCursor(cursorForHandle(handle));
+                return;
+            }
+            const QPointF center(m_transformBase.x() + m_transformBase.width() / 2.0,
+                                 m_transformBase.y() + m_transformBase.height() / 2.0);
+            const QPointF ip = toImageF(pos);
+            if (m_drag == TransformRotate) {
+                const double pointer = qRadiansToDegrees(qAtan2(ip.y() - center.y(), ip.x() - center.x()));
+                double angle = m_startAngle + (pointer - m_startPointerAngle);
+                while (angle > 180.0) angle -= 360.0;
+                while (angle <= -180.0) angle += 360.0;
+                if (event->modifiers() & Qt::ShiftModifier) {
+                    angle = std::round(angle / 15.0) * 15.0;
+                }
+                m_angle = angle;
+                updateTransformStatus();
+                update();
+                return;
+            }
+            if (m_drag == TransformScale) {
+                // 先把鼠标点逆旋转回"无旋转"坐标系，再按手柄基准偏移求两轴缩放
+                const double rad = qDegreesToRadians(m_angle);
+                const double cosA = std::cos(rad);
+                const double sinA = std::sin(rad);
+                const QPointF dMouse(ip.x() - center.x(), ip.y() - center.y());
+                const QPointF local(dMouse.x() * cosA + dMouse.y() * sinA,
+                                    -dMouse.x() * sinA + dMouse.y() * cosA);
+                const QPointF d = baseHandle(m_handle) - center;
+                double sx = (std::abs(d.x()) > 0.5) ? local.x() / d.x() : m_startSx;
+                double sy = (std::abs(d.y()) > 0.5) ? local.y() / d.y() : m_startSy;
+                const bool corner = (m_handle == 0 || m_handle == 2 || m_handle == 4 || m_handle == 6);
+                if (event->modifiers() & Qt::ShiftModifier) {
+                    if (corner) {
+                        const double f = QLineF(QPointF(0, 0), local).length() /
+                                         std::max(1e-6, QLineF(QPointF(0, 0), d).length());
+                        sx = sy = f;
+                    } else if (std::abs(d.x()) > 0.5) {
+                        sy = sx;   // 边中点：把变化的轴同步到另一轴，保持等比
+                    } else {
+                        sx = sy;
+                    }
+                }
+                m_sx = qBound(0.02, std::abs(sx), 20.0);
+                m_sy = qBound(0.02, std::abs(sy), 20.0);
+                updateTransformStatus();
+                update();
+                return;
+            }
+            return;
+        }
         if (!m_toolActive) {
             return;
         }
-        const QPoint pos = event->pos();
         if (m_drag == None) {
             if (m_tool == 2 && !m_poly.isEmpty()) {
                 m_hover = toImage(pos);
@@ -742,6 +883,15 @@ protected:
     void mouseReleaseEvent(QMouseEvent *event) override
     {
         Q_UNUSED(event);
+        if (m_transform) {
+            if (m_drag == TransformScale || m_drag == TransformRotate) {
+                m_drag = None;
+                m_handle = -1;
+                setCursor(Qt::ArrowCursor);
+                update();
+            }
+            return;   // 变换不因松开鼠标而提交，等 Enter / 双击
+        }
         if (m_drag == None) {
             return;
         }
@@ -782,7 +932,7 @@ protected:
     }
 
 private:
-    enum DragMode { None, Creating, Moving };
+    enum DragMode { None, Creating, Moving, TransformScale, TransformRotate };
 
     // 图像在控件中的显示矩形(标签按 AlignCenter 居中)
     QRect displayRect() const
@@ -834,6 +984,214 @@ private:
         return QPoint(dr.left() + qRound(p.x() * sx), dr.top() + qRound(p.y() * sy));
     }
 
+    // ---- 交互式变换的坐标/手柄工具 ----
+    // 连续坐标映射：与 toWidget/toImage 同一套 displayRect() 口径
+    QPointF toWidgetF(const QPointF &p) const
+    {
+        const QRect dr = displayRect();
+        if (dr.isEmpty()) {
+            return QPointF();
+        }
+        const double sx = static_cast<double>(dr.width()) / std::max(1, m_imgW);
+        const double sy = static_cast<double>(dr.height()) / std::max(1, m_imgH);
+        return QPointF(dr.left() + p.x() * sx, dr.top() + p.y() * sy);
+    }
+
+    QPointF toImageF(const QPointF &p) const
+    {
+        const QRect dr = displayRect();
+        if (dr.isEmpty()) {
+            return QPointF();
+        }
+        const double sx = static_cast<double>(dr.width()) / std::max(1, m_imgW);
+        const double sy = static_cast<double>(dr.height()) / std::max(1, m_imgH);
+        return QPointF((p.x() - dr.left()) / sx, (p.y() - dr.top()) / sy);
+    }
+
+    // 基准矩形上的手柄点(图像坐标)：0..7 缩放，8 视同 1(上中点)
+    QPointF baseHandle(int index) const
+    {
+        const QRectF r = m_transformBase;
+        const double cx = r.x() + r.width() / 2.0;
+        const double cy = r.y() + r.height() / 2.0;
+        switch (index) {
+        case 0: return QPointF(r.left(), r.top());
+        case 1: return QPointF(cx, r.top());
+        case 2: return QPointF(r.right(), r.top());
+        case 3: return QPointF(r.right(), cy);
+        case 4: return QPointF(r.right(), r.bottom());
+        case 5: return QPointF(cx, r.bottom());
+        case 6: return QPointF(r.left(), r.bottom());
+        case 7: return QPointF(r.left(), cy);
+        default: return QPointF(cx, r.top());
+        }
+    }
+
+    // P' = C + Rθ( S(sx, sy) · (P − C) )，与提交内核的 QTransform 顺序一致
+    QPointF transformPoint(const QPointF &p) const
+    {
+        const QRectF r = m_transformBase;
+        const double cx = r.x() + r.width() / 2.0;
+        const double cy = r.y() + r.height() / 2.0;
+        const double rad = qDegreesToRadians(m_angle);
+        const double c = std::cos(rad);
+        const double s = std::sin(rad);
+        const QPointF d((p.x() - cx) * m_sx, (p.y() - cy) * m_sy);
+        return QPointF(cx + d.x() * c - d.y() * s, cy + d.x() * s + d.y() * c);
+    }
+
+    // 变换后的手柄位置；旋转手柄从上中点沿旋转方向外移 28 个控件像素
+    QPointF handlePoint(int index) const
+    {
+        if (index != 8) {
+            return transformPoint(baseHandle(index));
+        }
+        const QRect dr = displayRect();
+        const double scale = (dr.isEmpty() || m_imgH <= 0)
+                                 ? 1.0
+                                 : static_cast<double>(dr.height()) / m_imgH;
+        const double rad = qDegreesToRadians(m_angle);
+        const QPointF top = transformPoint(baseHandle(1));
+        return top + QPointF(28.0 * std::sin(rad) / std::max(0.01, scale),
+                             -28.0 * std::cos(rad) / std::max(0.01, scale));
+    }
+
+    // 命中测试(控件坐标)：先测旋转手柄，再测 8 个缩放手柄
+    int hitHandle(const QPoint &widgetPos) const
+    {
+        const QPointF pos(widgetPos);
+        for (int i = 8; i >= 0; --i) {
+            const QPointF w = toWidgetF(handlePoint(i));
+            if (QLineF(w, pos).length() <= 9.0) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    static Qt::CursorShape cursorForHandle(int handle)
+    {
+        switch (handle) {
+        case 8: return Qt::OpenHandCursor;
+        case 1: case 5: return Qt::SizeVerCursor;
+        case 3: case 7: return Qt::SizeHorCursor;
+        case 0: case 4: return Qt::SizeFDiagCursor;
+        case 2: case 6: return Qt::SizeBDiagCursor;
+        default: return Qt::ArrowCursor;
+        }
+    }
+
+    void updateTransformStatus()
+    {
+        if (onTransformChanged) {
+            onTransformChanged(m_sx, m_sy, m_angle);
+        }
+    }
+
+    // 实时预览：原位置刷白 → 变换后的内容 → 旋转后的轮廓与手柄
+    void paintTransform(QPainter &p) const
+    {
+        if (m_transformWhite.isNull() || m_transformContent.isNull()) {
+            return;
+        }
+        p.setRenderHint(QPainter::SmoothPixmapTransform, true);
+        p.setRenderHint(QPainter::Antialiasing, true);
+
+        const QPointF tl = toWidgetF(m_transformBase.topLeft());
+        const QPointF br = toWidgetF(m_transformBase.bottomRight());
+        const QRectF baseWidget(tl, br);
+        if (baseWidget.isEmpty()) {
+            return;
+        }
+
+        // 1) 原选区按覆盖度刷白(alpha = 掩码覆盖度)
+        p.drawImage(baseWidget, m_transformWhite);
+
+        // 2) 变换后的内容：缩放 → 旋转，锚点为选区中心
+        const QPointF center = toWidgetF(QPointF(m_transformBase.x() + m_transformBase.width() / 2.0,
+                                                 m_transformBase.y() + m_transformBase.height() / 2.0));
+        p.save();
+        p.translate(center);
+        p.rotate(m_angle);
+        p.scale(m_sx, m_sy);
+        p.translate(-center);
+        p.drawImage(baseWidget, m_transformContent);
+        p.restore();
+
+        // 3) 旋转后的虚线轮廓
+        QPolygonF outline;
+        outline << toWidgetF(transformPoint(baseHandle(0)))
+                << toWidgetF(transformPoint(baseHandle(2)))
+                << toWidgetF(transformPoint(baseHandle(4)))
+                << toWidgetF(transformPoint(baseHandle(6)));
+        QPen dark(QColor(0, 0, 0, 210));
+        dark.setStyle(Qt::CustomDashLine);
+        dark.setDashPattern(QVector<qreal>{4, 4});
+        dark.setDashOffset(m_dashOffset);
+        p.setPen(dark);
+        p.setBrush(Qt::NoBrush);
+        p.drawPolygon(outline);
+
+        QPen light(QColor(255, 255, 255, 230));
+        light.setStyle(Qt::CustomDashLine);
+        light.setDashPattern(QVector<qreal>{4, 4});
+        light.setDashOffset(m_dashOffset + 4);
+        p.setPen(light);
+        p.drawPolygon(outline);
+
+        // 4) 旋转手柄连接线 + 圆点
+        const QPointF topMid = toWidgetF(transformPoint(baseHandle(1)));
+        const QPointF rot = toWidgetF(handlePoint(8));
+        p.setPen(QPen(QColor(34, 211, 238), 1));
+        p.drawLine(topMid, rot);
+
+        // 5) 8 个缩放手柄
+        p.setBrush(QColor(34, 211, 238));
+        for (int i = 0; i < 8; ++i) {
+            const QPointF w = toWidgetF(handlePoint(i));
+            p.drawRect(QRectF(w.x() - 3.5, w.y() - 3.5, 7.0, 7.0));
+        }
+        p.setBrush(QColor(9, 13, 18));
+        p.drawEllipse(rot, 5, 5);
+        p.setBrush(QColor(34, 211, 238));
+        p.drawEllipse(rot, 3, 3);
+
+        // 6) 参数提示(放在轮廓包围盒上方；贴顶时放到下方)
+        QString text;
+        if (std::abs(m_sx - m_sy) < 1e-6) {
+            text = QString("缩放 %1%").arg(m_sx * 100.0, 0, 'f', 0);
+        } else {
+            text = QString("缩放 %1% × %2%")
+                       .arg(m_sx * 100.0, 0, 'f', 0)
+                       .arg(m_sy * 100.0, 0, 'f', 0);
+        }
+        if (std::abs(m_angle) >= 0.05) {
+            text += QString(" · 旋转 %1°").arg(m_angle, 0, 'f', 1);
+        }
+        QFont f = font();
+        f.setPointSize(9);
+        p.setFont(f);
+        const QFontMetrics fm(f);
+        const QRectF bounds = outline.boundingRect();
+        const int tw = fm.boundingRect(text).width() + 10;
+        const int th = fm.height() + 4;
+        QRectF box(bounds.left() + (bounds.width() - tw) / 2.0, bounds.top() - th - 8, tw, th);
+        if (box.top() < 0) {
+            box.moveTop(bounds.bottom() + 8);
+        }
+        if (box.right() > width() - 2) {
+            box.moveRight(width() - 2);
+        }
+        if (box.left() < 2) {
+            box.moveLeft(2);
+        }
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(9, 13, 18, 220));
+        p.drawRoundedRect(box, 4, 4);
+        p.setPen(QColor(103, 232, 249));
+        p.drawText(box, Qt::AlignCenter, text);
+    }
+
     QTimer *m_anim = nullptr;
     int m_dashOffset = 0;
     bool m_toolActive = false;
@@ -853,6 +1211,20 @@ private:
     QPoint m_pressPos;           // 移动起点(控件坐标)
     QPoint m_anchor;             // 建立选区锚点(图像坐标)
     QRect m_startSel;            // 移动前的选区
+
+    // ---- 交互式变换会话 ----
+    bool m_transform = false;          // 是否处于拖拽手柄变换
+    QImage m_transformWhite;           // 基准矩形大小，白色 + 掩码 alpha
+    QImage m_transformContent;         // 基准矩形大小，原像素 + 掩码 alpha
+    QRectF m_transformBase;            // 基准矩形(图像坐标)
+    double m_sx = 1.0;                 // 当前水平缩放
+    double m_sy = 1.0;                 // 当前垂直缩放
+    double m_angle = 0.0;              // 当前旋转角度(度)
+    int m_handle = -1;                 // 0..7 缩放 / 8 旋转
+    double m_startSx = 1.0;            // 本次拖动开始时的缩放
+    double m_startSy = 1.0;
+    double m_startAngle = 0.0;         // 本次拖动开始时的角度
+    double m_startPointerAngle = 0.0;  // 按下时指针相对选区中心的角度
 };
 
 MainWindow::MainWindow(QWidget *parent)
@@ -893,8 +1265,9 @@ MainWindow::MainWindow(QWidget *parent)
 
     // 视图菜单：主题切换 / 适应窗口
     QMenu *viewMenu = menuBar()->addMenu(QString("视图"));
+    // Ctrl+T 已交给「自由变换（拖拽手柄）」，主题切换改用 Ctrl+Shift+T
     QAction *themeAction = viewMenu->addAction(QString("切换深色/浅色主题"));
-    themeAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_T));
+    themeAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_T));
     connect(themeAction, &QAction::triggered, this, []() {
         Theme::Toggle();
     });
@@ -1107,6 +1480,24 @@ void MainWindow::SetupSelectionTool()
         const int gy = luma(imageData, x, y + 1) - luma(imageData, x, y - 1);
         return qAbs(gx) + qAbs(gy);
     };
+    // 拖拽手柄变换：拖动中刷新状态栏；回车/双击提交，Esc 取消
+    m_overlay->onTransformChanged = [this](double sx, double sy, double angle) {
+        QString text;
+        if (std::abs(sx - sy) < 1e-6) {
+            text = QString("自由变换：缩放 %1%").arg(sx * 100.0, 0, 'f', 0);
+        } else {
+            text = QString("自由变换：缩放 %1% × %2%")
+                       .arg(sx * 100.0, 0, 'f', 0)
+                       .arg(sy * 100.0, 0, 'f', 0);
+        }
+        if (std::abs(angle) >= 0.05) {
+            text += QString(" · 旋转 %1°").arg(angle, 0, 'f', 1);
+        }
+        UpdateStatus(text + "（回车提交，Esc 取消）");
+    };
+    m_overlay->onTransformFinished = [this](bool commit, double sx, double sy, double angle) {
+        FinishInteractiveTransform(commit, sx, sy, angle);
+    };
     ui->imageLabel->installEventFilter(this);
 
     // 工具栏：矩形选框 / 自由套索 / 多边形套索 / 磁性套索(勾选后才在图像上拖拽，避免误触)
@@ -1132,6 +1523,10 @@ void MainWindow::SetupSelectionTool()
 
     // 四个工具共用一套状态同步：任一被勾选时启用覆盖层，并切换工具类型
     auto applyToolState = [this]() {
+        // 切换选区工具时放弃未提交的拖拽变换，避免手柄状态残留
+        if (m_overlay != nullptr && m_overlay->isTransformActive()) {
+            CancelInteractiveTransform();
+        }
         const bool rect = m_selectionToolAction->isChecked();
         const bool lasso = m_lassoToolAction->isChecked();
         const bool poly = m_polyToolAction->isChecked();
@@ -1214,6 +1609,10 @@ void MainWindow::SetupSelectionTool()
             StrokeSelection(color, static_cast<int>(dlg.value(0)));
         }
     });
+    // Ctrl+T 交给拖拽手柄；数值输入入口保留
+    QAction *interactiveTransform = addItem(QString("自由变换（拖拽手柄）"),
+                                            QKeySequence(Qt::CTRL | Qt::Key_T),
+                                            [this]() { BeginInteractiveTransform(); });
     QAction *transformAction = addItem(QString("自由变换…"), QKeySequence(), [this]() {
         if (!HasSelection()) {
             UpdateStatus("请先建立选区");
@@ -1275,13 +1674,15 @@ void MainWindow::SetupSelectionTool()
 
     // 没有选区时禁用需要选区的操作
     connect(m_selectionMenu, &QMenu::aboutToShow, this,
-            [this, copyAction, pasteAction, fillAction, strokeAction, transformAction, cropAction,
-             eraseAction, featherAction, growAction, shrinkAction, smoothAction]() {
+            [this, copyAction, pasteAction, fillAction, strokeAction, interactiveTransform,
+             transformAction, cropAction, eraseAction, featherAction, growAction, shrinkAction,
+             smoothAction]() {
         const bool has = HasSelection();
         copyAction->setEnabled(has);
         pasteAction->setEnabled(has);
         fillAction->setEnabled(has);
         strokeAction->setEnabled(has);
+        interactiveTransform->setEnabled(has);
         transformAction->setEnabled(has);
         cropAction->setEnabled(has);
         eraseAction->setEnabled(has);
@@ -1316,6 +1717,12 @@ void MainWindow::SyncSelectionToImage()
 {
     const int32_t w = myValue.bmpInfo.GetWidth();
     const int32_t h = myValue.bmpInfo.GetHeight();
+    // 撤销/裁剪/换图后变换基准已失效，先静默退出拖拽手柄
+    if (m_overlay != nullptr && m_overlay->isTransformActive() &&
+        (imageData.empty() || w <= 0 || h <= 0 || !HasSelection() ||
+         m_mask.width != w || m_mask.height != h)) {
+        CancelInteractiveTransform();
+    }
     if (imageData.empty() || w <= 0 || h <= 0) {
         m_mask.clear();
         m_selection = QRect();
@@ -2055,6 +2462,14 @@ void MainWindow::StrokeSelection(const QColor &color, int width)
 
 void MainWindow::FreeTransformSelection(double scalePercent, double angleDegrees)
 {
+    ApplyFreeTransform(scalePercent / 100.0, scalePercent / 100.0, angleDegrees,
+                       QStringLiteral("自由变换"));
+}
+
+// 非等比缩放 + 旋转：交互式手柄提交与自检都走这里
+void MainWindow::ApplyFreeTransform(double scaleX, double scaleY, double angleDegrees,
+                                    const QString &label)
+{
     if (m_busy) {
         UpdateStatus("上一个操作还在处理中，请稍候");
         return;
@@ -2069,9 +2484,10 @@ void MainWindow::FreeTransformSelection(double scalePercent, double angleDegrees
         UpdateStatus("请先建立选区");
         return;
     }
-    const double s = qBound(0.01, scalePercent / 100.0, 20.0);
+    const double sx = qBound(0.01, scaleX, 20.0);
+    const double sy = qBound(0.01, scaleY, 20.0);
     const double angle = angleDegrees;
-    if (std::abs(s - 1.0) < 1e-6 && std::abs(angle) < 1e-6) {
+    if (std::abs(sx - 1.0) < 1e-6 && std::abs(sy - 1.0) < 1e-6 && std::abs(angle) < 1e-6) {
         return;   // 没有变换参数
     }
 
@@ -2130,7 +2546,7 @@ void MainWindow::FreeTransformSelection(double scalePercent, double angleDegrees
         QTransform t;
         t.translate(cx, cy);
         t.rotate(angle);
-        t.scale(s, s);
+        t.scale(sx, sy);
         t.translate(-cx, -cy);
         p.setTransform(t);
         p.drawImage(QPointF(sel.x(), sel.y()), content);
@@ -2160,9 +2576,109 @@ void MainWindow::FreeTransformSelection(double scalePercent, double angleDegrees
 
     m_mask = std::move(newMask);
     m_selection = MaskBoundingRect();
-    ApplySnapshot(MakeSnapshot(std::move(result), w, h, m_contentQuad), false, "自由变换");
-    UpdateStatus(QString("已自由变换选区内容：缩放 %1% · 旋转 %2°")
-                     .arg(scalePercent).arg(angle));
+    ApplySnapshot(MakeSnapshot(std::move(result), w, h, m_contentQuad), false, label);
+
+    QString message;
+    if (std::abs(sx - sy) < 1e-6) {
+        message = QString("已自由变换选区内容：缩放 %1%").arg(sx * 100.0, 0, 'f', 1);
+    } else {
+        message = QString("已自由变换选区内容：缩放 %1% × %2%")
+                      .arg(sx * 100.0, 0, 'f', 1)
+                      .arg(sy * 100.0, 0, 'f', 1);
+    }
+    if (std::abs(angle) >= 0.05) {
+        message += QString(" · 旋转 %1°").arg(angle, 0, 'f', 1);
+    }
+    UpdateStatus(message);
+}
+
+// 进入拖拽手柄变换：把选区内容抽成"刷白层 + 内容层"两张预览图交给覆盖层
+void MainWindow::BeginInteractiveTransform()
+{
+    if (m_busy) {
+        UpdateStatus("上一个操作还在处理中，请稍候");
+        return;
+    }
+    const int32_t w = myValue.bmpInfo.GetWidth();
+    const int32_t h = myValue.bmpInfo.GetHeight();
+    if (imageData.empty() || w <= 0 || h <= 0) {
+        UpdateStatus("请先打开一张图像");
+        return;
+    }
+    if (!HasSelection() || m_mask.width != w || m_mask.height != h) {
+        UpdateStatus("请先建立选区");
+        return;
+    }
+    const QRect sel = m_selection.intersected(QRect(0, 0, w, h));
+    if (sel.isEmpty()) {
+        UpdateStatus("选区超出画布范围，无法变换");
+        return;
+    }
+    CancelPreview();   // 变换基于已提交的图像
+
+    QImage white(sel.width(), sel.height(), QImage::Format_ARGB32);
+    QImage content(sel.width(), sel.height(), QImage::Format_ARGB32);
+    white.fill(Qt::transparent);
+    content.fill(Qt::transparent);
+    for (int y = 0; y < sel.height(); ++y) {
+        const int vy = sel.y() + y;
+        const uint8_t *mrow = m_mask.data.data() + static_cast<size_t>(vy) * static_cast<size_t>(w);
+        QRgb *wline = reinterpret_cast<QRgb *>(white.scanLine(y));
+        QRgb *cline = reinterpret_cast<QRgb *>(content.scanLine(y));
+        for (int x = 0; x < sel.width(); ++x) {
+            const int vx = sel.x() + x;
+            const int a = mrow[vx];
+            if (a == 0) {
+                continue;
+            }
+            wline[x] = qRgba(255, 255, 255, a);
+            const size_t idx = (static_cast<size_t>(h - 1 - vy) * static_cast<size_t>(w) +
+                                static_cast<size_t>(vx)) * 3;
+            cline[x] = qRgba(imageData[idx + 2], imageData[idx + 1], imageData[idx], a);
+        }
+    }
+
+    m_overlay->setToolActive(true);
+    m_overlay->beginTransform(sel, white, content);
+    m_overlay->setFocus();
+    UpdateStatus("自由变换：拖拽角点缩放，拖拽顶部圆点旋转；回车提交，Esc 取消");
+}
+
+bool MainWindow::AnySelectionToolChecked() const
+{
+    return m_selectionToolAction->isChecked() || m_lassoToolAction->isChecked() ||
+           m_polyToolAction->isChecked() || m_magnetToolAction->isChecked();
+}
+
+// 变换结束：提交走 ApplyFreeTransform，取消只退出会话(画布本来就没被改过)
+void MainWindow::FinishInteractiveTransform(bool commit, double scaleX, double scaleY,
+                                            double angleDegrees)
+{
+    if (m_overlay == nullptr || !m_overlay->isTransformActive()) {
+        return;
+    }
+    m_overlay->endTransform();
+    m_overlay->setToolActive(AnySelectionToolChecked());
+    if (!commit) {
+        UpdateStatus("已取消自由变换");
+        return;
+    }
+    if (std::abs(scaleX - 1.0) < 1e-6 && std::abs(scaleY - 1.0) < 1e-6 &&
+        std::abs(angleDegrees) < 1e-6) {
+        UpdateStatus("自由变换未做改动");
+        return;
+    }
+    ApplyFreeTransform(scaleX, scaleY, angleDegrees, QStringLiteral("自由变换"));
+}
+
+// 撤销/裁剪/切换工具导致的静默退出
+void MainWindow::CancelInteractiveTransform()
+{
+    if (m_overlay != nullptr && m_overlay->isTransformActive()) {
+        m_overlay->endTransform();
+        m_overlay->setToolActive(AnySelectionToolChecked());
+        UpdateStatus("已取消自由变换");
+    }
 }
 
 void MainWindow::SetupLayerPanel()

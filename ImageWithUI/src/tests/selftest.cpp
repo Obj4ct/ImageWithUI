@@ -2106,6 +2106,76 @@ int Run(const QString &imagePath)
         out().flush();
     }
 
+    // ---------- 21.1 非等比自由变换 ----------
+    {
+        const QString nqPath = QDir::tempPath() + "/imagewithui_selftest_transform_nq.png";
+        {
+            QImage img(80, 60, QImage::Format_RGB32);
+            img.fill(qRgb(40, 120, 200));   // 内存里是 BGR(200,120,40)
+            img.save(nqPath, "PNG");
+        }
+
+        QString failReason;
+        {
+            MainWindow win;
+            if (!win.OpenImage(nqPath)) {
+                failReason = "无法打开测试图";
+            } else {
+                auto pixelAt = [](MainWindow &w, int x, int y, int out[3]) -> bool {
+                    const std::vector<uint8_t> &px = w.CurrentImageData();
+                    const int32_t iw = w.myValue.bmpInfo.GetWidth();
+                    const int32_t ih = w.myValue.bmpInfo.GetHeight();
+                    if (iw <= 0 || ih <= 0 || x < 0 || y < 0 || x >= iw || y >= ih) {
+                        return false;
+                    }
+                    const size_t i = (static_cast<size_t>(ih - 1 - y) * static_cast<size_t>(iw)
+                                      + static_cast<size_t>(x)) * 3;
+                    if (i + 2 >= px.size()) {
+                        return false;
+                    }
+                    out[0] = px[i];
+                    out[1] = px[i + 1];
+                    out[2] = px[i + 2];
+                    return true;
+                };
+
+                win.SetSelection(QRect(20, 20, 40, 20));
+                const QRect before = win.SelectionRect();
+                const int beforeHistory = static_cast<int>(win.imageDataHistory.size());
+                win.ApplyFreeTransform(1.2, 0.8, 0.0, QStringLiteral("自由变换"));
+                const QRect after = win.SelectionRect();
+                int corner[3] = {0, 0, 0};
+                if (qAbs(after.width() - 48) > 8 || qAbs(after.height() - 16) > 8) {
+                    failReason = QString("非等比缩放尺寸不对(实际 %1 × %2)")
+                                     .arg(after.width()).arg(after.height());
+                } else if (QLineF(QPointF(after.center()), QPointF(before.center())).length() > 2.0) {
+                    failReason = "缩放后选区中心偏移过大";
+                } else if (!pixelAt(win, 20, 20, corner) || corner[0] != 255 ||
+                           corner[1] != 255 || corner[2] != 255) {
+                    failReason = "非等比缩放后原位置没有留白";
+                } else if (static_cast<int>(win.imageDataHistory.size()) != beforeHistory + 1) {
+                    failReason = "非等比缩放没有写入一步历史";
+                } else {
+                    win.UndoImageProcessing();
+                    if (!pixelAt(win, 20, 20, corner) || corner[0] != 200 ||
+                        corner[1] != 120 || corner[2] != 40) {
+                        failReason = "撤销后原像素没有恢复";
+                    }
+                }
+            }
+        }
+        QFile::remove(nqPath);
+
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 非等比自由变换 : 1.2 × 0.8 后包围盒变宽变窄、中心不动、可撤销\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 非等比自由变换 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
     // ---------- 22. 全局撤销跨标签 ----------
     {
         const QString crossAPath = QDir::tempPath() + "/imagewithui_cross_a.png";
