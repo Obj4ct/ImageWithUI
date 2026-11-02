@@ -124,7 +124,7 @@ QStatusBar::item {
          <item>
           <widget class="QLabel" name="label_2">
            <property name="text">
-            <string>点击脸部中心</string>
+            <string>选好效果后，在图上按住左键涂抹（可拖动）</string>
            </property>
           </widget>
          </item>
@@ -209,7 +209,7 @@ QStatusBar::item {
          <item>
           <widget class="QLabel" name="label_6">
            <property name="text">
-            <string>影响范围</string>
+            <string>画笔大小</string>
            </property>
           </widget>
          </item>
@@ -251,7 +251,7 @@ QStatusBar::item {
          <item>
           <widget class="QPushButton" name="btn_ok">
            <property name="text">
-            <string>确定</string>
+            <string>重置</string>
            </property>
           </widget>
          </item>

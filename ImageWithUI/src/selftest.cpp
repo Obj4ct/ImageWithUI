@@ -4,6 +4,7 @@
 #include "mainwindow.h"
 #include "editdialogs.h"
 #include "eye.h"
+#include "face.h"
 #include <QFileInfo>
 #include <QTextStream>
 #include <QEventLoop>
@@ -2406,6 +2407,53 @@ int Run(const QString &imagePath)
         } else {
             ++g_fail;
             out() << "[FAIL] 旋转实时预览 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
+    // ---------- 27. 图片微调效果(收拢/膨胀/平滑/漩涡/推移) ----------
+    {
+        QString failReason;
+        const int w = 64, h = 64;
+        // 造一张高频噪点图：任何重采样都会让像素值明显变化，便于断言
+        std::vector<uint8_t> base(static_cast<size_t>(w) * h * 3);
+        for (int y = 0; y < h; ++y) {
+            for (int x = 0; x < w; ++x) {
+                const size_t i = (static_cast<size_t>(y) * w + x) * 3;
+                const uint8_t v = static_cast<uint8_t>((x * 7 + y * 13) % 251);
+                base[i] = v;
+                base[i + 1] = static_cast<uint8_t>((v + 60) % 251);
+                base[i + 2] = static_cast<uint8_t>((v + 120) % 251);
+            }
+        }
+        auto differs = [&base, w](const std::vector<uint8_t> &out, int x, int y) {
+            const size_t i = (static_cast<size_t>(y) * w + x) * 3;
+            return out[i] != base[i] || out[i + 1] != base[i + 1] || out[i + 2] != base[i + 2];
+        };
+
+        const Face::RetouchEffect effects[] = {
+            Face::Pucker, Face::Bloat, Face::Smooth, Face::Twirl, Face::Push
+        };
+        for (Face::RetouchEffect effect : effects) {
+            std::vector<uint8_t> out = base;
+            Face::ApplyEffect(out, w, h, effect, 32, 32, 12, 0.8, 4, 0);
+            // 画笔内必须变化，画笔外必须原样
+            if (!differs(out, 36, 32)) {
+                failReason = QString("效果 %1 没有改变画笔内的像素").arg(static_cast<int>(effect));
+                break;
+            }
+            if (differs(out, 1, 1)) {
+                failReason = QString("效果 %1 改动了画笔外的像素").arg(static_cast<int>(effect));
+                break;
+            }
+        }
+
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 图片微调 : 5 种效果都能生效且不影响画笔外区域\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 图片微调 : " << failReason << "\n";
         }
         out().flush();
     }

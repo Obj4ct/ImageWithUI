@@ -1006,7 +1006,7 @@
   </action>
   <action name="actionface">
    <property name="text">
-    <string>人像瘦脸…</string>
+    <string>图片微调…</string>
    </property>
   </action>
   <action name="actiontailor">
