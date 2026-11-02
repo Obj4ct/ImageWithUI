@@ -11,6 +11,8 @@
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QLabel>
+#include <QEvent>
+#include <functional>
 #include <cmath>
 
 // ------------------------------------------------------------------
@@ -62,6 +64,37 @@ void BindSliderToSpin(QSlider *slider, QDoubleSpinBox *spin)
                      });
 }
 
+// 双击数值框恢复打开对话框时的初始值；方向键步进由 spin 自身负责(1 个 singleStep)
+class ResetSpinFilter : public QObject
+{
+public:
+    explicit ResetSpinFilter(std::function<void()> reset, QObject *parent = nullptr)
+        : QObject(parent), m_reset(std::move(reset))
+    {
+    }
+
+    bool eventFilter(QObject *, QEvent *event) override
+    {
+        if (event->type() == QEvent::MouseButtonDblClick) {
+            m_reset();
+            return true;
+        }
+        return false;
+    }
+
+private:
+    std::function<void()> m_reset;
+};
+
+template <typename Spin>
+void InstallSpinReset(Spin *spin)
+{
+    const auto initial = spin->value();
+    spin->installEventFilter(new ResetSpinFilter([spin, initial]() {
+        spin->setValue(initial);
+    }, spin));
+}
+
 }   // namespace
 
 QWidget *MakeSliderRow(const QString &label, QSpinBox *spin, QWidget *parent)
@@ -78,6 +111,7 @@ QWidget *MakeSliderRow(const QString &label, QSpinBox *spin, QWidget *parent)
     top->addWidget(spin);
     layout->addLayout(top);
 
+    InstallSpinReset(spin);
     QSlider *slider = NewSlider(box);
     BindSliderToSpin(slider, spin);
     layout->addWidget(slider);
@@ -98,6 +132,7 @@ QWidget *MakeSliderRow(const QString &label, QDoubleSpinBox *spin, QWidget *pare
     top->addWidget(spin);
     layout->addLayout(top);
 
+    InstallSpinReset(spin);
     QSlider *slider = NewSlider(box);
     BindSliderToSpin(slider, spin);
     layout->addWidget(slider);
@@ -111,6 +146,7 @@ QWidget *MakeSliderCell(QSpinBox *spin, QWidget *parent)
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(2);
     layout->addWidget(spin);
+    InstallSpinReset(spin);
     QSlider *slider = NewSlider(box);
     BindSliderToSpin(slider, spin);
     layout->addWidget(slider);
@@ -124,6 +160,7 @@ QWidget *MakeSliderCell(QDoubleSpinBox *spin, QWidget *parent)
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(2);
     layout->addWidget(spin);
+    InstallSpinReset(spin);
     QSlider *slider = NewSlider(box);
     BindSliderToSpin(slider, spin);
     layout->addWidget(slider);

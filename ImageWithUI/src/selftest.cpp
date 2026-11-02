@@ -13,6 +13,7 @@
 #include <QSlider>
 #include <QApplication>
 #include <QMouseEvent>
+#include <QKeyEvent>
 #include <QTabBar>
 #include <QAction>
 #include <cmath>
@@ -2285,6 +2286,53 @@ int Run(const QString &imagePath)
         } else {
             ++g_fail;
             out() << "[FAIL] 参数滑块同步 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
+    // ---------- 24. 数值框方向键步进与双击复位 ----------
+    {
+        MainWindow win;
+        QString failReason;
+        QSlider *slider = win.findChild<QSlider *>("slider_brightness");
+        QLineEdit *edit = win.findChild<QLineEdit *>("lineEdit_brightness");
+        if (slider == nullptr || edit == nullptr) {
+            failReason = "找不到亮度滑块/数值框";
+        } else {
+            edit->setText(QString("10"));
+            if (slider->value() != 10) {
+                failReason = "初始数值未同步到滑块";
+            } else {
+                // ↑ 走 1 个刻度
+                QKeyEvent up(QEvent::KeyPress, Qt::Key_Up, Qt::NoModifier);
+                QApplication::sendEvent(edit, &up);
+                if (slider->value() != 11) {
+                    failReason = QString("↑ 后滑块应为 11，实际 %1").arg(slider->value());
+                } else {
+                    // Shift+↑ 走 10 个刻度
+                    QKeyEvent upShift(QEvent::KeyPress, Qt::Key_Up, Qt::ShiftModifier);
+                    QApplication::sendEvent(edit, &upShift);
+                    if (slider->value() != 21) {
+                        failReason = QString("Shift+↑ 后滑块应为 21，实际 %1").arg(slider->value());
+                    } else {
+                        // 双击数值框回到默认值 0
+                        QMouseEvent dbl(QEvent::MouseButtonDblClick, QPointF(2, 2),
+                                        Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+                        QApplication::sendEvent(edit, &dbl);
+                        if (slider->value() != 0 || edit->text().trimmed() != QString("0")) {
+                            failReason = QString("双击后应回到默认值 0，实际滑块 %1 / 数值 %2")
+                                             .arg(slider->value()).arg(edit->text());
+                        }
+                    }
+                }
+            }
+        }
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 滑块键盘微调 : ↑↓ 步进、Shift 十倍步进、双击恢复默认\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 滑块键盘微调 : " << failReason << "\n";
         }
         out().flush();
     }
