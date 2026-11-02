@@ -814,7 +814,7 @@
     <addaction name="actionsobel"/>
     <addaction name="actionmosaic"/>
     <addaction name="actioneyeZoom"/>
-    <addaction name="actionface"/>
+    <addaction name="actionretouch"/>
     <addaction name="actionfishEye"/>
    </widget>
    <addaction name="menu"/>
@@ -1004,7 +1004,7 @@
     <string>校正偏色</string>
    </property>
   </action>
-  <action name="actionface">
+  <action name="actionretouch">
    <property name="text">
     <string>图片微调…</string>
    </property>
