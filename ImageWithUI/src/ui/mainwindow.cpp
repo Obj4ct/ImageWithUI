@@ -938,6 +938,14 @@ MainWindow::MainWindow(QWidget *parent)
     resize(fitW, fitH);
     setMinimumSize(qMin(760, fitW), qMin(520, fitH));
     move(avail.left() + (avail.width() - fitW) / 2, avail.top() + (avail.height() - fitH) / 2);
+
+    // 把带快捷键的动作用于整个应用：焦点在图片微调/放大眼睛等子窗口时，
+    // Ctrl+Z、Ctrl+S 这些依然生效(默认的 WindowShortcut 只在主窗口激活时有效)
+    for (QAction *action : findChildren<QAction *>()) {
+        if (!action->shortcut().isEmpty()) {
+            action->setShortcutContext(Qt::ApplicationShortcut);
+        }
+    }
 }
 
 
