@@ -46,7 +46,7 @@ ColorMap::ColorMap(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     ui->setupUi(this);
     // 清掉 .ui 里自带的浅色样式，统一交给全局主题(Theme.h)接管
     setStyleSheet(QString());
-    setWindowTitle(QString("色彩映射"));
+    setWindowTitle(QString("调色曲线"));
     setWindowIcon(QIcon(":/icon/logo.png"));
     imageData = mainWindow->imageData;
     newValue = myValue;

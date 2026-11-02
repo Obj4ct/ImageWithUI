@@ -11,24 +11,24 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>数字图像处理系统</string>
+   <string>ImageWithUI · 图片编辑器</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QHBoxLayout" name="horizontalLayout_4">
     <property name="spacing">
-     <number>12</number>
+     <number>0</number>
     </property>
     <property name="leftMargin">
-     <number>12</number>
+     <number>0</number>
     </property>
     <property name="topMargin">
-     <number>12</number>
+     <number>0</number>
     </property>
     <property name="rightMargin">
-     <number>12</number>
+     <number>0</number>
     </property>
     <property name="bottomMargin">
-     <number>12</number>
+     <number>0</number>
     </property>
     <item>
      <widget class="QLabel" name="imageLabel">
@@ -79,33 +79,32 @@
      <widget class="QWidget" name="widget" native="true">
       <property name="minimumSize">
        <size>
-        <width>336</width>
+        <width>300</width>
         <height>0</height>
        </size>
       </property>
       <property name="maximumSize">
        <size>
-        <width>336</width>
+        <width>300</width>
         <height>16777215</height>
        </size>
       </property>
       <layout class="QHBoxLayout" name="horizontalLayout_5">
-       <item>
-        <spacer name="horizontalSpacer">
-         <property name="orientation">
-          <enum>Qt::Horizontal</enum>
-         </property>
-         <property name="sizeType">
-          <enum>QSizePolicy::Ignored</enum>
-         </property>
-         <property name="sizeHint" stdset="0">
-          <size>
-           <width>40</width>
-           <height>20</height>
-          </size>
-         </property>
-        </spacer>
-       </item>
+       <property name="spacing">
+        <number>0</number>
+       </property>
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
        <item>
         <widget class="QWidget" name="widget_14" native="true">
          <layout class="QVBoxLayout" name="verticalLayout_4">
@@ -127,228 +126,8 @@
           <item>
            <widget class="QLabel" name="label_sec_adjust">
             <property name="text">
-             <string>图像调整</string>
+             <string>调整</string>
             </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QWidget" name="widget_8" native="true">
-            <layout class="QHBoxLayout" name="horizontalLayout_12">
-             <property name="spacing">
-              <number>0</number>
-             </property>
-             <property name="leftMargin">
-              <number>0</number>
-             </property>
-             <property name="topMargin">
-              <number>0</number>
-             </property>
-             <property name="rightMargin">
-              <number>0</number>
-             </property>
-             <property name="bottomMargin">
-              <number>0</number>
-             </property>
-             <item>
-              <widget class="QLabel" name="label_36">
-               <property name="text">
-                <string>锐化程度            </string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QLineEdit" name="lineEdit_sharpen">
-               <property name="placeholderText">
-                <string>0 ~ 200</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QPushButton" name="btn_sharpen">
-               <property name="text">
-                <string>应用</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <spacer name="horizontalSpacer_3">
-               <property name="orientation">
-                <enum>Qt::Horizontal</enum>
-               </property>
-               <property name="sizeHint" stdset="0">
-                <size>
-                 <width>40</width>
-                 <height>20</height>
-                </size>
-               </property>
-              </spacer>
-             </item>
-            </layout>
-           </widget>
-          </item>
-          <item>
-           <widget class="QWidget" name="widget_9" native="true">
-            <layout class="QHBoxLayout" name="horizontalLayout_10">
-             <property name="spacing">
-              <number>0</number>
-             </property>
-             <property name="leftMargin">
-              <number>0</number>
-             </property>
-             <property name="topMargin">
-              <number>0</number>
-             </property>
-             <property name="rightMargin">
-              <number>0</number>
-             </property>
-             <property name="bottomMargin">
-              <number>0</number>
-             </property>
-             <item>
-              <widget class="QLabel" name="label_32">
-               <property name="text">
-                <string>高光值         </string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QLineEdit" name="lineEdit_highlight">
-               <property name="placeholderText">
-                <string>0 ~ 255</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QPushButton" name="btn_highlight_ok">
-               <property name="text">
-                <string>应用</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <spacer name="horizontalSpacer_4">
-               <property name="orientation">
-                <enum>Qt::Horizontal</enum>
-               </property>
-               <property name="sizeHint" stdset="0">
-                <size>
-                 <width>40</width>
-                 <height>20</height>
-                </size>
-               </property>
-              </spacer>
-             </item>
-            </layout>
-           </widget>
-          </item>
-          <item>
-           <widget class="QWidget" name="widget_10" native="true">
-            <layout class="QHBoxLayout" name="horizontalLayout_11">
-             <property name="spacing">
-              <number>0</number>
-             </property>
-             <property name="leftMargin">
-              <number>0</number>
-             </property>
-             <property name="topMargin">
-              <number>0</number>
-             </property>
-             <property name="rightMargin">
-              <number>0</number>
-             </property>
-             <property name="bottomMargin">
-              <number>0</number>
-             </property>
-             <item>
-              <widget class="QLabel" name="label_34">
-               <property name="text">
-                <string>阈值             </string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QLineEdit" name="lineEdit_threshold">
-               <property name="placeholderText">
-                <string>0 ~ 255</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QPushButton" name="btn_threshold_ok">
-               <property name="text">
-                <string>应用</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <spacer name="horizontalSpacer_5">
-               <property name="orientation">
-                <enum>Qt::Horizontal</enum>
-               </property>
-               <property name="sizeHint" stdset="0">
-                <size>
-                 <width>40</width>
-                 <height>20</height>
-                </size>
-               </property>
-              </spacer>
-             </item>
-            </layout>
-           </widget>
-          </item>
-          <item>
-           <widget class="QWidget" name="widget_21" native="true">
-            <layout class="QHBoxLayout" name="horizontalLayout_9">
-             <property name="spacing">
-              <number>0</number>
-             </property>
-             <property name="leftMargin">
-              <number>0</number>
-             </property>
-             <property name="topMargin">
-              <number>0</number>
-             </property>
-             <property name="rightMargin">
-              <number>0</number>
-             </property>
-             <property name="bottomMargin">
-              <number>0</number>
-             </property>
-             <item>
-              <widget class="QLabel" name="label_30">
-               <property name="text">
-                <string>阴影程度         </string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QLineEdit" name="lineEdit_shadow">
-               <property name="placeholderText">
-                <string>0 ~ 100</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QPushButton" name="btn_shadow_ok">
-               <property name="text">
-                <string>应用</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <spacer name="horizontalSpacer_6">
-               <property name="orientation">
-                <enum>Qt::Horizontal</enum>
-               </property>
-               <property name="sizeHint" stdset="0">
-                <size>
-                 <width>40</width>
-                 <height>20</height>
-                </size>
-               </property>
-              </spacer>
-             </item>
-            </layout>
            </widget>
           </item>
           <item>
@@ -485,7 +264,7 @@
              <item>
               <widget class="QLabel" name="label_3">
                <property name="text">
-                <string>饱和度          </string>
+                <string>饱和度</string>
                </property>
               </widget>
              </item>
@@ -520,9 +299,229 @@
            </widget>
           </item>
           <item>
+           <widget class="QWidget" name="widget_21" native="true">
+            <layout class="QHBoxLayout" name="horizontalLayout_9">
+             <property name="spacing">
+              <number>0</number>
+             </property>
+             <property name="leftMargin">
+              <number>0</number>
+             </property>
+             <property name="topMargin">
+              <number>0</number>
+             </property>
+             <property name="rightMargin">
+              <number>0</number>
+             </property>
+             <property name="bottomMargin">
+              <number>0</number>
+             </property>
+             <item>
+              <widget class="QLabel" name="label_30">
+               <property name="text">
+                <string>提亮暗部</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLineEdit" name="lineEdit_shadow">
+               <property name="placeholderText">
+                <string>0 ~ 100</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="btn_shadow_ok">
+               <property name="text">
+                <string>应用</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="horizontalSpacer_6">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>40</width>
+                 <height>20</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QWidget" name="widget_9" native="true">
+            <layout class="QHBoxLayout" name="horizontalLayout_10">
+             <property name="spacing">
+              <number>0</number>
+             </property>
+             <property name="leftMargin">
+              <number>0</number>
+             </property>
+             <property name="topMargin">
+              <number>0</number>
+             </property>
+             <property name="rightMargin">
+              <number>0</number>
+             </property>
+             <property name="bottomMargin">
+              <number>0</number>
+             </property>
+             <item>
+              <widget class="QLabel" name="label_32">
+               <property name="text">
+                <string>压住过曝</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLineEdit" name="lineEdit_highlight">
+               <property name="placeholderText">
+                <string>0 ~ 255</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="btn_highlight_ok">
+               <property name="text">
+                <string>应用</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="horizontalSpacer_4">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>40</width>
+                 <height>20</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QWidget" name="widget_8" native="true">
+            <layout class="QHBoxLayout" name="horizontalLayout_12">
+             <property name="spacing">
+              <number>0</number>
+             </property>
+             <property name="leftMargin">
+              <number>0</number>
+             </property>
+             <property name="topMargin">
+              <number>0</number>
+             </property>
+             <property name="rightMargin">
+              <number>0</number>
+             </property>
+             <property name="bottomMargin">
+              <number>0</number>
+             </property>
+             <item>
+              <widget class="QLabel" name="label_36">
+               <property name="text">
+                <string>让边缘更清晰</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLineEdit" name="lineEdit_sharpen">
+               <property name="placeholderText">
+                <string>0 ~ 200</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="btn_sharpen">
+               <property name="text">
+                <string>应用</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="horizontalSpacer_3">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>40</width>
+                 <height>20</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QWidget" name="widget_10" native="true">
+            <layout class="QHBoxLayout" name="horizontalLayout_11">
+             <property name="spacing">
+              <number>0</number>
+             </property>
+             <property name="leftMargin">
+              <number>0</number>
+             </property>
+             <property name="topMargin">
+              <number>0</number>
+             </property>
+             <property name="rightMargin">
+              <number>0</number>
+             </property>
+             <property name="bottomMargin">
+              <number>0</number>
+             </property>
+             <item>
+              <widget class="QLabel" name="label_34">
+               <property name="text">
+                <string>黑白分界</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLineEdit" name="lineEdit_threshold">
+               <property name="placeholderText">
+                <string>0 ~ 255</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="btn_threshold_ok">
+               <property name="text">
+                <string>应用</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="horizontalSpacer_5">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>40</width>
+                 <height>20</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
            <widget class="QLabel" name="label_sec_transform">
             <property name="text">
-             <string>几何变换</string>
+             <string>旋转</string>
             </property>
            </widget>
           </item>
@@ -550,14 +549,14 @@
              <item>
               <widget class="QLabel" name="label_20">
                <property name="text">
-                <string>顺时针          </string>
+                <string>向右转</string>
                </property>
               </widget>
              </item>
              <item>
               <widget class="QLineEdit" name="lineEdit_rotate">
                <property name="placeholderText">
-                <string>角度 0~360</string>
+                <string>0 ~ 360</string>
                </property>
               </widget>
              </item>
@@ -605,14 +604,14 @@
              <item>
               <widget class="QLabel" name="label_21">
                <property name="text">
-                <string>逆时针          </string>
+                <string>向左转</string>
                </property>
               </widget>
              </item>
              <item>
               <widget class="QLineEdit" name="lineEdit_rotate_r">
                <property name="placeholderText">
-                <string>角度 0~360</string>
+                <string>0 ~ 360</string>
                </property>
               </widget>
              </item>
@@ -638,19 +637,6 @@
              </item>
             </layout>
            </widget>
-          </item>
-          <item>
-           <spacer name="verticalSpacer_panel">
-            <property name="orientation">
-             <enum>Qt::Vertical</enum>
-            </property>
-            <property name="sizeHint" stdset="0">
-             <size>
-              <width>20</width>
-              <height>40</height>
-             </size>
-            </property>
-           </spacer>
           </item>
           <item>
            <widget class="QGroupBox" name="group_history">
@@ -710,7 +696,7 @@
              <item>
               <widget class="QLabel" name="label_layers_hint">
                <property name="text">
-                <string>图层系统开发中（当前为单图层）</string>
+                <string/>
                </property>
                <property name="alignment">
                 <set>Qt::AlignCenter</set>
@@ -719,6 +705,19 @@
              </item>
             </layout>
            </widget>
+          </item>
+          <item>
+           <spacer name="verticalSpacer_panel">
+            <property name="orientation">
+             <enum>Qt::Vertical</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>20</width>
+              <height>40</height>
+             </size>
+            </property>
+           </spacer>
           </item>
          </layout>
         </widget>
@@ -752,82 +751,48 @@
     <addaction name="actionredo"/>
     <addaction name="actionreset"/>
    </widget>
-   <widget class="QMenu" name="menu_blur">
-    <property name="title">
-     <string>图像模糊</string>
-    </property>
-    <addaction name="actionmedian"/>
-    <addaction name="actionaver"/>
-    <addaction name="actiongauss"/>
-   </widget>
    <widget class="QMenu" name="menu_base">
     <property name="title">
-     <string>基本工具</string>
+     <string>图像</string>
     </property>
-    <widget class="QMenu" name="menu_2">
-     <property name="title">
-      <string>图像缩放</string>
-     </property>
-     <widget class="QMenu" name="menu_3">
-      <property name="title">
-       <string>最临近插值</string>
-      </property>
-      <addaction name="actionlarge_near"/>
-      <addaction name="actionsmall_near"/>
-     </widget>
-     <widget class="QMenu" name="menu_4">
-      <property name="title">
-       <string>双线性插值</string>
-      </property>
-      <addaction name="actionlarge_bilinear"/>
-      <addaction name="actionsmall_bilinear"/>
-     </widget>
-     <widget class="QMenu" name="menu_5">
-      <property name="title">
-       <string>双立方插值</string>
-      </property>
-      <addaction name="actionlarge_bicubic"/>
-      <addaction name="actionsmall_bicubic"/>
-     </widget>
-     <addaction name="menu_3"/>
-     <addaction name="menu_4"/>
-     <addaction name="menu_5"/>
-    </widget>
-    <addaction name="actiongray"/>
-    <addaction name="actionreverse"/>
-    <addaction name="actioncomplementary"/>
-    <addaction name="actionautoContrast"/>
-    <addaction name="actioncolorBalance"/>
-    <addaction name="menu_2"/>
-   </widget>
-   <widget class="QMenu" name="menu_unbase">
-    <property name="title">
-     <string>高级处理</string>
-    </property>
-    <addaction name="actionblend"/>
-    <addaction name="actionmosaic"/>
-    <addaction name="actionsobel"/>
-    <addaction name="actionliquefaction"/>
-    <addaction name="actioncolorMap"/>
-    <addaction name="actionfishEye"/>
-    <addaction name="actionface"/>
-    <addaction name="actionhighContrast"/>
-   </widget>
-   <widget class="QMenu" name="menu_transform">
-    <property name="title">
-     <string>变换</string>
-    </property>
+    <addaction name="actionscale"/>
+    <addaction name="action_separator_base"/>
+    <addaction name="actiontailor"/>
+    <addaction name="action_separator_base2"/>
     <addaction name="actionflipH"/>
     <addaction name="actionflipV"/>
     <addaction name="actionrotate90"/>
     <addaction name="actionrotate90ccw"/>
     <addaction name="actiontranspose"/>
     <addaction name="actionantitranspose"/>
-    <addaction name="actiontailor"/>
+   </widget>
+   <widget class="QMenu" name="menu_blur">
+    <property name="title">
+     <string>滤镜</string>
+    </property>
+    <addaction name="actionmedian"/>
+    <addaction name="actionaver"/>
+    <addaction name="actiongauss"/>
+    <addaction name="action_separator_filter"/>
+    <addaction name="menu_unbase"/>
+    <addaction name="menu_enhance"/>
+    <addaction name="menu_morph"/>
+    <addaction name="menu_style"/>
+   </widget>
+   <widget class="QMenu" name="menu_unbase">
+    <property name="title">
+     <string>颜色</string>
+    </property>
+    <addaction name="actiongray"/>
+    <addaction name="actionreverse"/>
+    <addaction name="actioncomplementary"/>
+    <addaction name="actionautoContrast"/>
+    <addaction name="actioncolorBalance"/>
+    <addaction name="actioncolorMap"/>
    </widget>
    <widget class="QMenu" name="menu_enhance">
     <property name="title">
-     <string>增强</string>
+     <string>细节</string>
     </property>
     <addaction name="actionequalize"/>
     <addaction name="actionusm"/>
@@ -835,26 +800,38 @@
    </widget>
    <widget class="QMenu" name="menu_morph">
     <property name="title">
-     <string>形态学</string>
+     <string>去杂点/补小孔</string>
     </property>
     <addaction name="actionerode"/>
     <addaction name="actiondilate"/>
     <addaction name="actionopenMorph"/>
     <addaction name="actioncloseMorph"/>
    </widget>
+   <widget class="QMenu" name="menu_style">
+    <property name="title">
+     <string>风格化</string>
+    </property>
+    <addaction name="actionsobel"/>
+    <addaction name="actionmosaic"/>
+    <addaction name="actionliquefaction"/>
+    <addaction name="actionface"/>
+    <addaction name="actionfishEye"/>
+   </widget>
    <addaction name="menu"/>
    <addaction name="menu_edit"/>
-   <addaction name="menu_blur"/>
    <addaction name="menu_base"/>
-   <addaction name="menu_unbase"/>
-   <addaction name="menu_transform"/>
-   <addaction name="menu_enhance"/>
-   <addaction name="menu_morph"/>
+   <addaction name="menu_blur"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
   <widget class="QToolBar" name="toolBar">
    <property name="windowTitle">
     <string>toolBar</string>
+   </property>
+   <property name="movable">
+    <bool>false</bool>
+   </property>
+   <property name="toolButtonStyle">
+    <enum>Qt::ToolButtonTextBesideIcon</enum>
    </property>
    <attribute name="toolBarArea">
     <enum>TopToolBarArea</enum>
@@ -863,6 +840,56 @@
     <bool>false</bool>
    </attribute>
   </widget>
+  <widget class="QToolBar" name="toolBox">
+   <property name="windowTitle">
+    <string>toolBox</string>
+   </property>
+   <property name="orientation">
+    <enum>Qt::Vertical</enum>
+   </property>
+   <property name="movable">
+    <bool>false</bool>
+   </property>
+   <property name="floatable">
+    <bool>false</bool>
+   </property>
+   <property name="toolButtonStyle">
+    <enum>Qt::ToolButtonTextOnly</enum>
+   </property>
+   <property name="minimumSize">
+    <size>
+     <width>76</width>
+     <height>0</height>
+    </size>
+   </property>
+   <property name="maximumSize">
+    <size>
+     <width>76</width>
+     <height>16777215</height>
+    </size>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>LeftToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+  </widget>
+  <action name="action_separator_base">
+   <property name="separator">
+    <bool>true</bool>
+   </property>
+  </action>
+  <action name="action_separator_base2">
+   <property name="separator">
+    <bool>true</bool>
+   </property>
+  </action>
+  <action name="action_separator_filter">
+   <property name="separator">
+    <bool>true</bool>
+   </property>
+  </action>
   <action name="openImage">
    <property name="text">
     <string>打开图片</string>
@@ -883,7 +910,8 @@
    <property name="icon">
     <iconset resource="icon.qrc">
      <normaloff>:/icon/undo.png</normaloff>
-     <normalon>:/icon/undo.png</normalon>:/icon/undo.png</iconset>
+     <normalon>:/icon/undo.png</normalon>
+    </iconset>
    </property>
    <property name="text">
     <string>撤销</string>
@@ -896,43 +924,49 @@
    <property name="icon">
     <iconset resource="icon.qrc">
      <normaloff>:/icon/reset.png</normaloff>
-     <normalon>:/icon/reset.png</normalon>:/icon/reset.png</iconset>
+     <normalon>:/icon/reset.png</normalon>
+    </iconset>
    </property>
    <property name="text">
-    <string>重置图像</string>
+    <string>还原成原图</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+R</string>
    </property>
   </action>
+  <action name="actionscale">
+   <property name="text">
+    <string>缩放图像…</string>
+   </property>
+  </action>
   <action name="actionmedian">
    <property name="text">
-    <string>中值模糊</string>
+    <string>去除杂点</string>
    </property>
   </action>
   <action name="actionaver">
    <property name="text">
-    <string>均值模糊</string>
+    <string>轻微模糊</string>
    </property>
   </action>
   <action name="actiongauss">
    <property name="text">
-    <string>高斯模糊</string>
+    <string>高斯模糊…</string>
    </property>
   </action>
   <action name="actiongray">
    <property name="text">
-    <string>灰度图转换</string>
+    <string>转为黑白</string>
    </property>
   </action>
   <action name="actionreverse">
    <property name="text">
-    <string>颜色反转</string>
+    <string>反相</string>
    </property>
   </action>
   <action name="actioncomplementary">
    <property name="text">
-    <string>补色</string>
+    <string>互补色</string>
    </property>
   </action>
   <action name="actionautoContrast">
@@ -940,101 +974,58 @@
     <string>自动对比度</string>
    </property>
   </action>
-  <action name="actionblend">
-   <property name="text">
-    <string>图层混合</string>
-   </property>
-  </action>
-  <action name="actionmask">
-   <property name="text">
-    <string>局部磨皮</string>
-   </property>
-  </action>
   <action name="actionmosaic">
    <property name="text">
-    <string>马赛克</string>
+    <string>打马赛克…</string>
    </property>
   </action>
   <action name="actionsobel">
    <property name="text">
-    <string>边缘检测</string>
+    <string>描出轮廓</string>
    </property>
   </action>
   <action name="actionliquefaction">
    <property name="text">
-    <string>眼部放大</string>
+    <string>放大眼睛…</string>
    </property>
   </action>
   <action name="actioncolorMap">
    <property name="text">
-    <string>色彩映射</string>
+    <string>调色曲线…</string>
    </property>
   </action>
   <action name="actionfishEye">
    <property name="text">
-    <string>鱼眼镜头</string>
+    <string>鱼眼效果…</string>
    </property>
   </action>
   <action name="actioncolorBalance">
    <property name="text">
-    <string>色彩平衡</string>
+    <string>校正偏色</string>
    </property>
   </action>
   <action name="actionface">
    <property name="text">
-    <string>图像微调</string>
+    <string>人像瘦脸…</string>
    </property>
   </action>
   <action name="actiontailor">
    <property name="text">
-    <string>图像裁剪</string>
+    <string>裁剪图像…</string>
    </property>
   </action>
   <action name="actionredo">
    <property name="icon">
     <iconset resource="icon.qrc">
-     <normaloff>:/icon/redo.png</normaloff>:/icon/redo.png</iconset>
+     <normaloff>:/icon/redo.png</normaloff>
+     <normalon>:/icon/redo.png</normalon>
+    </iconset>
    </property>
    <property name="text">
     <string>重做</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+Y</string>
-   </property>
-  </action>
-  <action name="actionlarge_near">
-   <property name="text">
-    <string>放大</string>
-   </property>
-  </action>
-  <action name="actionsmall_near">
-   <property name="text">
-    <string>缩小</string>
-   </property>
-  </action>
-  <action name="actionlarge_bilinear">
-   <property name="text">
-    <string>放大</string>
-   </property>
-  </action>
-  <action name="actionsmall_bilinear">
-   <property name="text">
-    <string>缩小</string>
-   </property>
-  </action>
-  <action name="actionlarge_bicubic">
-   <property name="text">
-    <string>放大</string>
-   </property>
-  </action>
-  <action name="actionsmall_bicubic">
-   <property name="text">
-    <string>缩小</string>
-   </property>
-  </action>
-  <action name="actionhighContrast">
-   <property name="text">
-    <string>高反差保留</string>
    </property>
   </action>
   <action name="actionflipH">
@@ -1049,57 +1040,57 @@
   </action>
   <action name="actionrotate90">
    <property name="text">
-    <string>顺时针旋转 90°</string>
+    <string>向右转 90°</string>
    </property>
   </action>
   <action name="actionrotate90ccw">
    <property name="text">
-    <string>逆时针旋转 90°</string>
+    <string>向左转 90°</string>
    </property>
   </action>
   <action name="actiontranspose">
    <property name="text">
-    <string>沿主对角线镜像</string>
+    <string>沿对角线翻转（左上-右下）</string>
    </property>
   </action>
   <action name="actionantitranspose">
    <property name="text">
-    <string>沿副对角线镜像</string>
+    <string>沿对角线翻转（右上-左下）</string>
    </property>
   </action>
   <action name="actionequalize">
    <property name="text">
-    <string>直方图均衡化</string>
+    <string>自动拉大明暗</string>
    </property>
   </action>
   <action name="actionusm">
    <property name="text">
-    <string>USM 锐化</string>
+    <string>智能锐化…</string>
    </property>
   </action>
   <action name="actionconvolution">
    <property name="text">
-    <string>自定义卷积核 (3×3)</string>
+    <string>自定义滤镜（3×3）…</string>
    </property>
   </action>
   <action name="actionerode">
    <property name="text">
-    <string>腐蚀</string>
+    <string>去小亮点</string>
    </property>
   </action>
   <action name="actiondilate">
    <property name="text">
-    <string>膨胀</string>
+    <string>补小暗点</string>
    </property>
   </action>
   <action name="actionopenMorph">
    <property name="text">
-    <string>开运算</string>
+    <string>先消后补</string>
    </property>
   </action>
   <action name="actioncloseMorph">
    <property name="text">
-    <string>闭运算</string>
+    <string>先补后消</string>
    </property>
   </action>
  </widget>

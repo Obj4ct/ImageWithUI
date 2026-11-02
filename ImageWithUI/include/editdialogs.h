@@ -4,6 +4,8 @@
 #include "QTHeader.h"
 #include <QDoubleSpinBox>
 #include <QSpinBox>
+#include <QCheckBox>
+#include <QComboBox>
 
 // 裁剪对话框：在缩放后的预览图上拖拽框选，返回“图片像素坐标”下的选区
 class CropDialog : public QDialog
@@ -68,6 +70,25 @@ private:
     QDoubleSpinBox *m_radius = nullptr;
     QSpinBox *m_amount = nullptr;
     QSpinBox *m_threshold = nullptr;
+};
+
+// 缩放对话框：目标宽高 + 锁定比例 + 插值算法
+class ScaleDialog : public QDialog
+{
+    Q_OBJECT
+public:
+    explicit ScaleDialog(int currentWidth, int currentHeight, QWidget *parent = nullptr);
+    QSize targetSize() const;
+    // 0 快速 / 1 平滑 / 2 最佳
+    int algorithm() const;
+
+private:
+    int m_initialWidth = 1;
+    int m_initialHeight = 1;
+    QSpinBox *m_widthSpin = nullptr;
+    QSpinBox *m_heightSpin = nullptr;
+    QCheckBox *m_lockRatio = nullptr;
+    QComboBox *m_algorithm = nullptr;
 };
 
 #endif // EDITDIALOGS_H

@@ -23,6 +23,7 @@
 #include <QTransform>
 #include <QFontMetrics>
 #include <QInputDialog>
+#include <algorithm>
 
 namespace {
 
@@ -126,6 +127,31 @@ std::vector<uint8_t> DownsampleBgr(const std::vector<uint8_t> &src, int32_t w, i
             d[2] = p[2];
             d += 3;
         }
+    }
+    return out;
+}
+
+// QImage(BGR888) -> 内部 BGR 自底向上紧凑缓冲
+std::vector<uint8_t> BgrFromQImage(const QImage &image)
+{
+    if (image.isNull()) {
+        return {};
+    }
+    const QImage bgr = image.convertToFormat(QImage::Format_BGR888);
+    const int32_t w = bgr.width();
+    const int32_t h = bgr.height();
+    if (w <= 0 || h <= 0) {
+        return {};
+    }
+    std::vector<uint8_t> out(static_cast<size_t>(w) * static_cast<size_t>(h) * 3, 0);
+    const size_t rowBytes = static_cast<size_t>(w) * 3;
+    const int srcStride = bgr.bytesPerLine();
+    const uint8_t *bits = bgr.constBits();
+    for (int32_t y = 0; y < h; ++y) {
+        const uint8_t *src = bits + static_cast<ptrdiff_t>(y) * srcStride;
+        // 内部缓冲为自底向上：源第 y 行(视觉自上而下)写到目标 h-1-y 行
+        uint8_t *dst = out.data() + static_cast<size_t>(h - 1 - y) * rowBytes;
+        std::memcpy(dst, src, rowBytes);
     }
     return out;
 }
@@ -308,6 +334,13 @@ bool SameLayerStack(const std::vector<Layer> &a, const std::vector<Layer> &b)
         }
     }
     return true;
+}
+
+// 两份快照是否完全一致(用于全局历史去重)
+bool SameSnapshot(const ImageSnapshot &a, const ImageSnapshot &b)
+{
+    return a.data == b.data && a.width == b.width && a.height == b.height &&
+           a.activeLayer == b.activeLayer && SameLayerStack(a.layers, b.layers);
 }
 
 }   // namespace
@@ -827,7 +860,7 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
     setFocus();
-    setWindowTitle("ImageWithUI · 数字图像处理工作台");
+    setWindowTitle("ImageWithUI · 图片编辑器");
     setWindowIcon(QIcon(":/icon/logo.png"));
 
     //根据设备cpu线程数判断程序需要设置的线程
@@ -854,7 +887,8 @@ MainWindow::MainWindow(QWidget *parent)
     ui->toolBar->addSeparator();
     ui->toolBar->addAction(ui->actionundo);
     ui->toolBar->addAction(ui->actionredo);
-    ui->toolBar->addAction(ui->actionreset);
+    ui->toolBar->addSeparator();
+    ui->toolBar->addAction(ui->actionscale);
 
     // 视图菜单：主题切换 / 适应窗口
     QMenu *viewMenu = menuBar()->addMenu(QString("视图"));
@@ -1067,20 +1101,20 @@ void MainWindow::SetupSelectionTool()
     QActionGroup *toolGroup = new QActionGroup(this);
     toolGroup->setExclusive(true);
 
-    m_selectionToolAction = new QAction(QString("矩形选框"), this);
+    m_selectionToolAction = new QAction(QString("矩形选区"), this);
     m_selectionToolAction->setCheckable(true);
     m_selectionToolAction->setToolTip(QString("选中后在图像上按住左键拖动建立矩形选区；Shift 加选；在选区内拖动可移动选区，按住 Ctrl 拖动则同时移动选区内像素"));
     toolGroup->addAction(m_selectionToolAction);
 
-    m_lassoToolAction = new QAction(QString("自由套索"), this);
+    m_lassoToolAction = new QAction(QString("手绘选区"), this);
     m_lassoToolAction->setCheckable(true);
     m_lassoToolAction->setToolTip(QString("选中后沿图像拖动描出边界，松开建立不规则选区；Shift 加选，Alt 减选"));
 
-    m_polyToolAction = new QAction(QString("多边形套索"), this);
+    m_polyToolAction = new QAction(QString("多边形选区"), this);
     m_polyToolAction->setCheckable(true);
     m_polyToolAction->setToolTip(QString("依次单击落点描边，点回首点 / 双击 / 按 Enter 闭合；Backspace 撤销上一点，Esc 取消；Shift 加选，Alt 减选"));
 
-    m_magnetToolAction = new QAction(QString("磁性套索"), this);
+    m_magnetToolAction = new QAction(QString("自动贴边选区"), this);
     m_magnetToolAction->setCheckable(true);
     m_magnetToolAction->setToolTip(QString("沿目标边缘拖动，轨迹点会自动吸附到 8 px 内最强的边缘上；松开闭合；Shift 加选，Alt 减选"));
 
@@ -1096,13 +1130,13 @@ void MainWindow::SetupSelectionTool()
             m_overlay->setToolActive(rect || lasso || poly || magnet);
         }
         if (magnet) {
-            UpdateStatus(QString("磁性套索：沿边缘拖动，轨迹自动吸附；Shift 加选、Alt 减选"));
+            UpdateStatus(QString("自动贴边选区：沿边缘拖动，轨迹会自动贴过去；Shift 加选、Alt 减选"));
         } else if (poly) {
-            UpdateStatus(QString("多边形套索：单击落点，点回首点/双击/Enter 闭合；Backspace 退点、Esc 取消"));
+            UpdateStatus(QString("多边形选区：单击落点，点回起点/双击/回车闭合；退格撤点、Esc 取消"));
         } else if (lasso) {
-            UpdateStatus(QString("自由套索：沿图像拖动描边，松开后建立选区；Shift 加选、Alt 减选"));
+            UpdateStatus(QString("手绘选区：按住鼠标沿图像描一圈，松开后建立选区；Shift 加选、Alt 减选"));
         } else if (rect) {
-            UpdateStatus(QString("矩形选框：在图像上拖动建立选区；Shift 加选"));
+            UpdateStatus(QString("矩形选区：在图像上拖动框出选区；按住 Shift 加选"));
         } else {
             UpdateStatus(QString("选区工具已关闭"));
         }
@@ -1114,11 +1148,10 @@ void MainWindow::SetupSelectionTool()
     connect(m_lassoToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
     connect(m_polyToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
     connect(m_magnetToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
-    ui->toolBar->addSeparator();
-    ui->toolBar->addAction(m_selectionToolAction);
-    ui->toolBar->addAction(m_lassoToolAction);
-    ui->toolBar->addAction(m_polyToolAction);
-    ui->toolBar->addAction(m_magnetToolAction);
+    ui->toolBox->addAction(m_selectionToolAction);
+    ui->toolBox->addAction(m_lassoToolAction);
+    ui->toolBox->addAction(m_polyToolAction);
+    ui->toolBox->addAction(m_magnetToolAction);
 
     // "选择"菜单(放在"编辑"之后、"图像模糊"之前)
     m_selectionMenu = new QMenu(QString("选择"), this);
@@ -1144,17 +1177,17 @@ void MainWindow::SetupSelectionTool()
                                   [this]() { CopySelection(); });
     QAction *pasteAction = addItem(QString("粘贴到选区"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_V),
                                    [this]() { PasteIntoSelection(); });
-    QAction *fillAction = addItem(QString("填充选区…"), QKeySequence(), [this]() {
+    QAction *fillAction = addItem(QString("给选区填色…"), QKeySequence(), [this]() {
         if (!HasSelection()) {
             UpdateStatus("请先建立选区");
             return;
         }
-        const QColor color = QColorDialog::getColor(Qt::white, this, QString("填充选区"));
+        const QColor color = QColorDialog::getColor(Qt::white, this, QString("给选区填色"));
         if (color.isValid()) {
             FillSelection(color);
         }
     });
-    QAction *strokeAction = addItem(QString("描边选区…"), QKeySequence(), [this]() {
+    QAction *strokeAction = addItem(QString("给选区描边…"), QKeySequence(), [this]() {
         if (!HasSelection()) {
             UpdateStatus("请先建立选区");
             return;
@@ -1164,7 +1197,7 @@ void MainWindow::SetupSelectionTool()
             return;
         }
         bool ok = false;
-        const int width = QInputDialog::getInt(this, QString("描边选区"),
+        const int width = QInputDialog::getInt(this, QString("给选区描边"),
                                                QString("宽度(像素 1 ~ 50)："), 2, 1, 50, 1, &ok);
         if (ok) {
             StrokeSelection(color, width);
@@ -1190,20 +1223,20 @@ void MainWindow::SetupSelectionTool()
         }
         FreeTransformSelection(scale, angle);
     });
-    QAction *cropAction = addItem(QString("裁剪到选区"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_X),
+    QAction *cropAction = addItem(QString("裁到选区"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_X),
                                   [this]() { CropToSelection(); });
-    QAction *eraseAction = addItem(QString("清除选区内容"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Delete),
+    QAction *eraseAction = addItem(QString("清空选区内容"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Delete),
                                    [this]() { ClearSelectionContent(); });
     addItem(QString("全选"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_A), [this]() { SelectAll(); });
     addItem(QString("反选"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_I), [this]() { InvertSelection(); });
-    QAction *featherAction = addItem(QString("羽化…"), QKeySequence(), [this]() {
+    QAction *featherAction = addItem(QString("让边缘柔和…"), QKeySequence(), [this]() {
         if (!HasSelection()) {
             UpdateStatus("请先建立选区");
             return;
         }
         bool ok = false;
-        const double radius = QInputDialog::getDouble(this, QString("羽化选区"),
-                                                      QString("羽化半径(像素，0.5 ~ 64)："),
+        const double radius = QInputDialog::getDouble(this, QString("让边缘柔和"),
+                                                      QString("柔和半径（像素，0.5 ~ 64）："),
                                                       4.0, 0.5, 64.0, 1, &ok);
         if (ok) {
             FeatherSelection(radius);
@@ -1214,8 +1247,8 @@ void MainWindow::SetupSelectionTool()
             UpdateStatus("请先建立选区");
             return;
         }
-        const QString label = (mode == 0) ? QString("扩展选区") : (mode == 1) ? QString("收缩选区")
-                                                                             : QString("平滑选区");
+        const QString label = (mode == 0) ? QString("扩大选区") : (mode == 1) ? QString("缩小选区")
+                                                                             : QString("磨平边缘");
         bool ok = false;
         const int radius = QInputDialog::getInt(this, label,
                                                 QString("半径(像素 1 ~ 200)："),
@@ -1231,9 +1264,9 @@ void MainWindow::SetupSelectionTool()
             SmoothSelection(radius);
         }
     };
-    QAction *growAction = addItem(QString("扩展选区…"), QKeySequence(), [promptRefine]() { promptRefine(0); });
-    QAction *shrinkAction = addItem(QString("收缩选区…"), QKeySequence(), [promptRefine]() { promptRefine(1); });
-    QAction *smoothAction = addItem(QString("平滑边界…"), QKeySequence(), [promptRefine]() { promptRefine(2); });
+    QAction *growAction = addItem(QString("扩大选区…"), QKeySequence(), [promptRefine]() { promptRefine(0); });
+    QAction *shrinkAction = addItem(QString("缩小选区…"), QKeySequence(), [promptRefine]() { promptRefine(1); });
+    QAction *smoothAction = addItem(QString("磨平边缘…"), QKeySequence(), [promptRefine]() { promptRefine(2); });
     addItem(QString("取消选区"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_D), [this]() {
         ClearSelection();
         UpdateStatus("已取消选区");
@@ -1350,7 +1383,9 @@ QImage MainWindow::BuildMaskPreview() const
     }
     const int32_t ow = (w + step - 1) / step;
     const int32_t oh = (h + step - 1) / step;
-    QImage img(ow, oh, QImage::Format_ARGB32_Premultiplied);
+    // 注意：必须用非预乘的 ARGB32。若用 Premultiplied 格式却写入
+    // 未预乘的颜色(颜色分量大于 alpha)，Qt 会画出高饱和的异常色块
+    QImage img(ow, oh, QImage::Format_ARGB32);
     img.fill(Qt::transparent);
     for (int32_t y = 0; y < oh; ++y) {
         const int32_t sy = std::min(h - 1, y * step + step / 2);
@@ -1568,7 +1603,7 @@ void MainWindow::FeatherSelection(double radius)
     }
     const int r = qRound(radius);
     if (r < 1) {
-        UpdateStatus("羽化半径太小(至少 0.5 像素)");
+        UpdateStatus("柔和半径太小（至少 0.5 像素）");
         return;
     }
     // 两次盒式模糊逼近高斯，边界过渡更自然
@@ -1578,11 +1613,11 @@ void MainWindow::FeatherSelection(double radius)
     if (m_selection.isEmpty()) {
         m_mask.clear();
         UpdateSelectionOverlay();
-        UpdateStatus("羽化后选区为空，已取消选区");
+        UpdateStatus("处理后选区为空，已取消选区");
         return;
     }
     UpdateSelectionOverlay();
-    UpdateStatus(QString("已羽化选区(半径 %1 px)：选区 %2 × %3 px")
+    UpdateStatus(QString("已让边缘柔和（半径 %1 px）：选区 %2 × %3 px")
                      .arg(radius)
                      .arg(m_selection.width())
                      .arg(m_selection.height()));
@@ -1753,7 +1788,7 @@ void MainWindow::MoveSelectionContent(int dx, int dy)
 
     m_mask = std::move(moved);
     m_selection = MaskBoundingRect();
-    ApplySnapshot(MakeSnapshot(std::move(result), w, h, m_contentQuad));
+    ApplySnapshot(MakeSnapshot(std::move(result), w, h, m_contentQuad), false, "移动选区内容");
     UpdateStatus(QString("已移动选区内容 (%1, %2)").arg(dx).arg(dy));
 }
 
@@ -1822,7 +1857,7 @@ void MainWindow::PasteImageIntoSelection(const QImage &image)
             p[2] = static_cast<uint8_t>(qRed(line[x]));
         }
     }
-    ApplyResult(result);   // 内部会把选区外的像素还原，羽化边缘自然过渡
+    ApplyResult(result, "粘贴图片到选区");   // 内部会把选区外的像素还原，羽化边缘自然过渡
     UpdateStatus(QString("已粘贴图像到选区（%1 × %2 px）")
                      .arg(scaled.width()).arg(scaled.height()));
 }
@@ -1863,7 +1898,7 @@ void MainWindow::CropToSelection()
         return;
     }
     if (imageData.empty() || myValue.bmpInfo.GetWidth() <= 0) {
-        function.CreateMessagebox("提示", "请先打开一张 BMP 图像");
+        function.CreateMessagebox("提示", "请先打开一张图片");
         return;
     }
     if (!HasSelection()) {
@@ -1875,10 +1910,10 @@ void MainWindow::CropToSelection()
         UpdateStatus("选区太小(至少 4 × 4)，已取消裁剪");
         return;
     }
-    if (!RequireSingleLayer("裁剪到选区")) {
+    if (!RequireSingleLayer("裁到选区")) {
         return;
     }
-    ApplyOperator("裁剪到选区", [sel](std::vector<uint8_t> &d, OpContext &ctx) {
+    ApplyOperator("裁到选区", [sel](std::vector<uint8_t> &d, OpContext &ctx) {
         Function f;
         f.CropImage(d, ctx.width, ctx.height,
                     sel.x(), sel.y(), sel.width(), sel.height(), ctx.quad);
@@ -1892,7 +1927,7 @@ void MainWindow::ClearSelectionContent()
         return;
     }
     if (imageData.empty() || myValue.bmpInfo.GetWidth() <= 0) {
-        function.CreateMessagebox("提示", "请先打开一张 BMP 图像");
+        function.CreateMessagebox("提示", "请先打开一张图片");
         return;
     }
     if (!HasSelection()) {
@@ -1901,7 +1936,7 @@ void MainWindow::ClearSelectionContent()
     }
     // 按掩码覆盖度把像素刷白：羽化过的边缘会得到半透明白
     const SelectionMask mask = m_mask;
-    ApplyOperator("清除选区内容", [mask](std::vector<uint8_t> &d, OpContext &ctx) {
+    ApplyOperator("清空选区内容", [mask](std::vector<uint8_t> &d, OpContext &ctx) {
         if (mask.isEmpty() || mask.width != ctx.width || mask.height != ctx.height) {
             return;
         }
@@ -1924,7 +1959,7 @@ void MainWindow::ClearSelectionContent()
                 }
             }
         }
-    }, nullptr, [this]() { UpdateStatus("已清除选区内容"); }, false);
+    }, nullptr, [this]() { UpdateStatus("已清空选区内容"); }, false);
 }
 
 void MainWindow::FillSelection(const QColor &color)
@@ -1945,7 +1980,7 @@ void MainWindow::FillSelection(const QColor &color)
     const int cr = color.red();
     const int cg = color.green();
     const int cb = color.blue();
-    ApplyOperator("填充选区", [mask, cr, cg, cb](std::vector<uint8_t> &d, OpContext &ctx) {
+    ApplyOperator("给选区填色", [mask, cr, cg, cb](std::vector<uint8_t> &d, OpContext &ctx) {
         if (mask.isEmpty() || mask.width != ctx.width || mask.height != ctx.height) {
             return;
         }
@@ -1964,7 +1999,7 @@ void MainWindow::FillSelection(const QColor &color)
             }
         }
     }, nullptr, [this, color]() {
-        UpdateStatus(QString("已用 %1 填充选区").arg(color.name()));
+        UpdateStatus(QString("已给选区填上 %1").arg(color.name()));
     }, false);
 }
 
@@ -1988,7 +2023,7 @@ void MainWindow::StrokeSelection(const QColor &color, int width)
     const int cg = color.green();
     const int cb = color.blue();
     // 向内描边：把掩码收缩 thick 像素，原掩码减去收缩后剩下的就是边界带
-    ApplyOperator("描边选区", [mask, thick, cr, cg, cb](std::vector<uint8_t> &d, OpContext &ctx) {
+    ApplyOperator("给选区描边", [mask, thick, cr, cg, cb](std::vector<uint8_t> &d, OpContext &ctx) {
         if (mask.isEmpty() || mask.width != ctx.width || mask.height != ctx.height) {
             return;
         }
@@ -2124,7 +2159,7 @@ void MainWindow::FreeTransformSelection(double scalePercent, double angleDegrees
 
     m_mask = std::move(newMask);
     m_selection = MaskBoundingRect();
-    ApplySnapshot(MakeSnapshot(std::move(result), w, h, m_contentQuad));
+    ApplySnapshot(MakeSnapshot(std::move(result), w, h, m_contentQuad), false, "自由变换");
     UpdateStatus(QString("已自由变换选区内容：缩放 %1% · 旋转 %2°")
                      .arg(scalePercent).arg(angle));
 }
@@ -2401,7 +2436,7 @@ bool MainWindow::RequireSingleLayer(const QString &opName)
 }
 
 // 图层结构变化(新建/删除/复制/排序/合并)记一步历史
-void MainWindow::CommitLayerStructure(const QString &title)
+void MainWindow::CommitLayerStructure(const QString &title, const ImageSnapshot &before)
 {
     if (imageData.empty()) {
         return;
@@ -2411,7 +2446,7 @@ void MainWindow::CommitLayerStructure(const QString &title)
     }
     ImageSnapshot snap = MakeSnapshot(imageData, myValue.bmpInfo.GetWidth(),
                                       myValue.bmpInfo.GetHeight(), m_contentQuad);
-    ApplySnapshot(snap);
+    ApplySnapshot(snap, false, title, &before);
     UpdateStatus(title + " 完成");
 }
 
@@ -2442,6 +2477,7 @@ void MainWindow::AddLayer()
         return;
     }
     CancelPreview();
+    const ImageSnapshot before = CurrentSnapshot();
     m_layers[static_cast<size_t>(m_activeLayer)].data = imageData;
     const size_t bytes = static_cast<size_t>(myValue.bmpInfo.GetWidth()) *
                          static_cast<size_t>(myValue.bmpInfo.GetHeight()) * 3;
@@ -2453,7 +2489,7 @@ void MainWindow::AddLayer()
     m_activeLayer = insertAt;
     imageData = m_layers[static_cast<size_t>(m_activeLayer)].data;
     UpdateLayerPanel();
-    CommitLayerStructure("新建图层");
+    CommitLayerStructure("新建图层", before);
 }
 
 void MainWindow::DuplicateLayer()
@@ -2463,6 +2499,7 @@ void MainWindow::DuplicateLayer()
         return;
     }
     CancelPreview();
+    const ImageSnapshot before = CurrentSnapshot();
     m_layers[static_cast<size_t>(m_activeLayer)].data = imageData;
     Layer copy = m_layers[static_cast<size_t>(m_activeLayer)];   // 连属性一起复制
     copy.name = copy.name + " 副本";
@@ -2471,7 +2508,7 @@ void MainWindow::DuplicateLayer()
     m_activeLayer = insertAt;
     imageData = m_layers[static_cast<size_t>(m_activeLayer)].data;
     UpdateLayerPanel();
-    CommitLayerStructure("复制图层");
+    CommitLayerStructure("复制图层", before);
 }
 
 void MainWindow::DeleteActiveLayer()
@@ -2485,11 +2522,12 @@ void MainWindow::DeleteActiveLayer()
         return;
     }
     CancelPreview();
+    const ImageSnapshot before = CurrentSnapshot();
     m_layers.erase(m_layers.begin() + m_activeLayer);
     m_activeLayer = qBound(0, m_activeLayer, static_cast<int>(m_layers.size()) - 1);
     imageData = m_layers[static_cast<size_t>(m_activeLayer)].data;
     UpdateLayerPanel();
-    CommitLayerStructure("删除图层");
+    CommitLayerStructure("删除图层", before);
 }
 
 void MainWindow::MergeAllLayers()
@@ -2503,6 +2541,7 @@ void MainWindow::MergeAllLayers()
         return;
     }
     CancelPreview();
+    const ImageSnapshot before = CurrentSnapshot();
     m_layers[static_cast<size_t>(m_activeLayer)].data = imageData;
     // 合并成"看到的画面"(隐藏图层不参与)
     const std::vector<uint8_t> flat = BuildComposite();
@@ -2511,7 +2550,7 @@ void MainWindow::MergeAllLayers()
     m_activeLayer = 0;
     imageData = flat;
     UpdateLayerPanel();
-    CommitLayerStructure("合并所有图层");
+    CommitLayerStructure("合并所有图层", before);
 }
 
 void MainWindow::MoveActiveLayerUp()
@@ -2524,13 +2563,14 @@ void MainWindow::MoveActiveLayerUp()
         return;
     }
     CancelPreview();
+    const ImageSnapshot before = CurrentSnapshot();
     m_layers[static_cast<size_t>(m_activeLayer)].data = imageData;
     std::swap(m_layers[static_cast<size_t>(m_activeLayer)],
               m_layers[static_cast<size_t>(m_activeLayer + 1)]);
     ++m_activeLayer;
     imageData = m_layers[static_cast<size_t>(m_activeLayer)].data;
     UpdateLayerPanel();
-    CommitLayerStructure("上移图层");
+    CommitLayerStructure("上移图层", before);
 }
 
 void MainWindow::MoveActiveLayerDown()
@@ -2543,13 +2583,14 @@ void MainWindow::MoveActiveLayerDown()
         return;
     }
     CancelPreview();
+    const ImageSnapshot before = CurrentSnapshot();
     m_layers[static_cast<size_t>(m_activeLayer)].data = imageData;
     std::swap(m_layers[static_cast<size_t>(m_activeLayer)],
               m_layers[static_cast<size_t>(m_activeLayer - 1)]);
     --m_activeLayer;
     imageData = m_layers[static_cast<size_t>(m_activeLayer)].data;
     UpdateLayerPanel();
-    CommitLayerStructure("下移图层");
+    CommitLayerStructure("下移图层", before);
 }
 
 void MainWindow::SetLayerVisible(int index, bool visible)
@@ -2631,13 +2672,13 @@ void MainWindow::SetupLivePreview()
         OpFn (*makeOp)(double);
     };
     const Desk desks[] = {
-        { ui->lineEdit_sharpen,    "锐化",      0.0,   200.0, &MakeSharpenOp },
-        { ui->lineEdit_highlight,  "高光调整",  0.0,   255.0, &MakeHighlightOp },
-        { ui->lineEdit_threshold,  "阈值处理",  0.0,   255.0, &MakeThresholdOp },
-        { ui->lineEdit_shadow,     "阴影调整",  0.0,   100.0, &MakeShadowOp },
-        { ui->lineEdit_brightness, "亮度调整", -150.0, 150.0, &MakeBrightnessOp },
-        { ui->lineEdit_contrast,   "对比度调整", -50.0, 100.0, &MakeContrastOp },
-        { ui->lineEdit_saturation, "饱和度调整", -100.0, 100.0, &MakeSaturationOp },
+        { ui->lineEdit_sharpen,    "让边缘更清晰",     0.0,   200.0, &MakeSharpenOp },
+        { ui->lineEdit_highlight,  "压住过曝",   0.0,   255.0, &MakeHighlightOp },
+        { ui->lineEdit_threshold,  "黑白分界",   0.0,   255.0, &MakeThresholdOp },
+        { ui->lineEdit_shadow,     "提亮暗部",   0.0,   100.0, &MakeShadowOp },
+        { ui->lineEdit_brightness, "亮度",   -150.0, 150.0, &MakeBrightnessOp },
+        { ui->lineEdit_contrast,   "对比度",  -50.0, 100.0, &MakeContrastOp },
+        { ui->lineEdit_saturation, "饱和度", -100.0, 100.0, &MakeSaturationOp },
     };
 
     for (const Desk &d : desks) {
@@ -2851,13 +2892,15 @@ bool MainWindow::CommitPreview(const QString &title, QLineEdit *edit, double val
         }
         return false;
     }
-    ApplySnapshot(snap, false);
+    ApplySnapshot(snap, false, title);
     UpdateStatus(title + " 已应用");
     return true;
 }
 
 void MainWindow::ResetAll(MyValue &myValue)
 {
+    // 重置前的状态作为一条全局历史(重置后可以撤销回来)
+    const ImageSnapshot before = imageData.empty() ? ImageSnapshot() : CurrentSnapshot();
     CancelPreview();
     imageData = myValue.imageData;
     // 重置后回到单图层
@@ -2882,17 +2925,8 @@ void MainWindow::ResetAll(MyValue &myValue)
     }
     ui->imageLabel->setPixmap(pixmap);
     SyncSelectionToImage();
-    imageDataHistory.clear();
-    redoImageDataHistory.clear();
-    {
-        // 重置后把"原图"作为历史第 1 步，历史面板与撤销行为保持一致
-        ImageSnapshot snap = MakeSnapshot(imageData,
-                                          myValue.bmpInfo.GetWidth(),
-                                          myValue.bmpInfo.GetHeight(),
-                                          m_contentQuad);
-        SaveImageDataToHistory(snap);
-    }
     InvalidateRotateBase();
+    PushHistory("还原成原图", before);
     UpdateStatus("已重置为原始图像");
     UpdateStatusInfo();
     UpdateLayerPanel();
@@ -2930,33 +2964,38 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
-// 撤销操作，从链表中获取上一步的图像数据进行恢复
-OperationType MainWindow::SaveImageDataToHistory(const ImageSnapshot &snap)
+// 当前活动文档的完整快照
+ImageSnapshot MainWindow::CurrentSnapshot() const
 {
-    // 保存当前图像数据到链表
-    if (!imageDataHistory.empty()) {
-        const ImageSnapshot &back = imageDataHistory.back();
-        const bool samePixels = (snap.data == back.data && snap.width == back.width &&
-                                 snap.height == back.height);
-        // 像素相同但图层结构不同(新建/删除/排序/合并)也算一步
-        if (!samePixels || !SameLayerStack(snap.layers, back.layers)) {
-            imageDataHistory.push_back(snap);
-            // 控制历史长度，避免大图下内存无限增长
-            while (static_cast<int>(imageDataHistory.size()) > m_historyLimit) {
-                imageDataHistory.pop_front();
-            }
-            return UNDO;
-        }
-    } else {
-        imageDataHistory.push_back(snap);
-        return UNDO;
-    }
-
-    return REDO; // 返回重做类型
+    return MakeSnapshot(imageData, myValue.bmpInfo.GetWidth(),
+                        myValue.bmpInfo.GetHeight(), m_contentQuad);
 }
 
-// 应用一个快照：写历史 + 同步尺寸 + 刷新显示
-void MainWindow::ApplySnapshot(const ImageSnapshot &snap, bool keepRotateBase)
+// 写入一条全局历史：撤销栈保存"操作前状态"，并清空重做栈
+void MainWindow::PushHistory(const QString &label, const ImageSnapshot &before)
+{
+    if (m_activeDoc < 0 || m_activeDoc >= static_cast<int>(m_docs.size())) {
+        return;
+    }
+    if (SameSnapshot(before, CurrentSnapshot())) {
+        return;
+    }
+    HistoryEntry entry;
+    entry.docId = m_docs[static_cast<size_t>(m_activeDoc)].id;
+    entry.label = label;
+    entry.snap = before;
+    imageDataHistory.push_back(std::move(entry));
+    redoImageDataHistory.clear();
+    // 控制历史长度，避免大图下内存无限增长
+    while (static_cast<int>(imageDataHistory.size()) > m_historyLimit) {
+        imageDataHistory.pop_front();
+    }
+    UpdateHistoryPanel();
+}
+
+// 应用一个快照：先把"操作前状态"压入全局历史，再写进当前文档
+void MainWindow::ApplySnapshot(const ImageSnapshot &snap, bool keepRotateBase,
+                               const QString &label, const ImageSnapshot *beforeOverride)
 {
     if (snap.data.empty()) {
         return;
@@ -2967,12 +3006,21 @@ void MainWindow::ApplySnapshot(const ImageSnapshot &snap, bool keepRotateBase)
         UpdateStatus("结果尺寸与像素数据不一致，已忽略本次操作");
         return;
     }
+    const ImageSnapshot before = beforeOverride ? *beforeOverride : CurrentSnapshot();
+    // 先写入新状态再记历史：这样 PushHistory 的“与当前状态相同”判断
+    // 比较的是操作前后的差异，空操作才不会被误记成一步
+    ApplyStateSnapshot(snap, keepRotateBase);
+    PushHistory(label, before);
+}
+
+// 把快照内容写进当前文档并刷新显示(撤销/重做直接复用，不再写历史)
+void MainWindow::ApplyStateSnapshot(const ImageSnapshot &snap, bool keepRotateBase)
+{
     // 只有旋转结果才继续沿用无损基准；其它算子改的是像素本身，
     // 基准必须换成新的当前图像，否则后续旋转会丢掉这些修改
     if (!keepRotateBase) {
         InvalidateRotateBase();
     }
-    SaveImageDataToHistory(snap);
     m_contentQuad = snap.quad;
     // 尺寸可能已被算子改变(例如旋转)，同步到文件头信息
     myValue.bmpInfo.SetWidth(snap.width);
@@ -2989,55 +3037,77 @@ void MainWindow::ApplySnapshot(const ImageSnapshot &snap, bool keepRotateBase)
 
 void MainWindow::UndoImageProcessing()
 {
-    if (imageDataHistory.size() <= 1) {
-        qDebug() << "Undo operation failed: no more history";
+    if (m_busy) {
+        UpdateStatus("正在处理，请稍候…");
+        return;
+    }
+    CancelPreview();
+    if (imageDataHistory.empty()) {
         UpdateStatus("已经是最早的状态了");
         return;
     }
-    // 当前状态压入重做栈
-    CancelPreview();
-    redoImageDataHistory.push_back(imageDataHistory.back());
-    imageDataHistory.pop_back();
-
-    const ImageSnapshot &snap = imageDataHistory.back();
-    RestoreSnapshot(snap);
-    m_contentQuad = snap.quad;
-    myValue.bmpInfo.SetWidth(snap.width);
-    myValue.bmpInfo.SetHeight(snap.height);
-    ShowImage(imageData, myValue, snap.width, snap.height);
+    // 目标文档可能已被关闭：跳过它的记录，直到找到仍在的文档
+    HistoryEntry entry;
+    bool found = false;
+    while (!imageDataHistory.empty()) {
+        entry = std::move(imageDataHistory.back());
+        imageDataHistory.pop_back();
+        if (ActivateDocumentById(entry.docId)) {
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        UpdateHistoryPanel();
+        UpdateStatus("已经是最早的状态了");
+        return;
+    }
+    // 当前(操作后)状态压入重做栈
+    redoImageDataHistory.push_back(HistoryEntry{entry.docId, entry.label, CurrentSnapshot()});
+    ApplyStateSnapshot(entry.snap, false);
     InvalidateRotateBase();   // 撤销后以当前图像作为新的旋转基准
-    qDebug() << "Undo operation";
-    UpdateStatus("已撤销");
-    UpdateLayerPanel();
     UpdateHistoryPanel();
+    UpdateStatus("已撤销：" + entry.label);
 }
 
 void MainWindow::RedoImageProcessing()
 {
-    if (redoImageDataHistory.empty()) {
-        qDebug() << "Redo operation failed: no redo history";
-        UpdateStatus("没有可重做的操作");
+    if (m_busy) {
+        UpdateStatus("正在处理，请稍候…");
         return;
     }
     CancelPreview();
-    const ImageSnapshot snap = redoImageDataHistory.back();
-    imageDataHistory.push_back(snap);
-    redoImageDataHistory.pop_back();
-
-    // 恢复图像数据
-    RestoreSnapshot(snap);
-    m_contentQuad = snap.quad;
-    myValue.bmpInfo.SetWidth(snap.width);
-    myValue.bmpInfo.SetHeight(snap.height);
-    ShowImage(imageData, myValue, snap.width, snap.height);
+    if (redoImageDataHistory.empty()) {
+        UpdateStatus("没有可重做的操作");
+        return;
+    }
+    HistoryEntry entry;
+    bool found = false;
+    while (!redoImageDataHistory.empty()) {
+        entry = std::move(redoImageDataHistory.back());
+        redoImageDataHistory.pop_back();
+        if (ActivateDocumentById(entry.docId)) {
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        UpdateHistoryPanel();
+        UpdateStatus("没有可重做的操作");
+        return;
+    }
+    // 当前(操作前)状态压回撤销栈
+    imageDataHistory.push_back(HistoryEntry{entry.docId, entry.label, CurrentSnapshot()});
+    while (static_cast<int>(imageDataHistory.size()) > m_historyLimit) {
+        imageDataHistory.pop_front();
+    }
+    ApplyStateSnapshot(entry.snap, false);
     InvalidateRotateBase();   // 重做后以当前图像作为新的旋转基准
-    qDebug() << "Redo operation";
-    UpdateStatus("已重做");
-    UpdateLayerPanel();
     UpdateHistoryPanel();
+    UpdateStatus("已重做：" + entry.label);
 }
 
-// 刷新右侧"历史记录"面板：每次图像状态变化后调用
+// 刷新右侧"历史记录"面板：跨文档的全局历史
 void MainWindow::UpdateHistoryPanel()
 {
     if (ui->historyList == nullptr) {
@@ -3046,41 +3116,61 @@ void MainWindow::UpdateHistoryPanel()
     // 重建列表期间屏蔽信号，避免 setCurrentRow 反过来触发点击槽
     const QSignalBlocker blocker(ui->historyList);
     ui->historyList->clear();
-    const int lastIndex = static_cast<int>(imageDataHistory.size()) - 1;
-    int index = 0;
-    for (auto it = imageDataHistory.begin(); it != imageDataHistory.end(); ++it, ++index) {
-        QString text = QString("步骤 %1 · %2×%3").arg(index + 1).arg(it->width).arg(it->height);
-        if (index == 0) {
-            text += QString(" · 原图");
-        }
-        QListWidgetItem *entry = new QListWidgetItem(text);
-        if (index == lastIndex) {
-            // 当前步用加粗 + 箭头标记；列表禁用选中，避免系统高亮色破坏深色主题
-            QFont font = entry->font();
-            font.setBold(true);
-            entry->setFont(font);
-            entry->setText(QString("▶ ") + text);
-        }
+
+    // 撤销栈：从旧到新
+    for (const HistoryEntry &entry : imageDataHistory) {
+        ui->historyList->addItem(QString("%1 · %2")
+                                     .arg(DocumentDisplayName(entry.docId), entry.label));
+    }
+
+    // 当前状态
+    const QString currentName = (m_activeDoc >= 0 && m_activeDoc < static_cast<int>(m_docs.size()))
+                                    ? DocumentDisplayName(m_docs[static_cast<size_t>(m_activeDoc)].id)
+                                    : QString("未命名");
+    QListWidgetItem *current = new QListWidgetItem(QString("▶ 当前：%1").arg(currentName));
+    QFont font = current->font();
+    font.setBold(true);
+    current->setFont(font);
+    ui->historyList->addItem(current);
+
+    // 重做栈：从最近到最远，灰色显示
+    for (auto it = redoImageDataHistory.rbegin(); it != redoImageDataHistory.rend(); ++it) {
+        QListWidgetItem *entry = new QListWidgetItem(
+            QString("↪ 待重做：%1 · %2").arg(DocumentDisplayName(it->docId), it->label));
+        entry->setForeground(QBrush(QColor(140, 140, 140)));
         ui->historyList->addItem(entry);
     }
+
+    ui->historyList->setCurrentRow(-1);
     ui->historyList->scrollToBottom();
 }
 
-// 点击历史项：连续撤销/重做到目标步骤(历史是栈，当前状态永远是最后一项)
+// 点击历史项：连续撤销/重做到目标步(撤销栈存操作前状态，当前项位于栈顶之后)
 void MainWindow::on_historyList_itemClicked(QListWidgetItem *item)
 {
     if (item == nullptr) {
         return;
     }
     const int target = ui->historyList->row(item);
-    int current = static_cast<int>(imageDataHistory.size()) - 1;
-    while (current > target && imageDataHistory.size() > 1) {
-        UndoImageProcessing();
-        --current;
-    }
-    while (current < target && !redoImageDataHistory.empty()) {
-        RedoImageProcessing();
-        ++current;
+    const int undoCount = static_cast<int>(imageDataHistory.size());
+    if (target < undoCount) {
+        // 撤销到仅剩 target 条(该行对应的状态)
+        while (static_cast<int>(imageDataHistory.size()) > target) {
+            const size_t before = imageDataHistory.size();
+            UndoImageProcessing();
+            if (imageDataHistory.size() == before) {
+                break;   // 无法继续撤销(忙/无可用文档)，避免死循环
+            }
+        }
+    } else if (target > undoCount) {
+        const int steps = target - undoCount;
+        for (int i = 0; i < steps; ++i) {
+            const size_t before = imageDataHistory.size();
+            RedoImageProcessing();
+            if (imageDataHistory.size() == before) {
+                break;   // 无法继续重做，避免死循环
+            }
+        }
     }
 }
 
@@ -3105,6 +3195,7 @@ bool MainWindow::LoadImage(const QString &path)
 
     // 每打开一张图就新建一个文档(标签页)
     Document doc;
+    doc.id = m_nextDocId++;
     doc.path = path;
     doc.value = loaded;
     doc.imageData = loaded.imageData;
@@ -3115,15 +3206,6 @@ bool MainWindow::LoadImage(const QString &path)
     doc.canSave = true;
     doc.layers.push_back(Layer{QString("图层 1"), doc.imageData});
     doc.activeLayer = 0;
-    {
-        // 打开后的状态就是历史第 1 步
-        ImageSnapshot snap;
-        snap.data = doc.imageData;
-        snap.width = doc.originalWidth;
-        snap.height = doc.originalHeight;
-        snap.quad = doc.quad;
-        doc.history.push_back(snap);
-    }
 
     m_docs.push_back(std::move(doc));
     _SetVisible(true);
@@ -3219,8 +3301,6 @@ void MainWindow::ResetDocumentState()
     imageData.clear();
     originalImageData.clear();
     myValue = MyValue();
-    imageDataHistory.clear();
-    redoImageDataHistory.clear();
     m_originalWidth = 0;
     m_originalHeight = 0;
     m_contentQuad = ContentQuad();
@@ -3266,8 +3346,6 @@ void MainWindow::ActivateDocument(int index)
         cur.value = std::move(myValue);
         cur.imageData = std::move(imageData);
         cur.originalImageData = std::move(originalImageData);
-        cur.history = std::move(imageDataHistory);
-        cur.redoHistory = std::move(redoImageDataHistory);
         cur.originalWidth = m_originalWidth;
         cur.originalHeight = m_originalHeight;
         cur.quad = m_contentQuad;
@@ -3290,8 +3368,6 @@ void MainWindow::ActivateDocument(int index)
     myValue = std::move(doc.value);
     imageData = std::move(doc.imageData);
     originalImageData = std::move(doc.originalImageData);
-    imageDataHistory = std::move(doc.history);
-    redoImageDataHistory = std::move(doc.redoHistory);
     m_originalWidth = doc.originalWidth;
     m_originalHeight = doc.originalHeight;
     m_contentQuad = doc.quad;
@@ -3332,6 +3408,47 @@ void MainWindow::ActivateDocument(int index)
     UpdateTabBar();
 }
 
+// 按文档 id 切换到目标文档(全局撤销/重做用)
+bool MainWindow::ActivateDocumentById(int docId)
+{
+    for (size_t i = 0; i < m_docs.size(); ++i) {
+        if (m_docs[i].id != docId) {
+            continue;
+        }
+        if (static_cast<int>(i) == m_activeDoc) {
+            return true;
+        }
+        ActivateDocument(static_cast<int>(i));
+        return true;
+    }
+    return false;
+}
+
+// 历史面板/状态提示用的文档名
+QString MainWindow::DocumentDisplayName(int docId) const
+{
+    for (const Document &doc : m_docs) {
+        if (doc.id != docId) {
+            continue;
+        }
+        const QString name = QFileInfo(doc.path).fileName();
+        return name.isEmpty() ? QString("未命名 %1").arg(docId) : name;
+    }
+    return QString("已关闭的文档");
+}
+
+// 文档关闭后清理它名下的全局历史
+void MainWindow::PurgeHistoryForDocument(int docId)
+{
+    const auto match = [docId](const HistoryEntry &entry) { return entry.docId == docId; };
+    imageDataHistory.erase(std::remove_if(imageDataHistory.begin(), imageDataHistory.end(), match),
+                           imageDataHistory.end());
+    redoImageDataHistory.erase(
+        std::remove_if(redoImageDataHistory.begin(), redoImageDataHistory.end(), match),
+        redoImageDataHistory.end());
+    UpdateHistoryPanel();
+}
+
 void MainWindow::CloseDocument(int index)
 {
     if (index < 0 || index >= static_cast<int>(m_docs.size())) {
@@ -3342,12 +3459,14 @@ void MainWindow::CloseDocument(int index)
         return;
     }
 
+    const int closingId = m_docs[static_cast<size_t>(index)].id;
     const bool wasActive = (index == m_activeDoc);
     if (wasActive) {
         ResetDocumentState();
         m_activeDoc = -1;
     }
     m_docs.erase(m_docs.begin() + index);
+    PurgeHistoryForDocument(closingId);
     if (m_activeDoc > index) {
         --m_activeDoc;
     }
@@ -3499,7 +3618,6 @@ void MainWindow::SetBusy(bool busy)
     ui->menu_blur->setEnabled(!busy);
     ui->menu_base->setEnabled(!busy);
     ui->menu_unbase->setEnabled(!busy);
-    ui->menu_transform->setEnabled(!busy);
     ui->menu_enhance->setEnabled(!busy);
     ui->menu_morph->setEnabled(!busy);
     if (m_selectionMenu != nullptr) {
@@ -3556,7 +3674,7 @@ void MainWindow::ApplyOperator(const QString &title,
         return;
     }
     if (imageData.empty() || myValue.bmpInfo.GetWidth() <= 0 || myValue.bmpInfo.GetHeight() <= 0) {
-        function.CreateMessagebox("提示", "请先打开一张 BMP 图像");
+        function.CreateMessagebox("提示", "请先打开一张图片");
         return;
     }
     CancelPreview();   // 新算子从已提交的图像出发
@@ -3605,7 +3723,7 @@ void MainWindow::ApplyOperator(const QString &title,
                                              static_cast<int>(result->layers.size()) - 1);
                 result->layers[result->activeLayer].data.clear();
             }
-            ApplySnapshot(*result, fromRotation);
+            ApplySnapshot(*result, fromRotation, title);
             UpdateStatus(title + " 完成");
         } else {
             UpdateStatus(title + " 未产生结果");
@@ -3651,7 +3769,7 @@ void MainWindow::ApplyRotation(double deltaDegrees, const QString &title)
         return;
     }
     if (imageData.empty() || myValue.bmpInfo.GetWidth() <= 0 || myValue.bmpInfo.GetHeight() <= 0) {
-        function.CreateMessagebox("提示", "请先打开一张 BMP 图像");
+        function.CreateMessagebox("提示", "请先打开一张图片");
         return;
     }
 
@@ -3705,13 +3823,13 @@ void MainWindow::ApplyRotation(double deltaDegrees, const QString &title)
 }
 
 // 子窗口结果写回主窗口
-void MainWindow::ApplyResult(std::vector<uint8_t> &result)
+void MainWindow::ApplyResult(std::vector<uint8_t> &result, const QString &label)
 {
     const int32_t width = myValue.bmpInfo.GetWidth();
     const int32_t height = myValue.bmpInfo.GetHeight();
     if (result.empty() || width <= 0 || height <= 0 ||
         result.size() != static_cast<size_t>(width) * height * 3) {
-        UpdateStatus("子窗口结果与当前图像不一致，已忽略");
+        UpdateStatus("处理结果与当前图像尺寸不一致，已忽略");
         return;
     }
     if (!m_contentQuad.isValid()) {
@@ -3723,8 +3841,8 @@ void MainWindow::ApplyResult(std::vector<uint8_t> &result)
     }
     // 子窗口只改像素、不改画布几何；结果写回当前活动图层
     ImageSnapshot snap = MakeSnapshot(result, width, height, m_contentQuad);
-    ApplySnapshot(snap);
-    UpdateStatus("已应用子窗口结果");
+    ApplySnapshot(snap, false, label);
+    UpdateStatus("已应用处理结果");
 }
 
 // ------------------------------------------------------------------
@@ -3733,7 +3851,7 @@ void MainWindow::ApplyResult(std::vector<uint8_t> &result)
 
 void MainWindow::on_actiongray_triggered()
 {
-    ApplyOperator("灰度化", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
+    ApplyOperator("转为黑白", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
         RunSegmented(ctx, [this, &d](size_t s, size_t e) {
             this->function.ConvertToGray(d, s, e);
         });
@@ -3755,7 +3873,7 @@ void MainWindow::on_actionautoContrast_triggered()
 void MainWindow::on_actionaver_triggered()
 {
     qDebug() << "aver";
-    ApplyOperator("均值模糊", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
+    ApplyOperator("轻微模糊", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
         RunSegmented(ctx, [this, &d, ctx](size_t s, size_t e) {
             this->function.AverageBlur(d, static_cast<uint32_t>(ctx.width),
                                        static_cast<uint32_t>(ctx.height), s, e);
@@ -3766,13 +3884,6 @@ void MainWindow::on_actionaver_triggered()
 void MainWindow::on_btn_resetAll_clicked()
 {
     ResetAll(myValue);
-}
-
-void MainWindow::on_actionblend_triggered()
-{
-    qDebug() << "i am in a blend window!";
-    blendWindow = new BlendWindow(this, myValue);
-    blendWindow->show();
 }
 
 void MainWindow::on_btn_brightness_clicked()
@@ -3791,10 +3902,10 @@ void MainWindow::on_btn_brightness_clicked()
         return;
     }
     const double_t value = returnValue.value;
-    if (CommitPreview("亮度调整", ui->lineEdit_brightness, value)) {
+    if (CommitPreview("亮度", ui->lineEdit_brightness, value)) {
         return;
     }
-    ApplyOperator("亮度调整", MakeBrightnessOp(value));
+    ApplyOperator("亮度", MakeBrightnessOp(value));
 }
 
 void MainWindow::on_btn_contrast_clicked()
@@ -3813,10 +3924,10 @@ void MainWindow::on_btn_contrast_clicked()
         return;
     }
     const double_t value = returnValue.value;
-    if (CommitPreview("对比度调整", ui->lineEdit_contrast, value)) {
+    if (CommitPreview("对比度", ui->lineEdit_contrast, value)) {
         return;
     }
-    ApplyOperator("对比度调整", MakeContrastOp(value));
+    ApplyOperator("对比度", MakeContrastOp(value));
 }
 
 void MainWindow::on_btn_saturation_clicked()
@@ -3835,15 +3946,15 @@ void MainWindow::on_btn_saturation_clicked()
         return;
     }
     const double_t value = returnValue.value;
-    if (CommitPreview("饱和度调整", ui->lineEdit_saturation, value)) {
+    if (CommitPreview("饱和度", ui->lineEdit_saturation, value)) {
         return;
     }
-    ApplyOperator("饱和度调整", MakeSaturationOp(value));
+    ApplyOperator("饱和度", MakeSaturationOp(value));
 }
 
 void MainWindow::on_actioncolorBalance_triggered()
 {
-    ApplyOperator("色彩平衡", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
+    ApplyOperator("校正偏色", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
         this->function.ColorBalance(d, ctx.width, ctx.height);
     });
 }
@@ -3857,7 +3968,7 @@ void MainWindow::on_actioncolorMap_triggered()
 
 void MainWindow::on_actionreverse_triggered()
 {
-    ApplyOperator("颜色反转", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
+    ApplyOperator("反相", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
         RunSegmented(ctx, [this, &d](size_t s, size_t e) {
             this->function.InvertColors(d, s, e);
         });
@@ -3866,7 +3977,7 @@ void MainWindow::on_actionreverse_triggered()
 
 void MainWindow::on_actioncomplementary_triggered()
 {
-    ApplyOperator("补色", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
+    ApplyOperator("互补色", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
         RunSegmented(ctx, [this, &d](size_t s, size_t e) {
             this->function.Complementary(d, s, e);
         });
@@ -3900,7 +4011,7 @@ void MainWindow::on_actionfishEye_triggered()
 void MainWindow::on_actiongauss_triggered()
 {
     bool ok = false;
-    const double degree = QInputDialog::getDouble(this, tr("输入程度"), tr("程度:"), 0, 0, 10, 1, &ok);
+    const double degree = QInputDialog::getDouble(this, tr("输入数值"), tr("强度："), 0, 0, 10, 1, &ok);
     if (!ok) {
         qDebug() << "用户取消输入";
         return;
@@ -3948,7 +4059,7 @@ void MainWindow::on_btn_rotate_r_clicked()
 void MainWindow::on_actionmedian_triggered()
 {
     qDebug() << "median";
-    ApplyOperator("中值滤波", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
+    ApplyOperator("去除杂点", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
         this->function.MedianBlur(d, static_cast<uint32_t>(ctx.width), static_cast<uint32_t>(ctx.height));
     });
 }
@@ -3956,13 +4067,13 @@ void MainWindow::on_actionmedian_triggered()
 void MainWindow::on_actionmosaic_triggered()
 {
     bool ok = false;
-    const double degree = QInputDialog::getDouble(this, tr("输入程度"), tr("程度:"), 4, 1, 100, 1, &ok);
+    const double degree = QInputDialog::getDouble(this, tr("输入数值"), tr("强度："), 4, 1, 100, 1, &ok);
     if (!ok) {
         qDebug() << "用户取消输入";
         return;
     }
     const uint32_t step = static_cast<uint32_t>(std::max(1.0, degree));
-    ApplyOperator("马赛克", [this, step](std::vector<uint8_t> &d, const OpContext &ctx) {
+    ApplyOperator("打马赛克", [this, step](std::vector<uint8_t> &d, const OpContext &ctx) {
         this->function.FullMosaic(d, static_cast<uint32_t>(ctx.width),
                                   static_cast<uint32_t>(ctx.height), step);
     });
@@ -3984,10 +4095,10 @@ void MainWindow::on_btn_shadow_ok_clicked()
         return;
     }
     const double_t value = returnValue.value;
-    if (CommitPreview("阴影调整", ui->lineEdit_shadow, value)) {
+    if (CommitPreview("提亮暗部", ui->lineEdit_shadow, value)) {
         return;
     }
-    ApplyOperator("阴影调整", MakeShadowOp(value));
+    ApplyOperator("提亮暗部", MakeShadowOp(value));
 }
 
 void MainWindow::on_btn_highlight_ok_clicked()
@@ -4006,10 +4117,10 @@ void MainWindow::on_btn_highlight_ok_clicked()
         return;
     }
     const double_t value = returnValue.value;
-    if (CommitPreview("高光调整", ui->lineEdit_highlight, value)) {
+    if (CommitPreview("压住过曝", ui->lineEdit_highlight, value)) {
         return;
     }
-    ApplyOperator("高光调整", MakeHighlightOp(value));
+    ApplyOperator("压住过曝", MakeHighlightOp(value));
 }
 
 void MainWindow::on_btn_sharpen_clicked()
@@ -4029,15 +4140,15 @@ void MainWindow::on_btn_sharpen_clicked()
         return;
     }
     const double_t amount = returnValue.value;
-    if (CommitPreview("锐化", ui->lineEdit_sharpen, amount)) {
+    if (CommitPreview("让边缘更清晰", ui->lineEdit_sharpen, amount)) {
         return;
     }
-    ApplyOperator("锐化", MakeSharpenOp(amount));
+    ApplyOperator("让边缘更清晰", MakeSharpenOp(amount));
 }
 
 void MainWindow::on_actionsobel_triggered()
 {
-    ApplyOperator("Sobel 边缘检测", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
+    ApplyOperator("描出轮廓", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
         d = this->function.SobelEdge(d, ctx.width, ctx.height);
     });
 }
@@ -4058,20 +4169,70 @@ void MainWindow::on_btn_threshold_ok_clicked()
         return;
     }
     const double_t threshold = returnValue.value;
-    if (CommitPreview("阈值处理", ui->lineEdit_threshold, threshold)) {
+    if (CommitPreview("黑白分界", ui->lineEdit_threshold, threshold)) {
         return;
     }
-    ApplyOperator("阈值处理", MakeThresholdOp(threshold));
+    ApplyOperator("黑白分界", MakeThresholdOp(threshold));
 }
 
 void MainWindow::on_actionscale_triggered()
 {
-    qDebug() << "I am in a inter window!";
+    if (m_busy) {
+        UpdateStatus("正在处理，请稍候…");
+        return;
+    }
+    const int32_t oldW = myValue.bmpInfo.GetWidth();
+    const int32_t oldH = myValue.bmpInfo.GetHeight();
+    if (imageData.empty() || oldW <= 0 || oldH <= 0) {
+        UpdateStatus("请先打开一张图片");
+        return;
+    }
     if (!RequireSingleLayer("缩放图像")) {
         return;
     }
-    Interpolation *inter = new Interpolation(this, myValue);
-    inter->show();
+    CancelPreview();
+
+    ScaleDialog dlg(oldW, oldH, this);
+    if (dlg.exec() != QDialog::Accepted) {
+        return;
+    }
+    const QSize target = dlg.targetSize();
+    if (target.width() == oldW && target.height() == oldH) {
+        function.CreateMessagebox("提示", "尺寸没有变化");
+        return;
+    }
+
+    // 0 快速 / 1 平滑 / 2 最佳：Qt 没有"最佳"，用平滑代替
+    const Qt::TransformationMode mode =
+        (dlg.algorithm() == 0) ? Qt::FastTransformation : Qt::SmoothTransformation;
+
+    const QImage img = Function::ToDisplayImage(imageData, oldW, oldH);
+    if (img.isNull()) {
+        UpdateStatus("当前图像数据无效，无法缩放");
+        return;
+    }
+    const QImage scaled = img.scaled(target, Qt::IgnoreAspectRatio, mode);
+    std::vector<uint8_t> out = BgrFromQImage(scaled);
+    const int32_t newW = target.width();
+    const int32_t newH = target.height();
+    if (out.size() != static_cast<size_t>(newW) * static_cast<size_t>(newH) * 3) {
+        UpdateStatus("缩放结果无效，已取消");
+        return;
+    }
+
+    ContentQuad quad = m_contentQuad;
+    if (!quad.isValid()) {
+        quad.setRect(oldW, oldH);
+    }
+    const double scaleX = static_cast<double>(newW) / static_cast<double>(oldW);
+    const double scaleY = static_cast<double>(newH) / static_cast<double>(oldH);
+    for (int i = 0; i < 4; ++i) {
+        quad.x[i] *= scaleX;
+        quad.y[i] *= scaleY;
+    }
+
+    ApplySnapshot(MakeSnapshot(std::move(out), newW, newH, quad), false, "缩放图像");
+    UpdateStatus(QString("已缩放为 %1×%2").arg(newW).arg(newH));
 }
 
 void MainWindow::on_btn_undo_clicked()
@@ -4099,11 +4260,11 @@ void MainWindow::_SetVisible(bool set)
 {
     qDebug() << "Setting visibility to:" << set;
     ui->toolBar->setVisible(set);
+    ui->toolBox->setVisible(set);
     ui->menu_edit->menuAction()->setVisible(set);
     ui->menu_blur->menuAction()->setVisible(set);
     ui->menu_base->menuAction()->setVisible(set);
     ui->menu_unbase->menuAction()->setVisible(set);
-    ui->menu_transform->menuAction()->setVisible(set);
     ui->menu_enhance->menuAction()->setVisible(set);
     ui->menu_morph->menuAction()->setVisible(set);
     if (m_selectionMenu != nullptr) {
@@ -4137,127 +4298,6 @@ void MainWindow::closeEvent(QCloseEvent *event)
     }
 }
 
-// 缩放相关：倍率必须 >= 1，否则会出现除零/取模崩溃
-static bool AskScaleFactors(QWidget *parent, int &heightFactor, int &widthFactor)
-{
-    bool ok1 = false;
-    bool ok2 = false;
-    const int height = QInputDialog::getInt(parent, QObject::tr("输入高度倍数"), QObject::tr("高度倍数:"), 1, 1, 100, 1, &ok1);
-    const int width = QInputDialog::getInt(parent, QObject::tr("输入宽度倍数"), QObject::tr("宽度倍数:"), 1, 1, 100, 1, &ok2);
-    if (!ok1 || !ok2) {
-        return false;
-    }
-    heightFactor = height;
-    widthFactor = width;
-    return true;
-}
-
-void MainWindow::on_actionlarge_near_triggered()
-{
-    int h = 1, w = 1;
-    if (!RequireSingleLayer("放大图像")) {
-        return;
-    }
-    if (!AskScaleFactors(this, h, w)) {
-        qDebug() << "用户取消输入";
-        return;
-    }
-    Interpolation inter(this, myValue);
-    inter.ShowLargeNear(h, w);
-}
-
-void MainWindow::on_actionsmall_near_triggered()
-{
-    int h = 1, w = 1;
-    if (!RequireSingleLayer("缩小图像")) {
-        return;
-    }
-    if (!AskScaleFactors(this, h, w)) {
-        qDebug() << "用户取消输入";
-        return;
-    }
-    Interpolation inter(this, myValue);
-    inter.ShowSmallNear(h, w);
-}
-
-void MainWindow::on_actionlarge_bilinear_triggered()
-{
-    int h = 1, w = 1;
-    if (!RequireSingleLayer("放大图像")) {
-        return;
-    }
-    if (!AskScaleFactors(this, h, w)) {
-        qDebug() << "用户取消输入";
-        return;
-    }
-    Interpolation inter(this, myValue);
-    inter.ShowLargeBilinear(h, w);
-}
-
-void MainWindow::on_actionsmall_bilinear_triggered()
-{
-    int h = 1, w = 1;
-    if (!RequireSingleLayer("缩小图像")) {
-        return;
-    }
-    if (!AskScaleFactors(this, h, w)) {
-        qDebug() << "用户取消输入";
-        return;
-    }
-    Interpolation inter(this, myValue);
-    inter.ShowSmallBilinear(h, w);
-}
-
-void MainWindow::on_actionlarge_bicubic_triggered()
-{
-    int h = 1, w = 1;
-    if (!RequireSingleLayer("放大图像")) {
-        return;
-    }
-    if (!AskScaleFactors(this, h, w)) {
-        qDebug() << "用户取消输入";
-        return;
-    }
-    Interpolation inter(this, myValue);
-    inter.ShowLargeBicubic(h, w);
-}
-
-void MainWindow::on_actionsmall_bicubic_triggered()
-{
-    int h = 1, w = 1;
-    if (!RequireSingleLayer("缩小图像")) {
-        return;
-    }
-    if (!AskScaleFactors(this, h, w)) {
-        qDebug() << "用户取消输入";
-        return;
-    }
-    Interpolation inter(this, myValue);
-    inter.ShowSmallBicubic(h, w);
-}
-
-void MainWindow::on_actionhighContrast_triggered()
-{
-    bool ok = false;
-    const double degree = QInputDialog::getDouble(this, tr("输入程度"), tr("程度:"), 1, 1, 100, 1, &ok);
-    if (!ok) {
-        qDebug() << "用户取消输入";
-        return;
-    }
-    ApplyOperator("高反差保留", [degree](std::vector<uint8_t> &d, const OpContext &ctx) {
-        Function f;
-        std::promise<std::vector<uint8_t>> blurPromise;
-        std::future<std::vector<uint8_t>> blurFuture = blurPromise.get_future();
-        f.Gauss(d, blurPromise, ctx.width, ctx.height, degree);
-        const std::vector<uint8_t> blurred = blurFuture.get();
-
-        std::promise<std::vector<uint8_t>> highPromise;
-        std::future<std::vector<uint8_t>> highFuture = highPromise.get_future();
-        f.HighContrast(d, highPromise, blurred);
-        d = highFuture.get();
-    });
-}
-
 // ------------------------------------------------------------------
 // P2-A：几何变换 / 增强 / 形态学 / 卷积 / USM
 // ------------------------------------------------------------------
@@ -4288,7 +4328,7 @@ void MainWindow::on_actionrotate90_triggered()
     if (!RequireSingleLayer("旋转")) {
         return;
     }
-    ApplyOperator("顺时针旋转 90°", [](std::vector<uint8_t> &d, OpContext &ctx) {
+    ApplyOperator("向右转 90°", [](std::vector<uint8_t> &d, OpContext &ctx) {
         Function f;
         f.RotateImage(d, ctx.width, ctx.height, 90.0, ctx.quad);
     }, nullptr, nullptr, false);
@@ -4299,7 +4339,7 @@ void MainWindow::on_actionrotate90ccw_triggered()
     if (!RequireSingleLayer("旋转")) {
         return;
     }
-    ApplyOperator("逆时针旋转 90°", [](std::vector<uint8_t> &d, OpContext &ctx) {
+    ApplyOperator("向左转 90°", [](std::vector<uint8_t> &d, OpContext &ctx) {
         Function f;
         f.RotateImage(d, ctx.width, ctx.height, 270.0, ctx.quad);
     }, nullptr, nullptr, false);
@@ -4310,7 +4350,7 @@ void MainWindow::on_actiontranspose_triggered()
     if (!RequireSingleLayer("转置")) {
         return;
     }
-    ApplyOperator("沿主对角线镜像", [](std::vector<uint8_t> &d, OpContext &ctx) {
+    ApplyOperator("沿对角线翻转（左上-右下）", [](std::vector<uint8_t> &d, OpContext &ctx) {
         Function f;
         f.FlipImage(d, ctx.width, ctx.height, Function::FlipMode::Transpose, ctx.quad);
     }, nullptr, nullptr, false);
@@ -4321,7 +4361,7 @@ void MainWindow::on_actionantitranspose_triggered()
     if (!RequireSingleLayer("反转置")) {
         return;
     }
-    ApplyOperator("沿副对角线镜像", [](std::vector<uint8_t> &d, OpContext &ctx) {
+    ApplyOperator("沿对角线翻转（右上-左下）", [](std::vector<uint8_t> &d, OpContext &ctx) {
         Function f;
         f.FlipImage(d, ctx.width, ctx.height, Function::FlipMode::AntiTranspose, ctx.quad);
     }, nullptr, nullptr, false);
@@ -4333,11 +4373,11 @@ void MainWindow::on_actiontailor_triggered()
         UpdateStatus("上一个操作还在处理中，请稍候");
         return;
     }
-    if (!RequireSingleLayer("图像裁剪")) {
+    if (!RequireSingleLayer("裁剪图像")) {
         return;
     }
     if (imageData.empty() || myValue.bmpInfo.GetWidth() <= 0) {
-        function.CreateMessagebox("提示", "请先打开一张 BMP 图像");
+        function.CreateMessagebox("提示", "请先打开一张图片");
         return;
     }
     const QImage display = Function::ToDisplayImage(imageData,
@@ -4352,7 +4392,7 @@ void MainWindow::on_actiontailor_triggered()
         UpdateStatus("裁剪选区太小，已取消");
         return;
     }
-    ApplyOperator("图像裁剪", [sel](std::vector<uint8_t> &d, OpContext &ctx) {
+    ApplyOperator("裁剪图像", [sel](std::vector<uint8_t> &d, OpContext &ctx) {
         Function f;
         f.CropImage(d, ctx.width, ctx.height,
                     sel.x(), sel.y(), sel.width(), sel.height(), ctx.quad);
@@ -4361,7 +4401,7 @@ void MainWindow::on_actiontailor_triggered()
 
 void MainWindow::on_actionequalize_triggered()
 {
-    ApplyOperator("直方图均衡化", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
+    ApplyOperator("自动拉大明暗", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
         uint8_t lut[256];
         this->function.BuildEqualizeLUT(d, lut);
         RunSegmented(ctx, [this, &d, &lut](size_t s, size_t e) {
@@ -4372,7 +4412,7 @@ void MainWindow::on_actionequalize_triggered()
 
 void MainWindow::on_actionerode_triggered()
 {
-    ApplyOperator("腐蚀", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
+    ApplyOperator("去小亮点", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
         this->function.Morphology(d, ctx.width, ctx.height,
                                   Function::MorphType::Erode, 0, ctx.pixelCount);
     });
@@ -4380,7 +4420,7 @@ void MainWindow::on_actionerode_triggered()
 
 void MainWindow::on_actiondilate_triggered()
 {
-    ApplyOperator("膨胀", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
+    ApplyOperator("补小暗点", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
         this->function.Morphology(d, ctx.width, ctx.height,
                                   Function::MorphType::Dilate, 0, ctx.pixelCount);
     });
@@ -4388,7 +4428,7 @@ void MainWindow::on_actiondilate_triggered()
 
 void MainWindow::on_actionopenMorph_triggered()
 {
-    ApplyOperator("开运算", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
+    ApplyOperator("先消后补", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
         this->function.Morphology(d, ctx.width, ctx.height,
                                   Function::MorphType::Open, 0, ctx.pixelCount);
     });
@@ -4396,7 +4436,7 @@ void MainWindow::on_actionopenMorph_triggered()
 
 void MainWindow::on_actioncloseMorph_triggered()
 {
-    ApplyOperator("闭运算", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
+    ApplyOperator("先补后消", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
         this->function.Morphology(d, ctx.width, ctx.height,
                                   Function::MorphType::Close, 0, ctx.pixelCount);
     });
@@ -4409,7 +4449,7 @@ void MainWindow::on_actionconvolution_triggered()
         return;
     }
     if (imageData.empty()) {
-        function.CreateMessagebox("提示", "请先打开一张 BMP 图像");
+        function.CreateMessagebox("提示", "请先打开一张图片");
         return;
     }
     KernelDialog dlg(this);
@@ -4419,7 +4459,7 @@ void MainWindow::on_actionconvolution_triggered()
     const std::vector<double> kernel = dlg.kernel();
     const double scale = dlg.scale();
     const double offset = dlg.offset();
-    ApplyOperator("自定义卷积", [this, kernel, scale, offset](std::vector<uint8_t> &d, const OpContext &ctx) {
+    ApplyOperator("自定义滤镜", [this, kernel, scale, offset](std::vector<uint8_t> &d, const OpContext &ctx) {
         std::vector<uint8_t> out;
         this->function.Convolve3x3(d, out, ctx.width, ctx.height,
                                    kernel.data(), scale, offset, 0, ctx.pixelCount);
@@ -4436,7 +4476,7 @@ void MainWindow::on_actionusm_triggered()
         return;
     }
     if (imageData.empty()) {
-        function.CreateMessagebox("提示", "请先打开一张 BMP 图像");
+        function.CreateMessagebox("提示", "请先打开一张图片");
         return;
     }
     USMDialog dlg(this);
@@ -4446,7 +4486,7 @@ void MainWindow::on_actionusm_triggered()
     const double radius = dlg.radius();
     const double amount = dlg.amount();
     const double threshold = dlg.threshold();
-    ApplyOperator("USM 锐化", [this, radius, amount, threshold](std::vector<uint8_t> &d, const OpContext &ctx) {
+    ApplyOperator("智能锐化", [this, radius, amount, threshold](std::vector<uint8_t> &d, const OpContext &ctx) {
         std::vector<uint8_t> out;
         this->function.USMSharpen(d, out, ctx.width, ctx.height, radius, amount, threshold);
         if (!out.empty() && out.size() == d.size()) {

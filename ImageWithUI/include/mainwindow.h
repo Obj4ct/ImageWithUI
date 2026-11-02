@@ -12,9 +12,7 @@
 #include <QPolygon>
 #include "BMPFile.h"
 #include "Function.h"
-#include "blendwindow.h"
 #include "eye.h"
-#include "interpolation.h"
 #include "face.h"
 #include "colormap.h"
 
@@ -23,12 +21,6 @@ struct ReturnValue{
     bool isNumeric = false;
     double_t value = 0.0;
 };
-enum OperationType
-{
-    UNDO,
-    REDO
-};
-
 // 算子执行上下文：统一以【像素】为单位描述尺寸与分段
 struct OpContext {
     int32_t width = 0;
@@ -78,6 +70,13 @@ struct ImageSnapshot {
     int activeLayer = 0;
 };
 
+// 全局历史记录：撤销栈存“操作前状态”，重做栈存“操作后状态”
+struct HistoryEntry {
+    int docId = -1;
+    QString label;
+    ImageSnapshot snap;
+};
+
 // 算子函数：输入像素与执行上下文(可修改画布尺寸)
 using OpFn = std::function<void(std::vector<uint8_t> &, OpContext &)>;
 
@@ -95,12 +94,11 @@ struct PreviewField {
 // 只有"当前活动文档"的状态会放在 MainWindow 的成员里直接使用，
 // 其余文档以这份结构保存，切换标签时把两边状态整体交换(移动语义，不拷贝像素)
 struct Document {
+    int id = 0;                               // 文档唯一标识(全局历史按它定位文档)
     QString path;                             // 文件路径(空表示未命名)
     MyValue value;                            // 文件头信息 + 原始像素
     std::vector<uint8_t> imageData;           // 当前像素
     std::vector<uint8_t> originalImageData;   // 打开时的原始像素(重置用)
-    std::list<ImageSnapshot> history;         // 撤销栈
-    std::list<ImageSnapshot> redoHistory;     // 重做栈
     int32_t originalWidth = 0;
     int32_t originalHeight = 0;
     ContentQuad quad;
@@ -134,7 +132,6 @@ public:
     void ShowImage(const std::vector<uint8_t> &inImageData,MyValue value,int32_t width,int32_t height);
     void ResetAll(MyValue &myValue);
     ReturnValue CheckOK(QLineEdit* lineEdit);
-    OperationType SaveImageDataToHistory(const ImageSnapshot &snap);
     void UndoImageProcessing();
     void RedoImageProcessing();
     //清理每段数据,防止数据冲突引发异常
@@ -142,7 +139,8 @@ public:
 
     // ---- 给子窗口使用的接口 ----
     // 子窗口算子结果写回主窗口：更新数据 + 记录历史 + 刷新显示
-    void ApplyResult(std::vector<uint8_t> &result);
+    void ApplyResult(std::vector<uint8_t> &result,
+                     const QString &label = QStringLiteral("应用处理结果"));
     // 当前正在显示的像素数据
     const std::vector<uint8_t> &CurrentImageData() const { return imageData; }
     // 是否正在处理中(处理中应禁止再次触发算子)
@@ -212,8 +210,8 @@ public:
 
 public:
     std::string BMPPath;
-    std::list<ImageSnapshot> imageDataHistory;
-    std::list<ImageSnapshot> redoImageDataHistory;
+    std::list<HistoryEntry> imageDataHistory;      // 全局撤销栈(操作前状态)
+    std::list<HistoryEntry> redoImageDataHistory;  // 全局重做栈(操作后状态)
     //分段处理数据
     int num_threads = 1;
     size_t imageSize = 0;      // 像素数据字节数
@@ -285,8 +283,6 @@ private slots:
 
     void on_actioncolorBalance_triggered();
 
-    void on_actionblend_triggered();
-
     void on_actionmosaic_triggered();
 
     void on_actionsobel_triggered();
@@ -307,19 +303,6 @@ private slots:
     void on_actionscale_triggered();
 
     void on_actionredo_triggered();
-
-    void on_actionlarge_near_triggered();
-
-    void on_actionsmall_near_triggered();
-
-    void on_actionlarge_bilinear_triggered();
-
-    void on_actionsmall_bilinear_triggered();
-
-    void on_actionlarge_bicubic_triggered();
-
-    void on_actionsmall_bicubic_triggered();
-    void on_actionhighContrast_triggered();
 
     // ---- P2-A 新功能 ----
     void on_actionflipH_triggered();
@@ -344,7 +327,6 @@ protected:
 
 private:
     Ui::MainWindow *ui;
-    BlendWindow * blendWindow = nullptr;
     bool canSave = false;
     void closeEvent(QCloseEvent *event) override;
     void _SetVisible(bool set);
@@ -386,8 +368,22 @@ private:
     void SetBusy(bool busy);
     // 打开文件后的统一初始化
     bool LoadImage(const QString &path);
+    // 当前活动文档的完整快照(与 MakeSnapshot 的存储约定一致)
+    ImageSnapshot CurrentSnapshot() const;
+    // 写入一条全局历史：before 为操作前状态，当前状态为操作后
+    void PushHistory(const QString &label, const ImageSnapshot &before);
     // 应用一个快照：写历史 + 同步尺寸 + 刷新显示
-    void ApplySnapshot(const ImageSnapshot &snap, bool keepRotateBase = false);
+    void ApplySnapshot(const ImageSnapshot &snap, bool keepRotateBase = false,
+                       const QString &label = QStringLiteral("编辑"),
+                       const ImageSnapshot *beforeOverride = nullptr);
+    // 把快照内容直接写进当前文档并刷新显示(不写历史，撤销/重做共用)
+    void ApplyStateSnapshot(const ImageSnapshot &snap, bool keepRotateBase);
+    // 按文档 id 切换到目标文档；找不到返回 false
+    bool ActivateDocumentById(int docId);
+    // 历史面板/状态提示用的文档名
+    QString DocumentDisplayName(int docId) const;
+    // 文档关闭后清理它名下的撤销/重做记录
+    void PurgeHistoryForDocument(int docId);
     // 只刷新画面(不修改已提交的像素数据)，供预览/取消预览使用
     void SetDisplayPixmap(const std::vector<uint8_t> &data, int32_t width, int32_t height);
     void ApplyDisplayPixmap(QPixmap pixmap);
@@ -432,6 +428,7 @@ private:
     QTabBar *m_tabBar = nullptr;
     std::vector<Document> m_docs;
     int m_activeDoc = -1;
+    int m_nextDocId = 1;          // 下一个文档 id(只增不减)
 
     // ---- 选区 ----
     void SetupSelectionTool();
@@ -469,7 +466,7 @@ private:
     // 从快照恢复图层栈与像素(撤销/重做/应用快照共用)
     void RestoreSnapshot(const ImageSnapshot &snap);
     // 图层结构变化(增删/合并/排序)写一步历史
-    void CommitLayerStructure(const QString &title);
+    void CommitLayerStructure(const QString &title, const ImageSnapshot &before);
     // 需要保持"单图层"的几何操作守卫(多图层时提示先合并)
     bool RequireSingleLayer(const QString &opName);
 

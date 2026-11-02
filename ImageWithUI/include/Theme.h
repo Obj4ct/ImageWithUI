@@ -112,6 +112,43 @@ QToolBar QToolButton:checked {
 }
 QToolBar::separator { background: #232830; width: 1px; margin: 4px 8px; }
 
+/* ================= 左侧竖排工具条 ================= */
+QToolBar#toolBox {
+    background-color: #101318;
+    border: none;
+    border-right: 1px solid #1c222b;
+    padding: 8px 6px;
+    spacing: 6px;
+}
+QToolBar#toolBox QToolButton {
+    background: #141a21;
+    border: 1px solid #232d38;
+    border-radius: 8px;
+    padding: 0;
+    min-width: 60px;
+    max-width: 60px;
+    min-height: 46px;
+    max-height: 46px;
+    color: #b8c3d1;
+    font-size: 11px;
+}
+QToolBar#toolBox QToolButton:hover {
+    background-color: #171f29;
+    border-color: #2a3a49;
+    color: #e8f6ff;
+}
+QToolBar#toolBox QToolButton:pressed {
+    background-color: #12333f;
+    border-color: #1f5d70;
+    color: #8be9f9;
+}
+QToolBar#toolBox QToolButton:checked {
+    background-color: #123040;
+    border-color: #22d3ee;
+    color: #8be9f9;
+}
+QToolBar#toolBox::separator { background: #232830; height: 1px; margin: 6px 4px; }
+
 /* ================= 文档标签栏 ================= */
 QTabBar#documentTabBar { background: transparent; }
 QTabBar#documentTabBar::tab {
@@ -314,7 +351,7 @@ QWidget#widget {
 }
 QWidget#widget QWidget { background: transparent; }
 /* 固定标签宽度，让输入框/按钮整齐对齐(标签里原有的对齐空格会被裁掉) */
-QWidget#widget QLabel { color: #9dabb8; min-width: 104px; max-width: 104px; }
+QWidget#widget QLabel { color: #9dabb8; min-width: 76px; max-width: 76px; }
 QLabel#label_sec_adjust, QLabel#label_sec_transform {
     color: #67e8f9;
     font-size: 12px;
@@ -324,8 +361,8 @@ QLabel#label_sec_adjust, QLabel#label_sec_transform {
     max-width: 16777215px;
     padding: 6px 0 0 2px;
 }
-QWidget#widget QLineEdit { min-width: 78px; max-width: 92px; }
-QWidget#widget QPushButton { min-width: 46px; max-width: 64px; }
+QWidget#widget QLineEdit { min-width: 68px; max-width: 78px; }
+QWidget#widget QPushButton { min-width: 46px; max-width: 54px; }
 
 /* ================= 状态栏 ================= */
 QStatusBar {
@@ -422,6 +459,31 @@ QToolBar QToolButton:hover { background-color: #f0f4f8; border-color: #dfe3e8; }
 QToolBar QToolButton:pressed { background-color: #dff3f8; border-color: #9edbe6; color: #0b7285; }
 QToolBar QToolButton:checked { background-color: #e3f6fa; border-color: #22b8cf; color: #0b7285; }
 QToolBar::separator { background: #e7eaee; width: 1px; margin: 4px 8px; }
+
+/* ================= 左侧竖排工具条 ================= */
+QToolBar#toolBox {
+    background-color: #ffffff;
+    border: none;
+    border-right: 1px solid #e7eaee;
+    padding: 8px 6px;
+    spacing: 6px;
+}
+QToolBar#toolBox QToolButton {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 0;
+    min-width: 44px;
+    max-width: 44px;
+    min-height: 44px;
+    max-height: 44px;
+    color: #3c4a59;
+    font-size: 11px;
+}
+QToolBar#toolBox QToolButton:hover { background-color: #f0f4f8; border-color: #dfe3e8; }
+QToolBar#toolBox QToolButton:pressed { background-color: #dff3f8; border-color: #9edbe6; color: #0b7285; }
+QToolBar#toolBox QToolButton:checked { background-color: #e3f6fa; border-color: #22b8cf; color: #0b7285; }
+QToolBar#toolBox::separator { background: #e7eaee; height: 1px; margin: 6px 4px; }
 /* ================= 文档标签栏 ================= */
 QTabBar#documentTabBar { background: transparent; }
 QTabBar#documentTabBar::tab {
@@ -545,13 +607,13 @@ QWidget#widget {
     border-radius: 14px;
 }
 QWidget#widget QWidget { background: transparent; }
-QWidget#widget QLabel { color: #5b6876; min-width: 104px; max-width: 104px; }
+QWidget#widget QLabel { color: #5b6876; min-width: 76px; max-width: 76px; }
 QLabel#label_sec_adjust, QLabel#label_sec_transform {
     color: #0b7285; font-size: 12px; font-weight: 600;
     letter-spacing: 2px; min-width: 0; max-width: 16777215px; padding: 6px 0 0 2px;
 }
-QWidget#widget QLineEdit { min-width: 78px; max-width: 92px; }
-QWidget#widget QPushButton { min-width: 46px; max-width: 64px; }
+QWidget#widget QLineEdit { min-width: 68px; max-width: 78px; }
+QWidget#widget QPushButton { min-width: 46px; max-width: 54px; }
 QStatusBar { background-color: #ffffff; border-top: 1px solid #e7eaee; color: #6b7785; }
 QStatusBar::item { border: none; }
 QStatusBar QLabel { color: #6b7785; padding: 1px 10px; font-size: 12px; }

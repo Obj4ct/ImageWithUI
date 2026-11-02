@@ -11,7 +11,7 @@ Face::Face(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     // 清掉 .ui 里自带的浅色样式，统一交给全局主题(Theme.h)接管
     setStyleSheet(QString());
 
-    setWindowTitle(QString("图像微调"));
+    setWindowTitle(QString("人像瘦脸"));
     setWindowIcon(QIcon(":/icon/logo.png"));
     imageData = mainWindow->imageData;
     previewData = imageData;

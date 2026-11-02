@@ -8,7 +8,7 @@ eye::eye(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     ui->setupUi(this);
     // 清掉 .ui 里自带的浅色样式，统一交给全局主题(Theme.h)接管
     setStyleSheet(QString());
-    setWindowTitle(QString("眼部放大"));
+    setWindowTitle(QString("放大眼睛"));
     setWindowIcon(QIcon(":/icon/logo.png"));
     //默认显示原始图像
     imageData = mainWindow->imageData;
@@ -107,7 +107,7 @@ bool eye::RunPreview(bool reportErrors)
     } else if (returnRange.value <= 0) {
         error = "半径必须大于 0";
     } else if (returnNum.value <= 0 || returnNum.value > 1) {
-        error = "放大强度需在 0 和 1 之间（如 0.3 约放大 1.4 倍）";
+        error = "放大程度需在 0 和 1 之间（如 0.3 约放大 1.4 倍）";
     } else if (reportErrors && !hasFirst) {
         error = "还没成功获取坐标值";
     }

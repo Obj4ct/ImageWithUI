@@ -35,15 +35,9 @@ set(PROJECT_SOURCES
         include/Theme.h
         include/Function.h
         src/Function.cpp
-        #create a new ui include cpp and head file
-        include/blendwindow.h
-        src/blendwindow.cpp
-        ui/blendwindow.ui
         include/eye.h
         src/eye.cpp
         ui/eye.ui
-        include/interpolation.h
-        src/interpolation.cpp
 
         include/face.h
         src/face.cpp

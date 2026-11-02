@@ -236,7 +236,7 @@ QStatusBar::item {
          <item>
           <widget class="QLabel" name="label_4">
            <property name="text">
-            <string>眼部半径(像素)</string>
+            <string>影响范围（像素）</string>
            </property>
           </widget>
          </item>
@@ -263,7 +263,7 @@ QStatusBar::item {
          <item>
           <widget class="QLabel" name="label_5">
            <property name="text">
-            <string>放大强度(0~1)</string>
+            <string>放大程度（0~1）</string>
            </property>
           </widget>
          </item>

@@ -1034,7 +1034,7 @@ int Run(const QString &imagePath)
         out().flush();
     }
 
-    // ---------- 11. 多文档标签页：每个文档的像素/尺寸/历史互不干扰 ----------
+    // ---------- 11. 多文档标签页：全局撤销自动切换，像素/尺寸互不影响 ----------
     {
         const QString docAPath = QDir::tempPath() + "/imagewithui_doc_a.png";
         const QString docBPath = QDir::tempPath() + "/imagewithui_doc_b.png";
@@ -1054,6 +1054,8 @@ int Run(const QString &imagePath)
                 failReason = "无法打开测试图";
             } else if (win.DocumentCount() != 2 || win.ActiveDocumentIndex() != 1) {
                 failReason = "打开两张图后文档数/活动文档不对";
+            } else if (win.imageDataHistory.size() != 0) {
+                failReason = "打开文档不应产生全局历史";
             } else {
                 const std::vector<uint8_t> bPixels = win.CurrentImageData();
                 const int32_t bWidth = win.myValue.bmpInfo.GetWidth();
@@ -1069,41 +1071,83 @@ int Run(const QString &imagePath)
                     } else if (win.myValue.bmpInfo.GetWidth() != 64 ||
                                win.myValue.bmpInfo.GetHeight() != 48) {
                         failReason = "切换标签后尺寸没有跟着换";
-                    } else if (win.imageDataHistory.size() != 1) {
-                        failReason = "切换标签后历史没有跟着换";
+                    } else if (win.imageDataHistory.size() != 0) {
+                        failReason = "切换标签不应产生全局历史";
                     } else {
-                        // 在文档 A 上做一次亮度调整，不能影响文档 B
+                        const std::vector<uint8_t> aPixels = win.CurrentImageData();
+
+                        // 在文档 A 上应用亮度：全局历史 +1
                         QLineEdit *edit = win.findChild<QLineEdit *>("lineEdit_brightness");
                         QPushButton *apply = win.findChild<QPushButton *>("btn_brightness");
-                        if (edit != nullptr && apply != nullptr) {
+                        if (edit == nullptr || apply == nullptr) {
+                            failReason = "找不到亮度输入框/应用按钮";
+                        } else {
                             edit->setText("30");
                             QEventLoop loop;
                             QTimer::singleShot(1200, &loop, &QEventLoop::quit);
                             loop.exec();
                             apply->click();
-                            if (win.imageDataHistory.size() != 2) {
-                                failReason = "文档 A 应用调整后历史未增加";
+                            if (win.imageDataHistory.size() != 1) {
+                                failReason = "文档 A 应用调整后全局历史应为 1";
                             }
                         }
 
-                        bar->setCurrentIndex(1);   // 切回文档 B
-                        if (!failReason.isEmpty()) {
-                            // 已有失败原因，保持
-                        } else if (win.ActiveDocumentIndex() != 1) {
-                            failReason = "切回文档 B 失败";
-                        } else if (win.myValue.bmpInfo.GetWidth() != bWidth ||
-                                   win.myValue.bmpInfo.GetHeight() != bHeight) {
-                            failReason = "文档 B 的尺寸被破坏";
-                        } else if (win.CurrentImageData() != bPixels) {
-                            failReason = "文档 B 的像素被文档 A 的修改影响";
-                        } else if (win.imageDataHistory.size() != 1) {
-                            failReason = "文档 B 的历史被污染";
-                        } else {
-                            // 关闭当前标签，应回到文档 A
+                        std::vector<uint8_t> aAdjusted;
+                        if (failReason.isEmpty()) {
+                            aAdjusted = win.CurrentImageData();
+                            bar->setCurrentIndex(1);   // 切回文档 B
+                            if (win.ActiveDocumentIndex() != 1) {
+                                failReason = "切回文档 B 失败";
+                            } else if (win.myValue.bmpInfo.GetWidth() != bWidth ||
+                                       win.myValue.bmpInfo.GetHeight() != bHeight) {
+                                failReason = "文档 B 的尺寸被破坏";
+                            } else if (win.CurrentImageData() != bPixels) {
+                                failReason = "文档 B 的像素被文档 A 的修改影响";
+                            } else if (win.imageDataHistory.size() != 1) {
+                                failReason = "切换文档不应清空/污染全局历史";
+                            }
+                        }
+
+                        // 在 B 上撤销：自动切回 A，历史归零，A 恢复调整前像素
+                        if (failReason.isEmpty()) {
+                            const std::vector<uint8_t> bPixelsBeforeUndo = win.CurrentImageData();
+                            win.UndoImageProcessing();
+                            if (win.ActiveDocumentIndex() != 0) {
+                                failReason = "撤销没有自动切回文档 A";
+                            } else if (win.imageDataHistory.size() != 0) {
+                                failReason = "撤销后全局历史没有减少";
+                            } else if (win.CurrentImageData() != aPixels) {
+                                failReason = "撤销后文档 A 的像素没有恢复";
+                            } else if (win.CurrentImageData() == aAdjusted) {
+                                failReason = "撤销后文档 A 仍是调整后的像素";
+                            } else {
+                                bar->setCurrentIndex(1);   // 确认 B 未被撤销影响
+                                if (win.CurrentImageData() != bPixelsBeforeUndo) {
+                                    failReason = "撤销文档 A 的操作影响了文档 B";
+                                }
+                                bar->setCurrentIndex(0);   // 回到 A 继续验证重做
+                            }
+                        }
+
+                        // 重做：仍在 A，回到调整后的像素
+                        if (failReason.isEmpty()) {
+                            win.RedoImageProcessing();
+                            if (win.ActiveDocumentIndex() != 0) {
+                                failReason = "重做后活动文档应为 A";
+                            } else if (win.imageDataHistory.size() != 1) {
+                                failReason = "重做后全局历史没有恢复";
+                            } else if (win.CurrentImageData() != aAdjusted) {
+                                failReason = "重做后文档 A 没有回到调整后的像素";
+                            }
+                        }
+
+                        // 关闭 B：只剩 A，尺寸 64×48
+                        if (failReason.isEmpty()) {
                             QMetaObject::invokeMethod(bar, "tabCloseRequested", Q_ARG(int, 1));
                             if (win.DocumentCount() != 1 || win.ActiveDocumentIndex() != 0) {
                                 failReason = "关闭标签后文档数/活动文档不对";
-                            } else if (win.myValue.bmpInfo.GetWidth() != 64) {
+                            } else if (win.myValue.bmpInfo.GetWidth() != 64 ||
+                                       win.myValue.bmpInfo.GetHeight() != 48) {
                                 failReason = "关闭标签后没有切回文档 A";
                             }
                         }
@@ -1116,7 +1160,7 @@ int Run(const QString &imagePath)
 
         if (failReason.isEmpty()) {
             ++g_pass;
-            out() << "[PASS] 多文档标签页 : 标签切换保持各自像素/尺寸/历史，关闭后自动切换\n";
+            out() << "[PASS] 多文档标签页 : 全局历史共享，撤销自动切到目标文档，关闭后自动切换\n";
         } else {
             ++g_fail;
             out() << "[FAIL] 多文档标签页 : " << failReason << "\n";
@@ -1847,12 +1891,12 @@ int Run(const QString &imagePath)
                 QAction *magnet = nullptr;
                 QAction *lasso = nullptr;
                 for (QAction *a : win.findChildren<QAction *>()) {
-                    if (a->text() == QString("多边形套索")) poly = a;
-                    else if (a->text() == QString("磁性套索")) magnet = a;
-                    else if (a->text() == QString("自由套索")) lasso = a;
+                    if (a->text() == QString("多边形选区")) poly = a;
+                    else if (a->text() == QString("自动贴边选区")) magnet = a;
+                    else if (a->text() == QString("手绘选区")) lasso = a;
                 }
                 if (!poly || !magnet || !lasso) {
-                    failReason = "工具栏/菜单里找不到多边形或磁性套索";
+                    failReason = "工具栏/菜单里找不到多边形或自动贴边选区";
                 } else if (!poly->isCheckable() || !magnet->isCheckable()) {
                     failReason = "套索工具项不可勾选";
                 } else {
@@ -2052,6 +2096,163 @@ int Run(const QString &imagePath)
         } else {
             ++g_fail;
             out() << "[FAIL] 自由变换 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
+    // ---------- 22. 全局撤销跨标签 ----------
+    {
+        const QString crossAPath = QDir::tempPath() + "/imagewithui_cross_a.png";
+        const QString crossBPath = QDir::tempPath() + "/imagewithui_cross_b.png";
+        {
+            QImage a(64, 48, QImage::Format_RGB32);
+            a.fill(qRgb(200, 60, 60));
+            a.save(crossAPath, "PNG");
+            QImage b(80, 60, QImage::Format_RGB32);
+            b.fill(qRgb(60, 60, 200));
+            b.save(crossBPath, "PNG");
+        }
+
+        QString failReason;
+        {
+            MainWindow win;
+            QTabBar *bar = nullptr;
+            if (!win.OpenImage(crossAPath) || !win.OpenImage(crossBPath)) {
+                failReason = "无法打开测试图";
+            } else if (win.imageDataHistory.size() != 0) {
+                failReason = "打开文档不应产生全局历史";
+            } else {
+                bar = win.findChild<QTabBar *>("documentTabBar");
+                if (bar == nullptr || bar->count() != 2) {
+                    failReason = "标签栏没有正确创建";
+                }
+            }
+
+            std::vector<uint8_t> aOrig, aAdjusted, bOrig, bAdjusted;
+
+            // 1) 在 A 上应用亮度：全局历史 1
+            if (failReason.isEmpty()) {
+                bar->setCurrentIndex(0);
+                aOrig = win.CurrentImageData();
+                QLineEdit *edit = win.findChild<QLineEdit *>("lineEdit_brightness");
+                QPushButton *apply = win.findChild<QPushButton *>("btn_brightness");
+                if (edit == nullptr || apply == nullptr) {
+                    failReason = "找不到亮度输入框/应用按钮";
+                } else {
+                    edit->setText("30");
+                    QEventLoop loop;
+                    QTimer::singleShot(1200, &loop, &QEventLoop::quit);
+                    loop.exec();
+                    apply->click();
+                    if (win.imageDataHistory.size() != 1) {
+                        failReason = "A 应用亮度后全局历史应为 1";
+                    } else {
+                        aAdjusted = win.CurrentImageData();
+                    }
+                }
+            }
+
+            // 2) 切到 B 应用对比度：全局历史 2
+            if (failReason.isEmpty()) {
+                bar->setCurrentIndex(1);
+                bOrig = win.CurrentImageData();
+                QLineEdit *edit = win.findChild<QLineEdit *>("lineEdit_contrast");
+                QPushButton *apply = win.findChild<QPushButton *>("btn_contrast");
+                if (edit == nullptr || apply == nullptr) {
+                    failReason = "找不到对比度输入框/应用按钮";
+                } else {
+                    edit->setText("40");
+                    QEventLoop loop;
+                    QTimer::singleShot(1200, &loop, &QEventLoop::quit);
+                    loop.exec();
+                    apply->click();
+                    if (win.imageDataHistory.size() != 2) {
+                        failReason = "B 应用对比度后全局历史应为 2";
+                    } else {
+                        bAdjusted = win.CurrentImageData();
+                    }
+                }
+            }
+
+            // 3) 撤销：活动文档为 B，历史 1，B 像素恢复，A 未被改
+            if (failReason.isEmpty()) {
+                win.UndoImageProcessing();
+                if (win.ActiveDocumentIndex() != 1) {
+                    failReason = "撤销 B 的操作后活动文档应为 B";
+                } else if (win.imageDataHistory.size() != 1) {
+                    failReason = "撤销 B 的操作后全局历史应为 1";
+                } else if (win.CurrentImageData() != bOrig) {
+                    failReason = "撤销后 B 的像素没有恢复";
+                } else {
+                    bar->setCurrentIndex(0);
+                    if (win.CurrentImageData() != aAdjusted) {
+                        failReason = "撤销 B 的操作影响了 A";
+                    }
+                    bar->setCurrentIndex(1);   // 回到 B，准备第二次撤销
+                }
+            }
+
+            // 4) 再撤销：自动切到 A，历史 0，A 像素恢复
+            if (failReason.isEmpty()) {
+                win.UndoImageProcessing();
+                if (win.ActiveDocumentIndex() != 0) {
+                    failReason = "第二次撤销没有自动切到文档 A";
+                } else if (win.imageDataHistory.size() != 0) {
+                    failReason = "第二次撤销后全局历史应为 0";
+                } else if (win.CurrentImageData() != aOrig) {
+                    failReason = "第二次撤销后 A 的像素没有恢复";
+                }
+            }
+
+            // 5) 重做两次：先 A 调整后，再 B 调整后，最终活动文档为 B
+            if (failReason.isEmpty()) {
+                win.RedoImageProcessing();
+                if (win.ActiveDocumentIndex() != 0) {
+                    failReason = "第一次重做后活动文档应为 A";
+                } else if (win.imageDataHistory.size() != 1) {
+                    failReason = "第一次重做后全局历史应为 1";
+                } else if (win.CurrentImageData() != aAdjusted) {
+                    failReason = "第一次重做后 A 没有回到调整后的像素";
+                } else {
+                    win.RedoImageProcessing();
+                    if (win.ActiveDocumentIndex() != 1) {
+                        failReason = "第二次重做后活动文档应为 B";
+                    } else if (win.imageDataHistory.size() != 2) {
+                        failReason = "第二次重做后全局历史应为 2";
+                    } else if (win.CurrentImageData() != bAdjusted) {
+                        failReason = "第二次重做后 B 没有回到调整后的像素";
+                    }
+                }
+            }
+
+            // 6) 关闭 A：A 的历史记录被清理，剩余记录仍可撤销
+            if (failReason.isEmpty()) {
+                QMetaObject::invokeMethod(bar, "tabCloseRequested", Q_ARG(int, 0));
+                if (win.DocumentCount() != 1 || win.ActiveDocumentIndex() != 0) {
+                    failReason = "关闭 A 后应只剩文档 B";
+                } else if (win.imageDataHistory.size() != 1) {
+                    failReason = "关闭 A 后应只剩 B 的 1 条记录";
+                } else {
+                    win.UndoImageProcessing();
+                    if (win.ActiveDocumentIndex() != 0) {
+                        failReason = "关闭 A 后撤销应留在文档 B";
+                    } else if (win.imageDataHistory.size() != 0) {
+                        failReason = "关闭 A 后剩余记录撤销失败";
+                    } else if (win.CurrentImageData() != bOrig) {
+                        failReason = "关闭 A 后撤销没有恢复 B 的像素";
+                    }
+                }
+            }
+        }
+        QFile::remove(crossAPath);
+        QFile::remove(crossBPath);
+
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 全局撤销跨标签 : 跨文档撤销/重做自动切换，关闭文档清理历史\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 全局撤销跨标签 : " << failReason << "\n";
         }
         out().flush();
     }

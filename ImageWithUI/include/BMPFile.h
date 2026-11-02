@@ -92,11 +92,11 @@ public:
     {
         return headerSize;
     };
-    inline int32_t GetWidth()
+    inline int32_t GetWidth() const
     {
         return width;
     };
-    inline int32_t GetHeight()
+    inline int32_t GetHeight() const
     {
         return height;
     };

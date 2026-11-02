@@ -124,7 +124,7 @@ QStatusBar::item {
          <item>
           <widget class="QLabel" name="label_2">
            <property name="text">
-            <string>请用鼠标单击选择需要调整的中间位置</string>
+            <string>点击脸部中心</string>
            </property>
           </widget>
          </item>
@@ -209,7 +209,7 @@ QStatusBar::item {
          <item>
           <widget class="QLabel" name="label_6">
            <property name="text">
-            <string>调整范围</string>
+            <string>影响范围</string>
            </property>
           </widget>
          </item>

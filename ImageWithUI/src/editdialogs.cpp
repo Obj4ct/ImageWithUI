@@ -8,6 +8,7 @@
 #include <QDoubleSpinBox>
 #include <QSpinBox>
 #include <QComboBox>
+#include <QSignalBlocker>
 
 // ------------------------------------------------------------------
 // CropDialog
@@ -16,7 +17,7 @@ CropDialog::CropDialog(const QImage &displayImage, QWidget *parent)
     : QDialog(parent),
       m_image(displayImage)
 {
-    setWindowTitle("图像裁剪 · 拖拽框选要保留的区域");
+    setWindowTitle("裁剪图像 · 拖拽框选要保留的区域");
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
 
     const int maxW = 880;
@@ -164,17 +165,17 @@ void CropDialog::paintEvent(QPaintEvent *event)
 KernelDialog::KernelDialog(QWidget *parent)
     : QDialog(parent)
 {
-    setWindowTitle("自定义卷积核 (3×3)");
+    setWindowTitle("自定义滤镜（3×3）");
 
     QVBoxLayout *root = new QVBoxLayout(this);
     QComboBox *preset = new QComboBox(this);
     preset->addItems({QString("自定义"),
-                      QString("恒等(不改变图像)"),
+                      QString("不改变画面"),
                       QString("高斯模糊"),
-                      QString("锐化"),
+                      QString("让边缘更清晰"),
                       QString("浮雕"),
-                      QString("描边"),
-                      QString("拉普拉斯(边缘)")});
+                      QString("描出轮廓"),
+                      QString("找边缘")});
     root->addWidget(preset);
 
     QGridLayout *grid = new QGridLayout();
@@ -195,16 +196,16 @@ KernelDialog::KernelDialog(QWidget *parent)
     m_scaleSpin->setRange(0.01, 100.0);
     m_scaleSpin->setDecimals(2);
     m_scaleSpin->setValue(1.0);
-    form->addRow(QString("归一化除数"), m_scaleSpin);
+    form->addRow(QString("亮度缩放"), m_scaleSpin);
 
     m_offsetSpin = new QDoubleSpinBox(this);
     m_offsetSpin->setRange(-255.0, 255.0);
     m_offsetSpin->setDecimals(1);
     m_offsetSpin->setValue(0.0);
-    form->addRow(QString("偏移量"), m_offsetSpin);
+    form->addRow(QString("整体变亮/变暗"), m_offsetSpin);
     root->addLayout(form);
 
-    QLabel *tip = new QLabel(QString("卷积结果 = Σ(核系数 × 邻域像素) / 除数 + 偏移，越界按边缘复制。"), this);
+    QLabel *tip = new QLabel(QString("每个像素 = 周围 9 个像素按权重相加 ÷ 亮度缩放 + 整体变亮/变暗，越界按边缘像素处理。"), this);
     tip->setWordWrap(true);
     root->addWidget(tip);
 
@@ -293,7 +294,7 @@ double KernelDialog::offset() const
 USMDialog::USMDialog(QWidget *parent)
     : QDialog(parent)
 {
-    setWindowTitle("USM 锐化 (非锐化掩模)");
+    setWindowTitle("智能锐化");
 
     QVBoxLayout *root = new QVBoxLayout(this);
     QFormLayout *form = new QFormLayout();
@@ -303,21 +304,21 @@ USMDialog::USMDialog(QWidget *parent)
     m_radius->setDecimals(1);
     m_radius->setSingleStep(0.1);
     m_radius->setValue(1.2);
-    form->addRow(QString("半径 (高斯 σ)"), m_radius);
+    form->addRow(QString("锐化半径"), m_radius);
 
     m_amount = new QSpinBox(this);
     m_amount->setRange(0, 300);
     m_amount->setSuffix(QString(" %"));
     m_amount->setValue(100);
-    form->addRow(QString("强度"), m_amount);
+    form->addRow(QString("锐化程度"), m_amount);
 
     m_threshold = new QSpinBox(this);
     m_threshold->setRange(0, 255);
     m_threshold->setValue(6);
-    form->addRow(QString("保护阈值"), m_threshold);
+    form->addRow(QString("差异阈值（越大越只处理强边缘）"), m_threshold);
 
     root->addLayout(form);
-    QLabel *tip = new QLabel(QString("细部反差低于阈值时不参与锐化，可避免放大噪点。"), this);
+    QLabel *tip = new QLabel(QString("细部反差低于差异阈值时不参与锐化，可避免把噪点一起放大。"), this);
     tip->setWordWrap(true);
     root->addWidget(tip);
 
@@ -342,4 +343,83 @@ double USMDialog::amount() const
 double USMDialog::threshold() const
 {
     return static_cast<double>(m_threshold->value());
+}
+
+// ------------------------------------------------------------------
+// ScaleDialog
+// ------------------------------------------------------------------
+ScaleDialog::ScaleDialog(int currentWidth, int currentHeight, QWidget *parent)
+    : QDialog(parent),
+      m_initialWidth(std::max(1, currentWidth)),
+      m_initialHeight(std::max(1, currentHeight))
+{
+    setWindowTitle("缩放图像");
+
+    QVBoxLayout *root = new QVBoxLayout(this);
+    QFormLayout *form = new QFormLayout();
+
+    m_widthSpin = new QSpinBox(this);
+    m_widthSpin->setRange(1, 8192);
+    m_widthSpin->setSuffix(QString(" px"));
+    m_widthSpin->setValue(m_initialWidth);
+    form->addRow(QString("宽度"), m_widthSpin);
+
+    m_heightSpin = new QSpinBox(this);
+    m_heightSpin->setRange(1, 8192);
+    m_heightSpin->setSuffix(QString(" px"));
+    m_heightSpin->setValue(m_initialHeight);
+    form->addRow(QString("高度"), m_heightSpin);
+
+    m_lockRatio = new QCheckBox(QString("锁定比例"), this);
+    m_lockRatio->setChecked(true);
+    form->addRow(QString(), m_lockRatio);
+
+    m_algorithm = new QComboBox(this);
+    m_algorithm->addItems({QString("快速（像素画/图标）"),
+                           QString("平滑（照片）"),
+                           QString("最佳（照片放大）")});
+    form->addRow(QString("算法"), m_algorithm);
+
+    root->addLayout(form);
+
+    // 锁定比例时同步另一边的尺寸；blockSignals 避免互相触发
+    connect(m_widthSpin, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, [this](int value) {
+                if (!m_lockRatio->isChecked()) {
+                    return;
+                }
+                QSignalBlocker blocker(m_heightSpin);
+                const int h = qRound(static_cast<double>(value) *
+                                     static_cast<double>(m_initialHeight) /
+                                     static_cast<double>(m_initialWidth));
+                m_heightSpin->setValue(std::min(8192, std::max(1, h)));
+            });
+    connect(m_heightSpin, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, [this](int value) {
+                if (!m_lockRatio->isChecked()) {
+                    return;
+                }
+                QSignalBlocker blocker(m_widthSpin);
+                const int w = qRound(static_cast<double>(value) *
+                                     static_cast<double>(m_initialWidth) /
+                                     static_cast<double>(m_initialHeight));
+                m_widthSpin->setValue(std::min(8192, std::max(1, w)));
+            });
+
+    QDialogButtonBox *box = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    box->button(QDialogButtonBox::Ok)->setText(QString("确定"));
+    box->button(QDialogButtonBox::Cancel)->setText(QString("取消"));
+    connect(box, &QDialogButtonBox::accepted, this, &QDialog::accept);
+    connect(box, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    root->addWidget(box);
+}
+
+QSize ScaleDialog::targetSize() const
+{
+    return QSize(m_widthSpin->value(), m_heightSpin->value());
+}
+
+int ScaleDialog::algorithm() const
+{
+    return m_algorithm->currentIndex();
 }
