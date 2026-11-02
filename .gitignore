@@ -39,3 +39,14 @@ _trash/
 
 # ---- 本地功能台账(不进版本库) ----
 FEATURES.md
+
+# ---- 本地测试图片(含第三方素材，不随版本库分发) ----
+ImageWithUI/resources/image/
+
+# ---- 本地截图 / 开发过程文档 / 临时产物 ----
+.screenshots/
+.trae/
+ui_final.png
+spec.md
+tasks.md
+checklist.md

@@ -1,3 +1,11 @@
+/*
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2023 素曜
+ *
+ * This source file is licensed under the MIT License.
+ * See the LICENSE file in the project root for the full license text.
+ */
+
 #include "image_ops.h"
 // 定义结构体表示像素
 //先定义一个结构体来表示图像中的像素，包括红、绿和蓝三个通道的值

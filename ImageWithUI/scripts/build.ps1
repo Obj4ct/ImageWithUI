@@ -1,3 +1,9 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2023 素曜
+#
+# This source file is licensed under the MIT License.
+# See the LICENSE file in the project root for the full license text.
+
 # build.ps1 - one-click build for ImageWithUI (Qt 5 + MSVC)
 #
 # Usage:
