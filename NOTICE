@@ -3,25 +3,39 @@ ImageWithUI NOTICE
 
 Copyright (c) 2023 素曜
 
-1. 源代码
-   本项目源代码（ImageWithUI/include、ImageWithUI/src、ImageWithUI/ui、
-   ImageWithUI/scripts、ImageWithUI/CMakeLists.txt 等）采用 MIT License，
-   全文见 LICENSE。
+本文件用于说明本项目 MIT 许可的适用范围与例外。许可证全文以 LICENSE 为准；
+本文件不修改、不扩展也不缩减 MIT 许可的任何条款。
 
-2. 图标资源
-   ImageWithUI/resources/icon/ 下的 logo.png、undo.png、redo.png、reset.png、
-   what.png 为本项目自产素材，随本项目一并按 MIT License 授权。
+1. MIT 许可覆盖范围
+   本仓库中由素曜创作的内容按 MIT License 授权，包括：
+   - 源代码：ImageWithUI/include、ImageWithUI/src、ImageWithUI/ui、
+     ImageWithUI/scripts、ImageWithUI/CMakeLists.txt 等；
+   - 文档：README.md、NOTICE、ROADMAP.md 及项目内其他原创说明（LICENSE 除外）；
+   - 自产图标：ImageWithUI/resources/icon/ 下的 logo.png、undo.png、
+     redo.png、reset.png、what.png。
+   本仓库历史提交中的上述自有内容，同样按 MIT License 授权。
+   第三方内容（包括但不限于第 3 节所述的测试图片）不属于上述范围，不受
+   MIT License 覆盖。
 
-3. 测试图片（不随本仓库分发）
-   ImageWithUI/resources/image/ 目录已加入 .gitignore，不再纳入版本库。
-   该目录中的 Lenna.bmp 是图像处理领域广泛使用的第三方测试图，版权归原作者，
-   不属于本项目，也不受 MIT License 覆盖；back.bmp、image.bmp、lrh.bmp
-   由使用者自行提供，仅用于本地功能验证。分发或商用前请自行确认授权，
+2. 分发义务
+   任何人复制、修改或分发本项目自有代码时，须保留版权声明与 MIT 许可声明，
+   并附上 LICENSE 全文；软件按“原样”提供，不附带任何担保。
+
+3. 测试图片与历史提交
+   ImageWithUI/resources/image/ 已从当前版本库移除，并加入 .gitignore。
+   但 Git 历史提交中仍保留过该目录下的文件（包括 Lenna.bmp、back.bmp、
+   image.bmp、lrh.bmp），因此完整克隆历史仓库时仍可能取得这些文件。
+   - Lenna.bmp 是图像处理领域广泛使用的第三方测试图，版权归原作者，
+     不属于本项目；
+   - back.bmp、image.bmp、lrh.bmp 的来源与授权无法由本项目确认。
+   上述文件均不受本项目 MIT License 覆盖，也不构成 MIT 授权的一部分。
+   如需彻底从仓库中去除，需要对 Git 历史进行重写（如 git filter-repo）并
+   强制推送；在此之前，使用历史版本中的这些图片前应自行确认其授权，
    或替换为自产 / 公有领域素材。
 
 4. 第三方依赖
    Qt 5（Widgets / Gui / Concurrent）采用 LGPLv3 / GPLv3 / 商业授权，不属于
-   本项目，不受 MIT License 覆盖。分发二进制时需遵守 Qt 的许可要求：动态链接、
+   本项目，与 MIT 许可相互独立。分发二进制时需遵守 Qt 的许可要求：动态链接、
    附上 Qt 许可证文本，并允许用户替换 Qt 库文件。
    ROADMAP.md 中列出的可选依赖（OpenCV、LibRaw、Exiv2、ONNX Runtime 等）均未
    随本仓库分发，各自遵循其原始许可证；启用前请自行确认与 MIT 的兼容性。

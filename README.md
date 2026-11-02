@@ -106,7 +106,7 @@ cmake --build ImageWithUI/build-vs --config Release
 
 鼠标修饰键：`Shift` 加选，`Alt` 减选；在选区内拖动可移动选区，按住 `Ctrl` 拖动则连同像素一起移动。
 
-> 测试图片目录 `ImageWithUI/resources/image/` 不随仓库分发。运行自检时请通过参数传入本地图片，或自行把测试图放回该目录。
+> 当前版本不含测试图片目录 `ImageWithUI/resources/image/`；历史提交中仍可能存在其中的文件（见 [NOTICE](NOTICE)）。运行自检时请通过参数传入本地图片，或自行把测试图放回该目录。
 
 ## 目录结构
 
@@ -160,7 +160,8 @@ ImageWithUI/
 
 本项目采用 **MIT License**，版权人：素曜。许可证全文见 [LICENSE](LICENSE)。
 
-- 源代码、`ImageWithUI/resources/icon/` 下的图标均按 MIT 授权。
-- `ImageWithUI/resources/image/` 中的测试图片不随仓库分发；其中 `Lenna.bmp` 为第三方测试图，版权归原作者，不受 MIT 覆盖。
-- Qt 5 采用 LGPLv3 / GPLv3 / 商业授权，不属于本项目；分发二进制时需遵守其许可要求。
+MIT 许可的覆盖范围仅限素曜拥有著作权的源代码、文档与 `ImageWithUI/resources/icon/` 下的自产图标；仓库历史提交中的上述自有内容同样按 MIT 授权。
+
+- `ImageWithUI/resources/image/` 已从当前版本移除并加入 `.gitignore`。Git 历史提交中仍可能包含 `Lenna.bmp`、`back.bmp`、`image.bmp`、`lrh.bmp` 等文件；其中 `Lenna.bmp` 为第三方测试图，其余文件来源无法确认，均不受 MIT 覆盖，使用前请自行确认授权。
+- Qt 5 采用 LGPLv3 / GPLv3 / 商业授权，不属于本项目，与 MIT 许可相互独立；分发二进制时需遵守其许可要求。
 - 第三方依赖与素材的完整说明见 [NOTICE](NOTICE)。
