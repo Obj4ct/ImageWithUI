@@ -184,6 +184,8 @@ NumberDialog::NumberDialog(const QString &title, const QList<NumberParam> &param
         spin->setValue(param.value);
         spin->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
         root->addWidget(MakeSliderRow(param.label, spin, this));
+        connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                this, [this]() { emit paramsChanged(); });
         m_spins.append(spin);
     }
 
@@ -409,6 +411,16 @@ KernelDialog::KernelDialog(QWidget *parent)
 
     connect(preset, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, [this](int index) { applyPreset(index); });
+
+    // 任一参数变化就发信号，主窗口借此做实时预览
+    for (int i = 0; i < 9; ++i) {
+        connect(m_cells[i], QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                this, [this]() { emit paramsChanged(); });
+    }
+    connect(m_scaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, [this]() { emit paramsChanged(); });
+    connect(m_offsetSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, [this]() { emit paramsChanged(); });
 }
 
 void KernelDialog::applyPreset(int index)
@@ -506,6 +518,14 @@ USMDialog::USMDialog(QWidget *parent)
     m_threshold->setRange(0, 255);
     m_threshold->setValue(6);
     root->addWidget(MakeSliderRow(QString("差异阈值（越大越只处理强边缘）"), m_threshold, this));
+
+    // 参数一变就发信号，主窗口借此做实时预览
+    connect(m_radius, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, [this]() { emit paramsChanged(); });
+    connect(m_amount, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, [this]() { emit paramsChanged(); });
+    connect(m_threshold, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, [this]() { emit paramsChanged(); });
     QLabel *tip = new QLabel(QString("细部反差低于差异阈值时不参与锐化，可避免把噪点一起放大。"), this);
     tip->setWordWrap(true);
     root->addWidget(tip);

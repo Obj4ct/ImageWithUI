@@ -2,6 +2,7 @@
 #include "BMPFile.h"
 #include "Function.h"
 #include "mainwindow.h"
+#include "editdialogs.h"
 #include "eye.h"
 #include <QFileInfo>
 #include <QTextStream>
@@ -11,6 +12,8 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QSlider>
+#include <QDoubleSpinBox>
+#include <QComboBox>
 #include <QApplication>
 #include <QMouseEvent>
 #include <QKeyEvent>
@@ -2333,6 +2336,76 @@ int Run(const QString &imagePath)
         } else {
             ++g_fail;
             out() << "[FAIL] 滑块键盘微调 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
+    // ---------- 25. 弹窗参数变化信号(实时预览的触发源) ----------
+    {
+        QString failReason;
+        {
+            USMDialog dlg;
+            int changes = 0;
+            QObject::connect(&dlg, &USMDialog::paramsChanged, [&changes]() { ++changes; });
+            if (QDoubleSpinBox *radius = dlg.findChild<QDoubleSpinBox *>()) {
+                radius->setValue(2.5);
+            }
+            if (changes == 0) {
+                failReason = "智能锐化参数变化没有发出信号";
+            }
+        }
+        if (failReason.isEmpty()) {
+            KernelDialog dlg;
+            int changes = 0;
+            QObject::connect(&dlg, &KernelDialog::paramsChanged, [&changes]() { ++changes; });
+            if (QComboBox *preset = dlg.findChild<QComboBox *>()) {
+                preset->setCurrentIndex(2);   // 套用高斯模糊预设会改十几个 spin
+            }
+            if (changes == 0) {
+                failReason = "自定义滤镜参数变化没有发出信号";
+            }
+        }
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 弹窗参数变化信号 : 智能锐化/自定义滤镜都能触发实时预览\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 弹窗参数变化信号 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
+    // ---------- 26. 旋转实时预览与 Esc 取消 ----------
+    {
+        QString failReason;
+        {
+            MainWindow win;
+            if (!win.OpenImage(path)) {
+                failReason = "无法打开样例图";
+            } else if (QLineEdit *rotate = win.findChild<QLineEdit *>("lineEdit_rotate")) {
+                rotate->setText(QString("30"));
+                QEventLoop loop;
+                QTimer::singleShot(1200, &loop, &QEventLoop::quit);
+                loop.exec();
+                if (!win.IsPreviewActive()) {
+                    failReason = "旋转参数变化后没有出现预览";
+                } else {
+                    QKeyEvent esc(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+                    QApplication::sendEvent(rotate, &esc);
+                    if (win.IsPreviewActive()) {
+                        failReason = "Esc 没有取消旋转预览";
+                    }
+                }
+            } else {
+                failReason = "找不到旋转输入框";
+            }
+        }
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 旋转实时预览 : 改角度即预览，Esc 取消\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 旋转实时预览 : " << failReason << "\n";
         }
         out().flush();
     }

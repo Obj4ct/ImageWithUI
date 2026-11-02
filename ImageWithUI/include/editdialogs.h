@@ -34,6 +34,9 @@ public:
                           QWidget *parent = nullptr);
     double value(int index) const;
 
+signals:
+    void paramsChanged();
+
 private:
     QList<QDoubleSpinBox *> m_spins;
 };
@@ -79,6 +82,9 @@ public:
     double scale() const;
     double offset() const;
 
+signals:
+    void paramsChanged();   // 任一参数变化(用来做实时预览)
+
 private:
     void applyPreset(int index);
 
@@ -96,6 +102,9 @@ public:
     double radius() const;
     double amount() const;      // 0~3 的倍率(界面以百分比显示)
     double threshold() const;   // 0~255
+
+signals:
+    void paramsChanged();   // 任一参数变化(用来做实时预览)
 
 private:
     QDoubleSpinBox *m_radius = nullptr;

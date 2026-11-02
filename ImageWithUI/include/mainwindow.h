@@ -399,8 +399,16 @@ private:
     // 预览结果与当前输入完全一致时直接提交(省掉一次重复计算)，否则返回 false
     bool CommitPreview(const QString &title, QLineEdit *edit, double value);
     int PreviewFieldIndex(const QLineEdit *edit) const;
+    // 通用算子预览：旋转、弹窗参数用它试算(与面板共用防抖/世代号，不写历史)
+    void PreviewCustomOp(const QString &title,
+                         std::function<void(std::vector<uint8_t> &, OpContext &)> op);
+    // 旋转预览：在(缩小后的)当前图像上直接试转，提交时仍走无损基准
+    void PreviewRotation(double deltaDegrees);
 
     QTimer *m_previewTimer = nullptr;
+    bool m_customPreview = false;   // 当前预览来自旋转/对话框，而不是右侧 7 个输入框
+    std::function<void(std::vector<uint8_t> &, OpContext &)> m_pendingCustomOp;
+    QString m_pendingCustomTitle;
     std::vector<PreviewField> m_previewFields;
     int m_pendingFieldIndex = -1;   // 正在等待/执行的输入项
     int m_previewGeneration = 0;    // 世代号：过期结果直接丢弃

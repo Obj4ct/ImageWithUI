@@ -980,7 +980,10 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
     }
     if (event->type() == QEvent::KeyPress) {
         const QKeyEvent *key = static_cast<QKeyEvent *>(event);
-        if (key->key() == Qt::Key_Escape && PreviewFieldIndex(qobject_cast<QLineEdit *>(watched)) >= 0) {
+        const QLineEdit *edit = qobject_cast<QLineEdit *>(watched);
+        if (key->key() == Qt::Key_Escape &&
+            (PreviewFieldIndex(edit) >= 0 || edit == ui->lineEdit_rotate ||
+             edit == ui->lineEdit_rotate_r)) {
             CancelPreview();
         }
     }
@@ -2719,6 +2722,22 @@ void MainWindow::SetupLivePreview()
         SliderField::Bind(slider, d.edit);
     }
 
+    // 旋转角度也做实时预览：拖滑块/改数值时先试转，点"应用"才真正提交
+    auto connectRotatePreview = [this](QLineEdit *edit, double sign) {
+        connect(edit, &QLineEdit::textChanged, this, [this, edit, sign]() {
+            bool ok = false;
+            const double value = edit->text().trimmed().toDouble(&ok);
+            if (!ok || value < 0.0 || value > 360.0) {
+                CancelPreview();
+                return;
+            }
+            PreviewRotation(sign * value);
+        });
+        edit->installEventFilter(this);   // Esc 取消预览
+    };
+    connectRotatePreview(ui->lineEdit_rotate, 1.0);
+    connectRotatePreview(ui->lineEdit_rotate_r, -1.0);
+
     // 焦点离开右侧调整面板(或窗口失去焦点)时回滚到已提交的图像
     connect(qApp, &QApplication::focusChanged, this, [this](QWidget *, QWidget *now) {
         if (!m_previewActive) {
@@ -2744,7 +2763,43 @@ void MainWindow::OnPreviewTextChanged(int fieldIndex)
         return;
     }
     m_pendingFieldIndex = fieldIndex;
+    m_customPreview = false;   // 面板输入优先，丢掉之前挂起的旋转/弹窗预览
+    m_pendingCustomOp = nullptr;
+    m_pendingCustomTitle.clear();
     m_previewTimer->start();   // 防抖：连续输入时不断重新计时
+}
+
+// 通用算子预览：对话框/旋转调参数时在【已提交的图像】上试算，只刷新画面
+void MainWindow::PreviewCustomOp(const QString &title,
+                                 std::function<void(std::vector<uint8_t> &, OpContext &)> op)
+{
+    if (imageData.empty() || m_busy || m_layers.size() > 1 || !op) {
+        CancelPreview();
+        return;
+    }
+    m_customPreview = true;
+    m_pendingCustomOp = std::move(op);
+    m_pendingCustomTitle = title;
+    m_pendingFieldIndex = -1;
+    m_previewTimer->start(150);   // 拖动滑块时不必每次都算，停手 150ms 后再预览
+}
+
+// 旋转预览：直接在(必要时缩小的)当前图像上试转一个角度。
+// 提交时仍然走 ApplyRotation 的"无损基准"路径，预览不会影响旋转精度。
+void MainWindow::PreviewRotation(double deltaDegrees)
+{
+    if (!std::isfinite(deltaDegrees)) {
+        CancelPreview();
+        return;
+    }
+    double angle = std::fmod(deltaDegrees, 360.0);
+    if (angle < 0.0) {
+        angle += 360.0;
+    }
+    PreviewCustomOp(QString("旋转"), [angle](std::vector<uint8_t> &d, OpContext &ctx) {
+        Function f;
+        f.RotateImage(d, ctx.width, ctx.height, angle, ctx.quad);
+    });
 }
 
 // 在【已提交的图像】上跑一次算子，只刷新画面，不写历史
@@ -2752,9 +2807,6 @@ void MainWindow::RunPreview()
 {
     if (m_previewRunning) {
         m_previewQueued = true;   // 上一次还没算完，等它结束后再算最新输入
-        return;
-    }
-    if (m_pendingFieldIndex < 0 || m_pendingFieldIndex >= static_cast<int>(m_previewFields.size())) {
         return;
     }
     if (imageData.empty() || myValue.bmpInfo.GetWidth() <= 0 || myValue.bmpInfo.GetHeight() <= 0) {
@@ -2766,17 +2818,35 @@ void MainWindow::RunPreview()
         return;
     }
 
-    const PreviewField &field = m_previewFields[static_cast<size_t>(m_pendingFieldIndex)];
-    const ReturnValue rv = CheckOK(field.edit);
-    // 输入不完整/非法/越界：静默回到已提交的画面(提交时会给出提示)
-    if (rv.isNull || !rv.isNumeric || rv.value < field.min || rv.value > field.max) {
-        CancelPreview();
-        return;
+    // 预览来源有两种：右侧输入框(按字段索引) / 通用算子(旋转、弹窗参数)
+    const bool custom = m_customPreview;
+    double value = 0.0;
+    OpFn op;
+    int index = -2;
+    QString title;
+    if (custom) {
+        if (!m_pendingCustomOp) {
+            CancelPreview();
+            return;
+        }
+        op = m_pendingCustomOp;
+        title = m_pendingCustomTitle;
+    } else {
+        if (m_pendingFieldIndex < 0 || m_pendingFieldIndex >= static_cast<int>(m_previewFields.size())) {
+            return;
+        }
+        const PreviewField &field = m_previewFields[static_cast<size_t>(m_pendingFieldIndex)];
+        const ReturnValue rv = CheckOK(field.edit);
+        // 输入不完整/非法/越界：静默回到已提交的画面(提交时会给出提示)
+        if (rv.isNull || !rv.isNumeric || rv.value < field.min || rv.value > field.max) {
+            CancelPreview();
+            return;
+        }
+        value = rv.value;
+        op = field.makeOp(value);
+        index = m_pendingFieldIndex;
+        title = field.title;
     }
-
-    const double value = rv.value;
-    const OpFn op = field.makeOp(value);
-    const int index = m_pendingFieldIndex;
 
     const int32_t width = myValue.bmpInfo.GetWidth();
     const int32_t height = myValue.bmpInfo.GetHeight();
@@ -2807,12 +2877,15 @@ void MainWindow::RunPreview()
     auto result = std::make_shared<ImageSnapshot>();
     auto *watcher = new QFutureWatcher<void>(this);
     connect(watcher, &QFutureWatcher<void>::finished, this,
-            [this, watcher, result, gen, value, index, downsampled, workW, workH, width, height]() {
+            [this, watcher, result, gen, value, index, downsampled, workW, workH, width, height,
+             custom, title]() {
         watcher->deleteLater();
         m_previewRunning = false;
         // 世代号已过期 → 这条结果对应的是旧输入，直接丢弃
+        // 旋转等几何算子会改变画布尺寸，低分辨率预览不再要求尺寸一致(仅用于显示)
         const bool usable = gen == m_previewGeneration && !result->data.empty() &&
-                            (!downsampled || (result->width == workW && result->height == workH));
+                            (!downsampled || custom ||
+                             (result->width == workW && result->height == workH));
         if (usable) {
             m_previewValue = value;
             m_previewFieldIndex = index;
@@ -2833,10 +2906,16 @@ void MainWindow::RunPreview()
                 m_previewResult = std::move(*result);
                 SetDisplayPixmap(m_previewResult.data, m_previewResult.width, m_previewResult.height);
             }
-            UpdateStatus(QString("预览中：%1 = %2%3")
-                             .arg(m_previewFields[static_cast<size_t>(index)].title)
-                             .arg(value)
-                             .arg(downsampled ? "（低分辨率快速预览）" : ""));
+            if (custom) {
+                UpdateStatus(QString("预览中：%1%2")
+                                 .arg(title)
+                                 .arg(downsampled ? "（低分辨率快速预览）" : ""));
+            } else {
+                UpdateStatus(QString("预览中：%1 = %2%3")
+                                 .arg(m_previewFields[static_cast<size_t>(index)].title)
+                                 .arg(value)
+                                 .arg(downsampled ? "（低分辨率快速预览）" : ""));
+            }
         }
         if (m_previewQueued) {
             m_previewQueued = false;
@@ -2853,6 +2932,13 @@ void MainWindow::RunPreview()
         ctx.numThreads = 1;
         ctx.segmentSize = ctx.pixelCount;
         ctx.quad = quad;
+        if (step > 1) {
+            // 缩略图预览：内容区域坐标要按步长同比缩放，否则旋转会按原图坐标裁切
+            for (int i = 0; i < 4; ++i) {
+                ctx.quad.x[i] /= step;
+                ctx.quad.y[i] /= step;
+            }
+        }
         op(work, ctx);
         // 缩略图预览需把掩码按步长抽样；选区外恢复原像素
         if (!mask.isEmpty() && ctx.width == workW && ctx.height == workH) {
@@ -2872,6 +2958,9 @@ void MainWindow::CancelPreview()
     ++m_previewGeneration;   // 让在途结果失效
     m_previewQueued = false;
     m_pendingFieldIndex = -1;
+    m_customPreview = false;
+    m_pendingCustomOp = nullptr;
+    m_pendingCustomTitle.clear();
     if (m_previewTimer != nullptr) {
         m_previewTimer->stop();
     }
@@ -2900,6 +2989,9 @@ bool MainWindow::CommitPreview(const QString &title, QLineEdit *edit, double val
     ++m_previewGeneration;
     m_previewQueued = false;
     m_pendingFieldIndex = -1;
+    m_customPreview = false;
+    m_pendingCustomOp = nullptr;
+    m_pendingCustomTitle.clear();
     m_previewTimer->stop();
     m_previewActive = false;
     m_previewFieldIndex = -1;
@@ -4034,9 +4126,22 @@ void MainWindow::on_actiongauss_triggered()
 {
     NumberDialog dlg(QString("高斯模糊"),
                      { NumberParam{QString("强度"), 0, 10, 0, 0.1, 1} }, this);
+    connect(&dlg, &NumberDialog::paramsChanged, this, [this, &dlg]() {
+        const double degree = dlg.value(0);
+        PreviewCustomOp(QString("高斯模糊"),
+                        [degree](std::vector<uint8_t> &d, const OpContext &ctx) {
+                            Function f;
+                            std::promise<std::vector<uint8_t>> promise;
+                            std::future<std::vector<uint8_t>> future = promise.get_future();
+                            f.Gauss(d, promise, ctx.width, ctx.height, degree);
+                            d = future.get();
+                        });
+    });
     if (dlg.exec() != QDialog::Accepted) {
+        CancelPreview();
         return;
     }
+    CancelPreview();
     const double degree = dlg.value(0);
     ApplyOperator("高斯模糊", [degree](std::vector<uint8_t> &d, const OpContext &ctx) {
         Function f;
@@ -4059,6 +4164,7 @@ void MainWindow::on_btn_rotate_ok_clicked()
         return;
     }
     const double_t angle = returnValue.value;
+    CancelPreview();   // 预览结果不能直接当提交结果，按无损基准重新计算
     ApplyRotation(angle, "顺时针旋转");
 }
 
@@ -4074,6 +4180,7 @@ void MainWindow::on_btn_rotate_r_clicked()
         return;
     }
     const double_t angle = returnValue.value;
+    CancelPreview();   // 预览结果不能直接当提交结果，按无损基准重新计算
     ApplyRotation(-angle, "逆时针旋转");
 }
 
@@ -4089,9 +4196,20 @@ void MainWindow::on_actionmosaic_triggered()
 {
     NumberDialog dlg(QString("打马赛克"),
                      { NumberParam{QString("强度"), 1, 100, 4, 1, 0} }, this);
+    connect(&dlg, &NumberDialog::paramsChanged, this, [this, &dlg]() {
+        const uint32_t step = static_cast<uint32_t>(std::max(1.0, dlg.value(0)));
+        PreviewCustomOp(QString("打马赛克"),
+                        [step](std::vector<uint8_t> &d, const OpContext &ctx) {
+                            Function f;
+                            f.FullMosaic(d, static_cast<uint32_t>(ctx.width),
+                                         static_cast<uint32_t>(ctx.height), step);
+                        });
+    });
     if (dlg.exec() != QDialog::Accepted) {
+        CancelPreview();
         return;
     }
+    CancelPreview();
     const uint32_t step = static_cast<uint32_t>(std::max(1.0, dlg.value(0)));
     ApplyOperator("打马赛克", [this, step](std::vector<uint8_t> &d, const OpContext &ctx) {
         this->function.FullMosaic(d, static_cast<uint32_t>(ctx.width),
@@ -4473,9 +4591,25 @@ void MainWindow::on_actionconvolution_triggered()
         return;
     }
     KernelDialog dlg(this);
+    connect(&dlg, &KernelDialog::paramsChanged, this, [this, &dlg]() {
+        const std::vector<double> kernel = dlg.kernel();
+        const double scale = dlg.scale();
+        const double offset = dlg.offset();
+        PreviewCustomOp(QString("自定义滤镜"),
+                        [this, kernel, scale, offset](std::vector<uint8_t> &d, const OpContext &ctx) {
+                            std::vector<uint8_t> out;
+                            this->function.Convolve3x3(d, out, ctx.width, ctx.height,
+                                                       kernel.data(), scale, offset, 0, ctx.pixelCount);
+                            if (!out.empty()) {
+                                d.swap(out);
+                            }
+                        });
+    });
     if (dlg.exec() != QDialog::Accepted) {
+        CancelPreview();
         return;
     }
+    CancelPreview();
     const std::vector<double> kernel = dlg.kernel();
     const double scale = dlg.scale();
     const double offset = dlg.offset();
@@ -4500,9 +4634,25 @@ void MainWindow::on_actionusm_triggered()
         return;
     }
     USMDialog dlg(this);
+    connect(&dlg, &USMDialog::paramsChanged, this, [this, &dlg]() {
+        const double radius = dlg.radius();
+        const double amount = dlg.amount();
+        const double threshold = dlg.threshold();
+        PreviewCustomOp(QString("智能锐化"),
+                        [this, radius, amount, threshold](std::vector<uint8_t> &d, const OpContext &ctx) {
+                            std::vector<uint8_t> out;
+                            this->function.USMSharpen(d, out, ctx.width, ctx.height,
+                                                      radius, amount, threshold);
+                            if (!out.empty() && out.size() == d.size()) {
+                                d.swap(out);
+                            }
+                        });
+    });
     if (dlg.exec() != QDialog::Accepted) {
+        CancelPreview();
         return;
     }
+    CancelPreview();
     const double radius = dlg.radius();
     const double amount = dlg.amount();
     const double threshold = dlg.threshold();
