@@ -1,19 +1,19 @@
-#ifndef FACE_H
-#define FACE_H
-#include "QTHeader.h"
+#ifndef RETOUCH_H
+#define RETOUCH_H
+#include "qt_headers.h"
 #include <QTimer>
-#include "Debug.h"
-#include "BMPFile.h"
-#include "Function.h"
+#include "debug.h"
+#include "bmp_file.h"
+#include "image_ops.h"
 class MainWindow;
 class QComboBox;
 class QSlider;
 namespace Ui {
-class Face;
+class Retouch;
 }
 
-// 图片微调窗口(沿用 Face 这个类名/文件名，功能已从"人像瘦脸"扩展为通用局部微调)
-class Face : public QWidget
+// 图片微调窗口：用画笔在局部涂抹，实现液化式的区域变形与柔化
+class Retouch : public QWidget
 {
     Q_OBJECT
 
@@ -27,8 +27,8 @@ public:
         Push = 4      // 推移(拖动)
     };
 
-    explicit Face(MainWindow* mainWindow, MyValue myValue, QWidget *parent = nullptr);
-    ~Face();
+    explicit Retouch(MainWindow* mainWindow, BitmapImage myValue, QWidget *parent = nullptr);
+    ~Retouch();
 
     // 在 work(BGR 紧凑、自底向上)上就地施加一次微调。
     // deltaX/deltaY 只对"推移"生效，单位是图像像素(与内存行方向一致)。
@@ -47,11 +47,11 @@ private slots:
     void on_btn_apply_clicked();    // 写回主窗口并记入全局历史
 
 private:
-    Ui::Face *ui;
+    Ui::Retouch *ui;
     MainWindow* mainWindow;
-    Function function;
-    MyValue myValue;
-    MyValue newValue;
+    ImageOps function;
+    BitmapImage myValue;
+    BitmapImage newValue;
     std::vector<uint8_t> imageData;   // 打开窗口时的原始图像(重置基准)
     std::vector<uint8_t> m_work;      // 当前微调结果(可反复涂抹累积)
     QComboBox *m_effectCombo = nullptr;
@@ -72,4 +72,4 @@ private:
     void ApplyAt(const QPoint &imagePos, int deltaX, int deltaY);
 };
 
-#endif // FACE_H
+#endif // RETOUCH_H

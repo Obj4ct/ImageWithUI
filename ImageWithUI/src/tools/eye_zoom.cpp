@@ -1,10 +1,10 @@
 #include "mainwindow.h"
-#include "eye.h"
-#include "ui_eye.h"
-#include "SliderField.h"
+#include "eye_zoom.h"
+#include "ui_eye_zoom.h"
+#include "slider_field.h"
 
-eye::eye(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
-    : QWidget(parent), ui(new Ui::eye), mainWindow(mainWindow), myValue(myValue)
+EyeZoom::EyeZoom(MainWindow* mainWindow, BitmapImage myValue, QWidget *parent)
+    : QWidget(parent), ui(new Ui::EyeZoom), mainWindow(mainWindow), myValue(myValue)
 {
     ui->setupUi(this);
     // 清掉 .ui 里自带的浅色样式，统一交给全局主题(Theme.h)接管
@@ -15,7 +15,7 @@ eye::eye(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     imageData = mainWindow->imageData;
     previewData = imageData;
     newValue = myValue;
-    const QImage image = Function::ToDisplayImage(imageData,
+    const QImage image = ImageOps::ToDisplayImage(imageData,
                                                   newValue.bmpInfo.GetWidth(),
                                                   newValue.bmpInfo.GetHeight());
     // 显示原始图像在imageLabel上
@@ -27,8 +27,8 @@ eye::eye(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     previewTimer->setSingleShot(true);
     previewTimer->setInterval(250);
     connect(previewTimer, &QTimer::timeout, this, [this]() { RunPreview(false); });
-    connect(ui->lineEdit_range, &QLineEdit::textChanged, this, &eye::SchedulePreview);
-    connect(ui->lineEdit_increase, &QLineEdit::textChanged, this, &eye::SchedulePreview);
+    connect(ui->lineEdit_range, &QLineEdit::textChanged, this, &EyeZoom::SchedulePreview);
+    connect(ui->lineEdit_increase, &QLineEdit::textChanged, this, &EyeZoom::SchedulePreview);
 
     // 参数滑块：拖滑块写数值并触发预览，改数值时滑块跟着走
     QSlider *rangeSlider = SliderField::Make(ui->widget_2, 1, 300, 40);
@@ -47,7 +47,7 @@ eye::eye(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     }
 }
 
-void eye::mousePressEvent(QMouseEvent* event)
+void EyeZoom::mousePressEvent(QMouseEvent* event)
 {
     const QPixmap *pixmap = ui->imageLabel->pixmap();
     if (pixmap == nullptr || pixmap->isNull()) {
@@ -101,14 +101,14 @@ void eye::mousePressEvent(QMouseEvent* event)
     SchedulePreview();   // 坐标变了就重新预览
 }
 
-void eye::SchedulePreview()
+void EyeZoom::SchedulePreview()
 {
     if (previewTimer != nullptr) {
         previewTimer->start();
     }
 }
 
-bool eye::RunPreview(bool reportErrors)
+bool EyeZoom::RunPreview(bool reportErrors)
 {
     if (previewTimer != nullptr) {
         previewTimer->stop();
@@ -147,35 +147,35 @@ bool eye::RunPreview(bool reportErrors)
     previewData = imageData;
     // 两次点击对应左右两只眼睛，逐个做径向放大(圆外像素不受影响)
     if (hasFirst) {
-        Function::EnlargeEye(previewData, width, height, firstX, firstY, radius, strength);
+        ImageOps::EnlargeEye(previewData, width, height, firstX, firstY, radius, strength);
     }
     if (hasSecond) {
-        Function::EnlargeEye(previewData, width, height, secondX, secondY, radius, strength);
+        ImageOps::EnlargeEye(previewData, width, height, secondX, secondY, radius, strength);
     }
     ShowImage(previewData);
     return true;
 }
 
-void eye::ShowImage(std::vector<uint8_t>&inImageData)
+void EyeZoom::ShowImage(std::vector<uint8_t>&inImageData)
 {
-    const QImage image = Function::ToDisplayImage(inImageData,
+    const QImage image = ImageOps::ToDisplayImage(inImageData,
                                                   newValue.bmpInfo.GetWidth(),
                                                   newValue.bmpInfo.GetHeight());
     ui->imageLabel->setPixmap(QPixmap::fromImage(image));
 }
 
-eye::~eye()
+EyeZoom::~EyeZoom()
 {
     delete ui;
 }
 
-void eye::on_btn_ok_clicked()
+void EyeZoom::on_btn_ok_clicked()
 {
     qDebug() << "click preview";
     RunPreview(true);
 }
 
-void eye::on_btn_apply_clicked()
+void EyeZoom::on_btn_apply_clicked()
 {
     qDebug() << "apply";
     // 先保证预览是最新参数的结果；参数非法时不写回主窗口

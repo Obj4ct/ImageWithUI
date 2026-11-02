@@ -1,4 +1,4 @@
-#include "editdialogs.h"
+#include "dialogs.h"
 
 #include <algorithm>
 #include <QVBoxLayout>

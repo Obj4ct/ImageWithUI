@@ -1,6 +1,6 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
-#include"QTHeader.h"
+#include"qt_headers.h"
 #include <QListWidgetItem>
 #include <QListWidget>
 #include <QSlider>
@@ -10,11 +10,11 @@
 #include <QTimer>
 #include <QTabBar>
 #include <QPolygon>
-#include "BMPFile.h"
-#include "Function.h"
-#include "eye.h"
-#include "face.h"
-#include "colormap.h"
+#include "bmp_file.h"
+#include "image_ops.h"
+#include "eye_zoom.h"
+#include "retouch.h"
+#include "color_map.h"
 
 struct ReturnValue{
     bool isNull = true;
@@ -96,7 +96,7 @@ struct PreviewField {
 struct Document {
     int id = 0;                               // 文档唯一标识(全局历史按它定位文档)
     QString path;                             // 文件路径(空表示未命名)
-    MyValue value;                            // 文件头信息 + 原始像素
+    BitmapImage value;                            // 文件头信息 + 原始像素
     std::vector<uint8_t> imageData;           // 当前像素
     std::vector<uint8_t> originalImageData;   // 打开时的原始像素(重置用)
     int32_t originalWidth = 0;
@@ -128,9 +128,9 @@ public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
     //reset image
-    void ResetImage(MyValue &myValue);
-    void ShowImage(const std::vector<uint8_t> &inImageData,MyValue value,int32_t width,int32_t height);
-    void ResetAll(MyValue &myValue);
+    void ResetImage(BitmapImage &myValue);
+    void ShowImage(const std::vector<uint8_t> &inImageData,BitmapImage value,int32_t width,int32_t height);
+    void ResetAll(BitmapImage &myValue);
     ReturnValue CheckOK(QLineEdit* lineEdit);
     void UndoImageProcessing();
     void RedoImageProcessing();
@@ -221,14 +221,14 @@ public:
     std::vector<size_t> segmentStarts; // 用来存储每个数据段的起始位置
     //QImage
     QImage m_bmpImage;
-    MyValue myValue;
+    BitmapImage myValue;
     //store image data
     std::vector<uint8_t>imageData;
     //store original image data
     std::vector<uint8_t> originalImageData;
 
     //create a object of object
-    Function function;
+    ImageOps function;
 
     double sigma;
     double angle;
@@ -287,13 +287,13 @@ private slots:
 
     void on_actionsobel_triggered();
 
-    void on_actionliquefaction_triggered();
+    void on_actioneyeZoom_triggered();
 
     void on_actioncolorMap_triggered();
 
     void on_actionfishEye_triggered();
 
-    void on_actionface_triggered();
+    void on_actionretouch_triggered();
 
     void on_actionundo_triggered();
 

@@ -813,7 +813,7 @@
     </property>
     <addaction name="actionsobel"/>
     <addaction name="actionmosaic"/>
-    <addaction name="actionliquefaction"/>
+    <addaction name="actioneyeZoom"/>
     <addaction name="actionface"/>
     <addaction name="actionfishEye"/>
    </widget>
@@ -984,7 +984,7 @@
     <string>描出轮廓</string>
    </property>
   </action>
-  <action name="actionliquefaction">
+  <action name="actioneyeZoom">
    <property name="text">
     <string>放大眼睛…</string>
    </property>

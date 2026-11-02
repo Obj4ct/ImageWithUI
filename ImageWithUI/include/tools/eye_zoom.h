@@ -1,23 +1,23 @@
-#ifndef EYE_H
-#define EYE_H
-#include "QTHeader.h"
+#ifndef EYE_ZOOM_H
+#define EYE_ZOOM_H
+#include "qt_headers.h"
 #include <QTimer>
-#include "Debug.h"
-#include "BMPFile.h"
-#include "Function.h"
+#include "debug.h"
+#include "bmp_file.h"
+#include "image_ops.h"
 
 class MainWindow;
 namespace Ui {
-class eye;
+class EyeZoom;
 }
 
-class eye : public QWidget
+class EyeZoom : public QWidget
 {
     Q_OBJECT
 
 public:
-    explicit eye(MainWindow* mainWindow, MyValue myValue, QWidget *parent = nullptr);
-    ~eye();
+    explicit EyeZoom(MainWindow* mainWindow, BitmapImage myValue, QWidget *parent = nullptr);
+    ~EyeZoom();
     // 当前预览结果(供自检使用)
     const std::vector<uint8_t> &PreviewData() const { return previewData; }
 
@@ -32,11 +32,11 @@ protected:
     void mousePressEvent(QMouseEvent* event) override;
 
 private:
-    Ui::eye *ui;
+    Ui::EyeZoom *ui;
     MainWindow* mainWindow;
-    Function function;
-    MyValue myValue;
-    MyValue newValue;
+    ImageOps function;
+    BitmapImage myValue;
+    BitmapImage newValue;
     std::vector<uint8_t>imageData;
     QImage m_bmpImage;
     QPoint firstClick;
@@ -61,4 +61,4 @@ private:
     QTimer *previewTimer = nullptr;
 };
 
-#endif // EYE_H
+#endif // EYE_ZOOM_H

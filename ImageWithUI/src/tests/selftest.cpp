@@ -1,10 +1,10 @@
 #include "selftest.h"
-#include "BMPFile.h"
-#include "Function.h"
+#include "bmp_file.h"
+#include "image_ops.h"
 #include "mainwindow.h"
-#include "editdialogs.h"
-#include "eye.h"
-#include "face.h"
+#include "dialogs.h"
+#include "eye_zoom.h"
+#include "retouch.h"
 #include <QFileInfo>
 #include <QTextStream>
 #include <QEventLoop>
@@ -154,9 +154,9 @@ int Run(const QString &imagePath)
         f.open(QIODevice::WriteOnly | QIODevice::Truncate);
         f.write("NOT-A-BMP-FILE");
         f.close();
-        MyValue v;
+        BitmapImage v;
         QString err;
-        const bool ok = MYFunction::ReadBMPFile(bogus.toStdString(), v, err);
+        const bool ok = BmpIO::ReadBMPFile(bogus.toStdString(), v, err);
         if (!ok && !err.isEmpty()) {
             ++g_pass;
             out() << "[PASS] 非法文件被正确拒绝 : " << err << "\n";
@@ -177,9 +177,9 @@ int Run(const QString &imagePath)
         return 1;
     }
 
-    MyValue base;
+    BitmapImage base;
     QString err;
-    if (!MYFunction::ReadBMPFile(path.toStdString(), base, err)) {
+    if (!BmpIO::ReadBMPFile(path.toStdString(), base, err)) {
         ++g_fail;
         out() << "[FAIL] 读取样例图失败 : " << err << "\n";
         out().flush();
@@ -198,7 +198,7 @@ int Run(const QString &imagePath)
     const int threads = 5;
     const size_t seg = pixels / threads;
 
-    Function fn;
+    ImageOps fn;
     auto copyOf = [&base]() { return base.imageData; };
 
     // ---------- 3. 分段算子(按像素分段，检查通道是否错位) ----------
@@ -355,8 +355,8 @@ int Run(const QString &imagePath)
             // 落盘一份旋转结果，便于人工核对
             BMP rb = base.bmp;
             BMPInfo ri = base.bmpInfo;
-            MYFunction::SetBMPHeaderValues(rb, ri, rw, rh, ri.GetBitsPerPixel());
-            MYFunction::WriteBMPFile((QDir::tempPath() + "/imagewithui_rot30.bmp").toStdString(), data, rb, ri);
+            BmpIO::SetBMPHeaderValues(rb, ri, rw, rh, ri.GetBitsPerPixel());
+            BmpIO::WriteBMPFile((QDir::tempPath() + "/imagewithui_rot30.bmp").toStdString(), data, rb, ri);
         }
         const double ratio = static_cast<double>(countContent(data)) /
                              static_cast<double>(std::max<size_t>(1, countContent(base.imageData)));
@@ -441,8 +441,8 @@ int Run(const QString &imagePath)
         int32_t rw = w, rh = h;
         ContentQuad quad;
         quad.setRect(w, h);
-        fn.FlipImage(data, rw, rh, Function::FlipMode::Horizontal, quad);
-        fn.FlipImage(data, rw, rh, Function::FlipMode::Horizontal, quad);
+        fn.FlipImage(data, rw, rh, ImageOps::FlipMode::Horizontal, quad);
+        fn.FlipImage(data, rw, rh, ImageOps::FlipMode::Horizontal, quad);
         expect("水平翻转两次复原", data == base.imageData && rw == w && rh == h, "");
     }
     {
@@ -450,8 +450,8 @@ int Run(const QString &imagePath)
         int32_t rw = w, rh = h;
         ContentQuad quad;
         quad.setRect(w, h);
-        fn.FlipImage(data, rw, rh, Function::FlipMode::Vertical, quad);
-        fn.FlipImage(data, rw, rh, Function::FlipMode::Vertical, quad);
+        fn.FlipImage(data, rw, rh, ImageOps::FlipMode::Vertical, quad);
+        fn.FlipImage(data, rw, rh, ImageOps::FlipMode::Vertical, quad);
         expect("垂直翻转两次复原", data == base.imageData && rw == w && rh == h, "");
     }
     {
@@ -460,9 +460,9 @@ int Run(const QString &imagePath)
         int32_t rw = w, rh = h;
         ContentQuad quad;
         quad.setRect(w, h);
-        fn.FlipImage(data, rw, rh, Function::FlipMode::Transpose, quad);
+        fn.FlipImage(data, rw, rh, ImageOps::FlipMode::Transpose, quad);
         const bool swapped = (rw == h && rh == w);
-        fn.FlipImage(data, rw, rh, Function::FlipMode::Transpose, quad);
+        fn.FlipImage(data, rw, rh, ImageOps::FlipMode::Transpose, quad);
         expect("转置两次复原", swapped && data == base.imageData && rw == w && rh == h,
                swapped ? "" : "宽高未交换");
     }
@@ -471,8 +471,8 @@ int Run(const QString &imagePath)
         int32_t rw = w, rh = h;
         ContentQuad quad;
         quad.setRect(w, h);
-        fn.FlipImage(data, rw, rh, Function::FlipMode::AntiTranspose, quad);
-        fn.FlipImage(data, rw, rh, Function::FlipMode::AntiTranspose, quad);
+        fn.FlipImage(data, rw, rh, ImageOps::FlipMode::AntiTranspose, quad);
+        fn.FlipImage(data, rw, rh, ImageOps::FlipMode::AntiTranspose, quad);
         expect("副对角镜像两次复原", data == base.imageData && rw == w && rh == h, "");
     }
     {
@@ -526,7 +526,7 @@ int Run(const QString &imagePath)
     {
         // 腐蚀：逐通道只会变小或不变
         auto data = copyOf();
-        fn.Morphology(data, w, h, Function::MorphType::Erode, 0, pixels);
+        fn.Morphology(data, w, h, ImageOps::MorphType::Erode, 0, pixels);
         bool notGreater = true;
         for (size_t i = 0; i < data.size(); ++i) {
             if (data[i] > base.imageData[i]) {
@@ -538,7 +538,7 @@ int Run(const QString &imagePath)
     }
     {
         auto data = copyOf();
-        fn.Morphology(data, w, h, Function::MorphType::Dilate, 0, pixels);
+        fn.Morphology(data, w, h, ImageOps::MorphType::Dilate, 0, pixels);
         bool notLess = true;
         for (size_t i = 0; i < data.size(); ++i) {
             if (data[i] < base.imageData[i]) {
@@ -550,12 +550,12 @@ int Run(const QString &imagePath)
     }
     {
         auto data = copyOf();
-        fn.Morphology(data, w, h, Function::MorphType::Open, 0, pixels);
+        fn.Morphology(data, w, h, ImageOps::MorphType::Open, 0, pixels);
         expect("开运算", data.size() == bytes && data != base.imageData, "");
     }
     {
         auto data = copyOf();
-        fn.Morphology(data, w, h, Function::MorphType::Close, 0, pixels);
+        fn.Morphology(data, w, h, ImageOps::MorphType::Close, 0, pixels);
         expect("闭运算", data.size() == bytes && data != base.imageData, "");
     }
     {
@@ -604,7 +604,7 @@ int Run(const QString &imagePath)
                 ok = false;
             }
         }
-        const QImage img = ok ? Function::ToDisplayImage(data, rw, rh) : QImage();
+        const QImage img = ok ? ImageOps::ToDisplayImage(data, rw, rh) : QImage();
         expect("反复 90° 旋转不膨胀", ok && !img.isNull() && img.width() == rw,
                QString("画布像素 %1 -> %2×%3").arg(pixelsBefore).arg(rw).arg(rh));
     }
@@ -660,7 +660,7 @@ int Run(const QString &imagePath)
     }
     {
         // 多格式导出：PNG 落盘后能被重新读取，尺寸一致
-        const QImage img = Function::ToDisplayImage(base.imageData, w, h);
+        const QImage img = ImageOps::ToDisplayImage(base.imageData, w, h);
         const QString pngPath = QDir::tempPath() + "/imagewithui_selftest_out.png";
         const bool saved = img.save(pngPath, "PNG");
         QImage back(pngPath);
@@ -686,7 +686,7 @@ int Run(const QString &imagePath)
                 buf[i + 2] = static_cast<uint8_t>((c * 3 + mr * 17 + 120) % 256);
             }
         }
-        const QImage img = Function::ToDisplayImage(buf, tw, th);
+        const QImage img = ImageOps::ToDisplayImage(buf, tw, th);
         int mismatch = 0;
         if (img.isNull() || img.width() != tw || img.height() != th) {
             mismatch = tw * th;
@@ -718,9 +718,9 @@ int Run(const QString &imagePath)
         const QString pngPath = QDir::tempPath() + "/imagewithui_selftest_fmt.png";
         const bool savedPng = pngSrc.save(pngPath, "PNG");
 
-        MyValue mv;
+        BitmapImage mv;
         QString e;
-        const bool readOk = savedPng && MYFunction::ReadImageFile(pngPath.toStdString(), mv, e);
+        const bool readOk = savedPng && BmpIO::ReadImageFile(pngPath.toStdString(), mv, e);
         bool ok = readOk && mv.bmpInfo.GetWidth() == 4 && mv.bmpInfo.GetHeight() == 3 &&
                   mv.imageData.size() == static_cast<size_t>(4 * 3 * 3);
         if (ok) {
@@ -769,7 +769,7 @@ int Run(const QString &imagePath)
             return n;
         };
         const size_t before = brightCount();
-        Function::EnlargeEye(img, w, h, cx, cy, r, 0.6);
+        ImageOps::EnlargeEye(img, w, h, cx, cy, r, 0.6);
         const size_t after = brightCount();
 
         // 白色方块被径向放大后面积应明显变大
@@ -825,12 +825,12 @@ int Run(const QString &imagePath)
         fn.ConvertToGray(data, 0, pixels);
         BMP outBmp = base.bmp;
         BMPInfo outInfo = base.bmpInfo;
-        MYFunction::SetBMPHeaderValues(outBmp, outInfo, w, h, outInfo.GetBitsPerPixel());
+        BmpIO::SetBMPHeaderValues(outBmp, outInfo, w, h, outInfo.GetBitsPerPixel());
         const QString outPath = QDir::tempPath() + "/imagewithui_selftest_out.bmp";
-        const bool saved = MYFunction::WriteBMPFile(outPath.toStdString(), data, outBmp, outInfo);
-        MyValue back;
+        const bool saved = BmpIO::WriteBMPFile(outPath.toStdString(), data, outBmp, outInfo);
+        BitmapImage back;
         QString err2;
-        const bool loaded = saved && MYFunction::ReadBMPFile(outPath.toStdString(), back, err2);
+        const bool loaded = saved && BmpIO::ReadBMPFile(outPath.toStdString(), back, err2);
         if (loaded && back.imageData.size() == data.size()) {
             ++g_pass;
             out() << "[PASS] 保存并重新读取 : 数据一致(" << back.imageData.size() << " 字节)\n";
@@ -914,7 +914,7 @@ int Run(const QString &imagePath)
                 failReason = "无法打开样例图";
             } else {
                 const size_t historyBefore = win.imageDataHistory.size();
-                eye eyeWin(&win, win.myValue);
+                EyeZoom eyeWin(&win, win.myValue);
                 eyeWin.resize(1000, 800);
                 eyeWin.show();
                 QApplication::processEvents();
@@ -2431,12 +2431,12 @@ int Run(const QString &imagePath)
             return out[i] != base[i] || out[i + 1] != base[i + 1] || out[i + 2] != base[i + 2];
         };
 
-        const Face::RetouchEffect effects[] = {
-            Face::Pucker, Face::Bloat, Face::Smooth, Face::Twirl, Face::Push
+        const Retouch::RetouchEffect effects[] = {
+            Retouch::Pucker, Retouch::Bloat, Retouch::Smooth, Retouch::Twirl, Retouch::Push
         };
-        for (Face::RetouchEffect effect : effects) {
+        for (Retouch::RetouchEffect effect : effects) {
             std::vector<uint8_t> out = base;
-            Face::ApplyEffect(out, w, h, effect, 32, 32, 12, 0.8, 4, 0);
+            Retouch::ApplyEffect(out, w, h, effect, 32, 32, 12, 0.8, 4, 0);
             // 画笔内必须变化，画笔外必须原样
             if (!differs(out, 36, 32)) {
                 failReason = QString("效果 %1 没有改变画笔内的像素").arg(static_cast<int>(effect));

@@ -1,7 +1,7 @@
 #ifndef EDITDIALOGS_H
 #define EDITDIALOGS_H
 
-#include "QTHeader.h"
+#include "qt_headers.h"
 #include <QDoubleSpinBox>
 #include <QSpinBox>
 #include <QCheckBox>

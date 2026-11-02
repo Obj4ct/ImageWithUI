@@ -2,9 +2,9 @@
 // MainWindow.cpp
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
-#include "Theme.h"
-#include "editdialogs.h"
-#include "SliderField.h"
+#include "theme.h"
+#include "dialogs.h"
+#include "slider_field.h"
 #include <QAction>
 #include <QActionGroup>
 #include <QMenu>
@@ -33,7 +33,7 @@ namespace {
 OpFn MakeBrightnessOp(double value)
 {
     return [value](std::vector<uint8_t> &d, OpContext &) {
-        Function f;
+        ImageOps f;
         f.Brightness(d, value);
     };
 }
@@ -41,7 +41,7 @@ OpFn MakeBrightnessOp(double value)
 OpFn MakeContrastOp(double value)
 {
     return [value](std::vector<uint8_t> &d, OpContext &) {
-        Function f;
+        ImageOps f;
         f.Contrast(d, value);
     };
 }
@@ -49,7 +49,7 @@ OpFn MakeContrastOp(double value)
 OpFn MakeSaturationOp(double value)
 {
     return [value](std::vector<uint8_t> &d, OpContext &ctx) {
-        Function f;
+        ImageOps f;
         f.Saturation(d, ctx.width, ctx.height, value);
     };
 }
@@ -57,7 +57,7 @@ OpFn MakeSaturationOp(double value)
 OpFn MakeShadowOp(double value)
 {
     return [value](std::vector<uint8_t> &d, OpContext &) {
-        Function f;
+        ImageOps f;
         std::vector<uint8_t> out;
         f.MakeShadow(d, out, value);
         d.swap(out);
@@ -67,7 +67,7 @@ OpFn MakeShadowOp(double value)
 OpFn MakeHighlightOp(double value)
 {
     return [value](std::vector<uint8_t> &d, OpContext &) {
-        Function f;
+        ImageOps f;
         std::vector<uint8_t> out;
         f.HighLight(d, out, value);
         d.swap(out);
@@ -77,7 +77,7 @@ OpFn MakeHighlightOp(double value)
 OpFn MakeThresholdOp(double threshold)
 {
     return [threshold](std::vector<uint8_t> &d, OpContext &ctx) {
-        Function f;
+        ImageOps f;
         f.ApplyThreshold(d, threshold, 0, ctx.pixelCount);
     };
 }
@@ -86,7 +86,7 @@ OpFn MakeThresholdOp(double threshold)
 OpFn MakeSharpenOp(double amount)
 {
     return [amount](std::vector<uint8_t> &d, OpContext &ctx) {
-        Function f;
+        ImageOps f;
         std::promise<std::vector<uint8_t>> blurPromise;
         std::future<std::vector<uint8_t>> blurFuture = blurPromise.get_future();
         f.Gauss(d, blurPromise, ctx.width, ctx.height, amount);
@@ -990,18 +990,18 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
     return QMainWindow::eventFilter(watched, event);
 }
 
-void MainWindow::ResetImage(MyValue &myValue)
+void MainWindow::ResetImage(BitmapImage &myValue)
 {
     imageData = myValue.imageData;
     // 恢复原始图像
-    const QImage originalImage = Function::ToDisplayImage(myValue.imageData,
+    const QImage originalImage = ImageOps::ToDisplayImage(myValue.imageData,
                                                           myValue.bmpInfo.GetWidth(),
                                                           myValue.bmpInfo.GetHeight());
     ui->imageLabel->setText(QString());
     ui->imageLabel->setPixmap(QPixmap::fromImage(originalImage));
 }
 
-void MainWindow::ShowImage(const std::vector<uint8_t> &inImageData, MyValue value, int32_t width, int32_t height)
+void MainWindow::ShowImage(const std::vector<uint8_t> &inImageData, BitmapImage value, int32_t width, int32_t height)
 {
     imageData = inImageData;
     myValue = value;
@@ -1016,7 +1016,7 @@ void MainWindow::ShowImage(const std::vector<uint8_t> &inImageData, MyValue valu
 // 只更新画面显示，不改动 imageData/myValue —— 预览与取消预览都走这里
 void MainWindow::SetDisplayPixmap(const std::vector<uint8_t> &data, int32_t width, int32_t height)
 {
-    const QImage image = Function::ToDisplayImage(data, width, height);
+    const QImage image = ImageOps::ToDisplayImage(data, width, height);
     if (image.isNull()) {
         return;
     }
@@ -1874,7 +1874,7 @@ void MainWindow::CopySelection()
         UpdateStatus("请先建立选区");
         return;
     }
-    const QImage full = Function::ToDisplayImage(imageData, w, h);
+    const QImage full = ImageOps::ToDisplayImage(imageData, w, h);
     const QImage sub = full.copy(m_selection.intersected(full.rect()));
     if (sub.isNull() || sub.width() <= 0 || sub.height() <= 0) {
         UpdateStatus("复制选区失败");
@@ -1907,7 +1907,7 @@ void MainWindow::CropToSelection()
         return;
     }
     ApplyOperator("裁到选区", [sel](std::vector<uint8_t> &d, OpContext &ctx) {
-        Function f;
+        ImageOps f;
         f.CropImage(d, ctx.width, ctx.height,
                     sel.x(), sel.y(), sel.width(), sel.height(), ctx.quad);
     }, nullptr, [this]() { ClearSelection(); }, false);
@@ -2797,7 +2797,7 @@ void MainWindow::PreviewRotation(double deltaDegrees)
         angle += 360.0;
     }
     PreviewCustomOp(QString("旋转"), [angle](std::vector<uint8_t> &d, OpContext &ctx) {
-        Function f;
+        ImageOps f;
         f.RotateImage(d, ctx.width, ctx.height, angle, ctx.quad);
     });
 }
@@ -2894,7 +2894,7 @@ void MainWindow::RunPreview()
             if (downsampled) {
                 // 低分辨率结果只用来显示，不能提交
                 m_previewResult = ImageSnapshot();
-                m_previewImage = Function::ToDisplayImage(result->data, result->width, result->height);
+                m_previewImage = ImageOps::ToDisplayImage(result->data, result->width, result->height);
                 QPixmap pixmap = QPixmap::fromImage(m_previewImage);
                 if (!m_fitToWindow) {
                     pixmap = pixmap.scaled(QSize(width, height),
@@ -3011,7 +3011,7 @@ bool MainWindow::CommitPreview(const QString &title, QLineEdit *edit, double val
     return true;
 }
 
-void MainWindow::ResetAll(MyValue &myValue)
+void MainWindow::ResetAll(BitmapImage &myValue)
 {
     // 重置前的状态作为一条全局历史(重置后可以撤销回来)
     const ImageSnapshot before = imageData.empty() ? ImageSnapshot() : CurrentSnapshot();
@@ -3027,7 +3027,7 @@ void MainWindow::ResetAll(MyValue &myValue)
         myValue.bmpInfo.SetHeight(m_originalHeight);
         m_contentQuad.setRect(m_originalWidth, m_originalHeight);
     }
-    const QImage img = Function::ToDisplayImage(imageData,
+    const QImage img = ImageOps::ToDisplayImage(imageData,
                                                 myValue.bmpInfo.GetWidth(),
                                                 myValue.bmpInfo.GetHeight());
     QPixmap pixmap = QPixmap::fromImage(img);
@@ -3292,9 +3292,9 @@ void MainWindow::on_historyList_itemClicked(QListWidgetItem *item)
 bool MainWindow::LoadImage(const QString &path)
 {
     CancelPreview();   // 打开新图前先回滚未提交的预览
-    MyValue loaded;
+    BitmapImage loaded;
     QString errMsg;
-    if (!MYFunction::ReadImageFile(path.toStdString(), loaded, errMsg)) {
+    if (!BmpIO::ReadImageFile(path.toStdString(), loaded, errMsg)) {
         function.CreateMessagebox("打开失败", errMsg);
         UpdateStatus("打开失败：" + errMsg);
         return false;
@@ -3414,7 +3414,7 @@ void MainWindow::ResetDocumentState()
     BMPPath.clear();
     imageData.clear();
     originalImageData.clear();
-    myValue = MyValue();
+    myValue = BitmapImage();
     m_originalWidth = 0;
     m_originalHeight = 0;
     m_contentQuad = ContentQuad();
@@ -3652,8 +3652,8 @@ void MainWindow::on_actionsave_triggered()
     if (suffix == "bmp") {
         BMP outBmp = myValue.bmp;
         BMPInfo outInfo = myValue.bmpInfo;
-        MYFunction::SetBMPHeaderValues(outBmp, outInfo, width, height, outInfo.GetBitsPerPixel());
-        if (MYFunction::WriteBMPFile(filePath.toStdString(), pixels, outBmp, outInfo)) {
+        BmpIO::SetBMPHeaderValues(outBmp, outInfo, width, height, outInfo.GetBitsPerPixel());
+        if (BmpIO::WriteBMPFile(filePath.toStdString(), pixels, outBmp, outInfo)) {
             BMPPath = filePath.toStdString();
             UpdateTabBar();
             UpdateStatus(QString("已保存到 %1").arg(QFileInfo(filePath).fileName()));
@@ -3664,7 +3664,7 @@ void MainWindow::on_actionsave_triggered()
     }
 
     // 其它格式：交给 Qt 图像插件（PNG / JPEG / TIFF / WebP）
-    const QImage image = Function::ToDisplayImage(pixels, width, height);
+    const QImage image = ImageOps::ToDisplayImage(pixels, width, height);
     if (image.isNull()) {
         function.CreateMessagebox("保存失败", "当前图像数据无效");
         return;
@@ -3920,7 +3920,7 @@ void MainWindow::ApplyRotation(double deltaDegrees, const QString &title)
     ApplyOperator(
         title,
         [total, applied](std::vector<uint8_t> &d, OpContext &ctx) {
-            Function f;
+            ImageOps f;
             *applied = f.RotateImage(d, ctx.width, ctx.height, total, ctx.quad);
         },
         &base,
@@ -4098,18 +4098,18 @@ void MainWindow::on_actioncomplementary_triggered()
     });
 }
 
-void MainWindow::on_actionliquefaction_triggered()
+void MainWindow::on_actioneyeZoom_triggered()
 {
-    qDebug() << "I am in a eye window!";
-    eye *myEye = new eye(this, myValue);
+    qDebug() << "I am in a EyeZoom window!";
+    EyeZoom *myEye = new EyeZoom(this, myValue);
     myEye->show();
 }
 
-void MainWindow::on_actionface_triggered()
+void MainWindow::on_actionretouch_triggered()
 {
-    qDebug() << "I am in a face window!";
-    Face *face = new Face(this, myValue);
-    face->show();
+    qDebug() << "I am in a retouch window!";
+    Retouch *retouch = new Retouch(this, myValue);
+    retouch->show();
 }
 
 void MainWindow::on_actionfishEye_triggered()
@@ -4130,7 +4130,7 @@ void MainWindow::on_actiongauss_triggered()
         const double degree = dlg.value(0);
         PreviewCustomOp(QString("高斯模糊"),
                         [degree](std::vector<uint8_t> &d, const OpContext &ctx) {
-                            Function f;
+                            ImageOps f;
                             std::promise<std::vector<uint8_t>> promise;
                             std::future<std::vector<uint8_t>> future = promise.get_future();
                             f.Gauss(d, promise, ctx.width, ctx.height, degree);
@@ -4144,7 +4144,7 @@ void MainWindow::on_actiongauss_triggered()
     CancelPreview();
     const double degree = dlg.value(0);
     ApplyOperator("高斯模糊", [degree](std::vector<uint8_t> &d, const OpContext &ctx) {
-        Function f;
+        ImageOps f;
         std::promise<std::vector<uint8_t>> promise;
         std::future<std::vector<uint8_t>> future = promise.get_future();
         f.Gauss(d, promise, ctx.width, ctx.height, degree);
@@ -4200,7 +4200,7 @@ void MainWindow::on_actionmosaic_triggered()
         const uint32_t step = static_cast<uint32_t>(std::max(1.0, dlg.value(0)));
         PreviewCustomOp(QString("打马赛克"),
                         [step](std::vector<uint8_t> &d, const OpContext &ctx) {
-                            Function f;
+                            ImageOps f;
                             f.FullMosaic(d, static_cast<uint32_t>(ctx.width),
                                          static_cast<uint32_t>(ctx.height), step);
                         });
@@ -4344,7 +4344,7 @@ void MainWindow::on_actionscale_triggered()
     const Qt::TransformationMode mode =
         (dlg.algorithm() == 0) ? Qt::FastTransformation : Qt::SmoothTransformation;
 
-    const QImage img = Function::ToDisplayImage(imageData, oldW, oldH);
+    const QImage img = ImageOps::ToDisplayImage(imageData, oldW, oldH);
     if (img.isNull()) {
         UpdateStatus("当前图像数据无效，无法缩放");
         return;
@@ -4445,8 +4445,8 @@ void MainWindow::on_actionflipH_triggered()
         return;
     }
     ApplyOperator("水平翻转", [](std::vector<uint8_t> &d, OpContext &ctx) {
-        Function f;
-        f.FlipImage(d, ctx.width, ctx.height, Function::FlipMode::Horizontal, ctx.quad);
+        ImageOps f;
+        f.FlipImage(d, ctx.width, ctx.height, ImageOps::FlipMode::Horizontal, ctx.quad);
     }, nullptr, nullptr, false);
 }
 
@@ -4456,8 +4456,8 @@ void MainWindow::on_actionflipV_triggered()
         return;
     }
     ApplyOperator("垂直翻转", [](std::vector<uint8_t> &d, OpContext &ctx) {
-        Function f;
-        f.FlipImage(d, ctx.width, ctx.height, Function::FlipMode::Vertical, ctx.quad);
+        ImageOps f;
+        f.FlipImage(d, ctx.width, ctx.height, ImageOps::FlipMode::Vertical, ctx.quad);
     }, nullptr, nullptr, false);
 }
 
@@ -4467,7 +4467,7 @@ void MainWindow::on_actionrotate90_triggered()
         return;
     }
     ApplyOperator("向右转 90°", [](std::vector<uint8_t> &d, OpContext &ctx) {
-        Function f;
+        ImageOps f;
         f.RotateImage(d, ctx.width, ctx.height, 90.0, ctx.quad);
     }, nullptr, nullptr, false);
 }
@@ -4478,7 +4478,7 @@ void MainWindow::on_actionrotate90ccw_triggered()
         return;
     }
     ApplyOperator("向左转 90°", [](std::vector<uint8_t> &d, OpContext &ctx) {
-        Function f;
+        ImageOps f;
         f.RotateImage(d, ctx.width, ctx.height, 270.0, ctx.quad);
     }, nullptr, nullptr, false);
 }
@@ -4489,8 +4489,8 @@ void MainWindow::on_actiontranspose_triggered()
         return;
     }
     ApplyOperator("沿对角线翻转（左上-右下）", [](std::vector<uint8_t> &d, OpContext &ctx) {
-        Function f;
-        f.FlipImage(d, ctx.width, ctx.height, Function::FlipMode::Transpose, ctx.quad);
+        ImageOps f;
+        f.FlipImage(d, ctx.width, ctx.height, ImageOps::FlipMode::Transpose, ctx.quad);
     }, nullptr, nullptr, false);
 }
 
@@ -4500,8 +4500,8 @@ void MainWindow::on_actionantitranspose_triggered()
         return;
     }
     ApplyOperator("沿对角线翻转（右上-左下）", [](std::vector<uint8_t> &d, OpContext &ctx) {
-        Function f;
-        f.FlipImage(d, ctx.width, ctx.height, Function::FlipMode::AntiTranspose, ctx.quad);
+        ImageOps f;
+        f.FlipImage(d, ctx.width, ctx.height, ImageOps::FlipMode::AntiTranspose, ctx.quad);
     }, nullptr, nullptr, false);
 }
 
@@ -4518,7 +4518,7 @@ void MainWindow::on_actiontailor_triggered()
         function.CreateMessagebox("提示", "请先打开一张图片");
         return;
     }
-    const QImage display = Function::ToDisplayImage(imageData,
+    const QImage display = ImageOps::ToDisplayImage(imageData,
                                                     myValue.bmpInfo.GetWidth(),
                                                     myValue.bmpInfo.GetHeight());
     CropDialog dlg(display, this);
@@ -4531,7 +4531,7 @@ void MainWindow::on_actiontailor_triggered()
         return;
     }
     ApplyOperator("裁剪图像", [sel](std::vector<uint8_t> &d, OpContext &ctx) {
-        Function f;
+        ImageOps f;
         f.CropImage(d, ctx.width, ctx.height,
                     sel.x(), sel.y(), sel.width(), sel.height(), ctx.quad);
     }, nullptr, nullptr, false);
@@ -4552,7 +4552,7 @@ void MainWindow::on_actionerode_triggered()
 {
     ApplyOperator("去小亮点", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
         this->function.Morphology(d, ctx.width, ctx.height,
-                                  Function::MorphType::Erode, 0, ctx.pixelCount);
+                                  ImageOps::MorphType::Erode, 0, ctx.pixelCount);
     });
 }
 
@@ -4560,7 +4560,7 @@ void MainWindow::on_actiondilate_triggered()
 {
     ApplyOperator("补小暗点", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
         this->function.Morphology(d, ctx.width, ctx.height,
-                                  Function::MorphType::Dilate, 0, ctx.pixelCount);
+                                  ImageOps::MorphType::Dilate, 0, ctx.pixelCount);
     });
 }
 
@@ -4568,7 +4568,7 @@ void MainWindow::on_actionopenMorph_triggered()
 {
     ApplyOperator("先消后补", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
         this->function.Morphology(d, ctx.width, ctx.height,
-                                  Function::MorphType::Open, 0, ctx.pixelCount);
+                                  ImageOps::MorphType::Open, 0, ctx.pixelCount);
     });
 }
 
@@ -4576,7 +4576,7 @@ void MainWindow::on_actioncloseMorph_triggered()
 {
     ApplyOperator("先补后消", [this](std::vector<uint8_t> &d, const OpContext &ctx) {
         this->function.Morphology(d, ctx.width, ctx.height,
-                                  Function::MorphType::Close, 0, ctx.pixelCount);
+                                  ImageOps::MorphType::Close, 0, ctx.pixelCount);
     });
 }
 

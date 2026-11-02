@@ -1,6 +1,6 @@
 #include "mainwindow.h"
-#include "colormap.h"
-#include "ui_colormap.h"
+#include "color_map.h"
+#include "ui_color_map.h"
 // colorMap1: 红色过渡
 std::vector<uint8_t> colorMap1 = {
     255, 0, 50,    // 深红色
@@ -40,7 +40,7 @@ std::vector<uint8_t> colorMap4 = {
 
 
 
-ColorMap::ColorMap(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
+ColorMap::ColorMap(MainWindow* mainWindow, BitmapImage myValue, QWidget *parent)
     : QWidget(parent), ui(new Ui::ColorMap), mainWindow(mainWindow), myValue(myValue)
 {
     ui->setupUi(this);
@@ -50,14 +50,14 @@ ColorMap::ColorMap(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     setWindowIcon(QIcon(":/icon/logo.png"));
     imageData = mainWindow->imageData;
     newValue = myValue;
-    const QImage image = Function::ToDisplayImage(imageData,
+    const QImage image = ImageOps::ToDisplayImage(imageData,
                                                   newValue.bmpInfo.GetWidth(),
                                                   newValue.bmpInfo.GetHeight());
     // 显示原始图像在imageLabel上
     ui->imageLabel->setAlignment(Qt::AlignCenter);
     ui->imageLabel->setPixmap(QPixmap::fromImage(image));
 
-    Function function;
+    ImageOps function;
 
     // 设置下拉框的初始状态
     ui->comboBox_colorMap->addItem("<请选择>");
@@ -97,7 +97,7 @@ void ColorMap::_ColorMap(std::vector<uint8_t> &imageData, std::vector<uint8_t> &
 
 void ColorMap::ShowImage(std::vector<uint8_t> &inImageData)
 {
-    const QImage image = Function::ToDisplayImage(inImageData,
+    const QImage image = ImageOps::ToDisplayImage(inImageData,
                                                   newValue.bmpInfo.GetWidth(),
                                                   newValue.bmpInfo.GetHeight());
     // 显示图像在imageLabel上
@@ -117,7 +117,7 @@ void ColorMap::on_comboBox_colorMap_currentIndexChanged(int index)
     const int numThreads = std::max(1, mainWindow->num_threads);
     const size_t segmentSize = std::max<size_t>(1, pixelCount / static_cast<size_t>(numThreads));
 
-    auto func = std::bind(&Function::ConvertToGray, &function, std::ref(imageData),
+    auto func = std::bind(&ImageOps::ConvertToGray, &function, std::ref(imageData),
                            std::placeholders::_1, std::placeholders::_2);
     std::vector<std::thread> workers;
     workers.reserve(static_cast<size_t>(numThreads));

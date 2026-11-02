@@ -20,38 +20,47 @@ find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets concurrent)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets concurrent)
 
 
+# 目录结构：
+#   core/   图像底层(BMP 读写、图像算子、调试输出、公共头)
+#   ui/     主窗口、主题、滑块控件、对话框
+#   tools/  独立工具窗口(图片微调、放大眼睛、色彩映射)
+#   tests/  自检
 set(PROJECT_SOURCES
-        src/main.cpp
-        src/mainwindow.cpp
-        src/selftest.cpp
-        include/mainwindow.h
+        # 入口与主窗口
+        src/app/main.cpp
+        src/ui/mainwindow.cpp
+        include/ui/mainwindow.h
         ui/mainwindow.ui
-        include/BMPFile.h
-        src/BMPFile.cpp
-        include/Debug.h
-        src/Debug.cpp
-        include/stdcpp.h
-        include/QTHeader.h
-        include/Theme.h
-        include/Function.h
-        src/Function.cpp
-        include/eye.h
-        src/eye.cpp
-        ui/eye.ui
+        include/ui/theme.h
+        include/ui/slider_field.h
+        include/ui/dialogs.h
+        src/ui/dialogs.cpp
 
-        include/face.h
-        src/face.cpp
-        ui/face.ui
+        # 底层
+        src/core/bmp_file.cpp
+        include/core/bmp_file.h
+        src/core/image_ops.cpp
+        include/core/image_ops.h
+        src/core/debug.cpp
+        include/core/debug.h
+        include/core/std_headers.h
+        include/core/qt_headers.h
+
+        # 工具窗口
+        src/tools/retouch.cpp
+        include/tools/retouch.h
+        ui/retouch.ui
+        src/tools/eye_zoom.cpp
+        include/tools/eye_zoom.h
+        ui/eye_zoom.ui
+        src/tools/color_map.cpp
+        include/tools/color_map.h
+        ui/color_map.ui
+
+        # 自检与资源
+        src/tests/selftest.cpp
+        include/tests/selftest.h
         resources/icon.qrc
-        include/colormap.h
-        src/colormap.cpp
-        ui/colormap.ui
-
-        include/editdialogs.h
-        src/editdialogs.cpp
-        include/SliderField.h
-
-
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
@@ -77,7 +86,12 @@ else()
     endif()
 endif()
 
-target_include_directories(ImageWithUI PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(ImageWithUI PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/core
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/tools
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/tests)
 
 # .ui files live in the ui/ subdir; tell AUTOUIC where to find them
 set_property(TARGET ImageWithUI APPEND PROPERTY AUTOUIC_SEARCH_PATHS ${CMAKE_CURRENT_SOURCE_DIR}/ui)

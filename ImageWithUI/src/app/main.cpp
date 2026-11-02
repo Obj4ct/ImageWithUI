@@ -4,7 +4,7 @@
 #include <QTimer>
 #include <QPixmap>
 #include "mainwindow.h"
-#include "Theme.h"
+#include "theme.h"
 #include "selftest.h"
 
 int main(int argc, char *argv[])

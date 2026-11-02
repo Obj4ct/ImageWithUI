@@ -1,7 +1,7 @@
 #include "mainwindow.h"
-#include "face.h"
-#include "ui_face.h"
-#include "SliderField.h"
+#include "retouch.h"
+#include "ui_retouch.h"
+#include "slider_field.h"
 
 #include <algorithm>
 #include <cmath>
@@ -49,8 +49,8 @@ void SampleBilinear(const std::vector<uint8_t> &snap, int w, int h,
 
 }   // namespace
 
-Face::Face(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
-    : QWidget(parent), ui(new Ui::Face), mainWindow(mainWindow), myValue(myValue)
+Retouch::Retouch(MainWindow* mainWindow, BitmapImage myValue, QWidget *parent)
+    : QWidget(parent), ui(new Ui::Retouch), mainWindow(mainWindow), myValue(myValue)
 {
     ui->setupUi(this);
     // 清掉 .ui 里自带的浅色样式，统一交给全局主题(Theme.h)接管
@@ -114,12 +114,12 @@ Face::Face(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     }
 }
 
-Face::~Face()
+Retouch::~Retouch()
 {
     delete ui;
 }
 
-bool Face::PointToImage(const QPoint &widgetPos, QPoint *imagePos) const
+bool Retouch::PointToImage(const QPoint &widgetPos, QPoint *imagePos) const
 {
     const QPixmap *pixmap = ui->imageLabel->pixmap();
     if (pixmap == nullptr || pixmap->isNull() || imagePos == nullptr) {
@@ -151,7 +151,7 @@ bool Face::PointToImage(const QPoint &widgetPos, QPoint *imagePos) const
     return true;
 }
 
-int Face::CurrentRadius() const
+int Retouch::CurrentRadius() const
 {
     bool ok = false;
     const int value = ui->lineEdit_radius->text().trimmed().toInt(&ok);
@@ -161,7 +161,7 @@ int Face::CurrentRadius() const
     return std::min(300, value);
 }
 
-double Face::CurrentStrength() const
+double Retouch::CurrentStrength() const
 {
     bool ok = false;
     const double value = m_strengthEdit->text().trimmed().toDouble(&ok);
@@ -171,7 +171,7 @@ double Face::CurrentStrength() const
     return std::min(1.0, std::max(0.0, value / 100.0));
 }
 
-void Face::ApplyAt(const QPoint &imagePos, int deltaX, int deltaY)
+void Retouch::ApplyAt(const QPoint &imagePos, int deltaX, int deltaY)
 {
     const int width = newValue.bmpInfo.GetWidth();
     const int height = newValue.bmpInfo.GetHeight();
@@ -186,7 +186,7 @@ void Face::ApplyAt(const QPoint &imagePos, int deltaX, int deltaY)
     ShowImage(m_work);
 }
 
-void Face::mousePressEvent(QMouseEvent* event)
+void Retouch::mousePressEvent(QMouseEvent* event)
 {
     if (event->button() != Qt::LeftButton) {
         QWidget::mousePressEvent(event);
@@ -201,7 +201,7 @@ void Face::mousePressEvent(QMouseEvent* event)
     ApplyAt(imagePos, 0, 0);
 }
 
-void Face::mouseMoveEvent(QMouseEvent* event)
+void Retouch::mouseMoveEvent(QMouseEvent* event)
 {
     if (!m_stroking) {
         QWidget::mouseMoveEvent(event);
@@ -223,7 +223,7 @@ void Face::mouseMoveEvent(QMouseEvent* event)
     m_lastPos = imagePos;
 }
 
-void Face::mouseReleaseEvent(QMouseEvent* event)
+void Retouch::mouseReleaseEvent(QMouseEvent* event)
 {
     if (event->button() == Qt::LeftButton) {
         m_stroking = false;
@@ -231,22 +231,22 @@ void Face::mouseReleaseEvent(QMouseEvent* event)
     QWidget::mouseReleaseEvent(event);
 }
 
-void Face::ShowImage(std::vector<uint8_t> &inImageData)
+void Retouch::ShowImage(std::vector<uint8_t> &inImageData)
 {
-    const QImage image = Function::ToDisplayImage(inImageData,
+    const QImage image = ImageOps::ToDisplayImage(inImageData,
                                                   newValue.bmpInfo.GetWidth(),
                                                   newValue.bmpInfo.GetHeight());
     ui->imageLabel->setPixmap(QPixmap::fromImage(image));
 }
 
-void Face::on_btn_ok_clicked()
+void Retouch::on_btn_ok_clicked()
 {
     // 重置：丢弃所有涂抹，回到打开窗口时的图像
     m_work = imageData;
     ShowImage(m_work);
 }
 
-void Face::on_btn_apply_clicked()
+void Retouch::on_btn_apply_clicked()
 {
     if (m_work.empty()) {
         return;
@@ -255,7 +255,7 @@ void Face::on_btn_apply_clicked()
     mainWindow->ApplyResult(m_work);
 }
 
-void Face::ApplyEffect(std::vector<uint8_t> &work, int width, int height,
+void Retouch::ApplyEffect(std::vector<uint8_t> &work, int width, int height,
                        RetouchEffect effect, int centerX, int centerY,
                        int radius, double strength, int deltaX, int deltaY)
 {

@@ -1,4 +1,4 @@
-#include"Debug.h"
+#include"debug.h"
 void Debug::ImgInfo(BMP &inBmp, BMPInfo &inBmpInfo)
 {
     std::cout << "this is a BMP file" << std::endl

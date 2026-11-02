@@ -1,9 +1,9 @@
 #ifndef COLORMAP_H
 #define COLORMAP_H
-#include "QTHeader.h"
-#include "BMPFile.h"
-#include "Debug.h"
-#include "Function.h"
+#include "qt_headers.h"
+#include "bmp_file.h"
+#include "debug.h"
+#include "image_ops.h"
 class MainWindow;
 namespace Ui {
 class ColorMap;
@@ -13,7 +13,7 @@ class ColorMap : public QWidget
     Q_OBJECT
 
 public:
-    explicit ColorMap(MainWindow* mainWindow, MyValue myValue, QWidget *parent = nullptr);
+    explicit ColorMap(MainWindow* mainWindow, BitmapImage myValue, QWidget *parent = nullptr);
     ~ColorMap();
 
 private slots:
@@ -24,9 +24,9 @@ private slots:
 private:
     Ui::ColorMap *ui;
     MainWindow* mainWindow;
-    Function function;
-    MyValue myValue;
-    MyValue newValue;
+    ImageOps function;
+    BitmapImage myValue;
+    BitmapImage newValue;
     std::vector<uint8_t>imageData;
     QImage m_bmpImage;
 private:

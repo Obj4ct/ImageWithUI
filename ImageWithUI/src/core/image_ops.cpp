@@ -1,4 +1,4 @@
-#include "Function.h"
+#include "image_ops.h"
 // 定义结构体表示像素
 //先定义一个结构体来表示图像中的像素，包括红、绿和蓝三个通道的值
 struct Pixel {
@@ -19,13 +19,13 @@ int sobelY[3][3] = {
     {1,  2,  1}
 };
 
-Function::Function()
+ImageOps::ImageOps()
 {
 
 }
 
 
-bool Function::CreateMessagebox(QString title,QString message)
+bool ImageOps::CreateMessagebox(QString title,QString message)
 {
     QMessageBox* myBox = new QMessageBox;
     QPushButton* okBtn = new QPushButton("确定");
@@ -43,7 +43,7 @@ bool Function::CreateMessagebox(QString title,QString message)
     return !clickedOk;
 }
 
-QImage Function::ToDisplayImage(const std::vector<uint8_t>& imageData, int32_t width, int32_t height){
+QImage ImageOps::ToDisplayImage(const std::vector<uint8_t>& imageData, int32_t width, int32_t height){
     if (imageData.empty() || width <= 0 || height <= 0) {
         return QImage();
     }
@@ -63,7 +63,7 @@ QImage Function::ToDisplayImage(const std::vector<uint8_t>& imageData, int32_t w
 // 眼部放大：径向放大(类似 PS 液化里的"膨胀"工具)
 // 对圆内每个像素，把采样点往圆心收缩 factor 倍再双线性插值，等价于把眼睛内容整体放大；
 // 收缩量由 (1-t²)² 控制(t=r/R)，所以圆心处最强、到半径处平滑归零，不会留下硬边圆环。
-void Function::EnlargeEye(std::vector<uint8_t> &imageData, int32_t width, int32_t height,
+void ImageOps::EnlargeEye(std::vector<uint8_t> &imageData, int32_t width, int32_t height,
                           int32_t centerX, int32_t centerY, int32_t radius, double strength)
 {
     if (width <= 0 || height <= 0 || radius <= 0 ||
@@ -129,7 +129,7 @@ void Function::EnlargeEye(std::vector<uint8_t> &imageData, int32_t width, int32_
 }
 
 //to gray
-void Function::ConvertToGray(std::vector<uint8_t>& imageData, size_t startPixel, size_t endPixel)
+void ImageOps::ConvertToGray(std::vector<uint8_t>& imageData, size_t startPixel, size_t endPixel)
 {
     const size_t total = imageData.size() / 3;
     const size_t last = std::min(endPixel, total);
@@ -142,7 +142,7 @@ void Function::ConvertToGray(std::vector<uint8_t>& imageData, size_t startPixel,
     }
 }
 
-uint64_t Function::GetSum(const std::vector<uint8_t> &imageData)
+uint64_t ImageOps::GetSum(const std::vector<uint8_t> &imageData)
 {
     uint64_t sum = 0;
     for (uint8_t v : imageData) {
@@ -151,7 +151,7 @@ uint64_t Function::GetSum(const std::vector<uint8_t> &imageData)
     return sum;
 }
 
-double Function::CalAver(const std::vector<uint8_t> &imageData)
+double ImageOps::CalAver(const std::vector<uint8_t> &imageData)
 {
     if (imageData.empty()) {
         return 0.0;
@@ -160,7 +160,7 @@ double Function::CalAver(const std::vector<uint8_t> &imageData)
     return static_cast<double>(sum) / static_cast<double>(imageData.size());
 }
 
-double Function::CalStandard(const std::vector<uint8_t> &imageData, double aver)
+double ImageOps::CalStandard(const std::vector<uint8_t> &imageData, double aver)
 {
     if (imageData.empty()) {
         return 0.0;
@@ -174,7 +174,7 @@ double Function::CalStandard(const std::vector<uint8_t> &imageData, double aver)
     return std::sqrt(variance);
 }
 
-void Function::AutoContrast(std::vector<uint8_t> &imageData, float_t aver, float_t standard, size_t startPixel, size_t endPixel)
+void ImageOps::AutoContrast(std::vector<uint8_t> &imageData, float_t aver, float_t standard, size_t startPixel, size_t endPixel)
 {
     const size_t total = imageData.size() / 3;
     const size_t last = std::min(endPixel, total);
@@ -190,7 +190,7 @@ void Function::AutoContrast(std::vector<uint8_t> &imageData, float_t aver, float
     }
 }
 
-void Function::AverageBlur(std::vector<uint8_t> &imageData, uint32_t width, uint32_t height, size_t startPixel, size_t endPixel)
+void ImageOps::AverageBlur(std::vector<uint8_t> &imageData, uint32_t width, uint32_t height, size_t startPixel, size_t endPixel)
 {
     if (width == 0 || height == 0) {
         return;
@@ -224,7 +224,7 @@ void Function::AverageBlur(std::vector<uint8_t> &imageData, uint32_t width, uint
     }
 }
 
-void Function::Brightness(std::vector<uint8_t> &brightnessImageData, double_t brightnessValue)
+void ImageOps::Brightness(std::vector<uint8_t> &brightnessImageData, double_t brightnessValue)
 {
     for (unsigned char &i: brightnessImageData) {
         double_t newValue = static_cast<double_t>(i) + brightnessValue;
@@ -237,7 +237,7 @@ void Function::Brightness(std::vector<uint8_t> &brightnessImageData, double_t br
     }
 }
 
-void Function::Contrast(std::vector<uint8_t> &contrastImageData, double_t contrastValue)
+void ImageOps::Contrast(std::vector<uint8_t> &contrastImageData, double_t contrastValue)
 {
     double_t factor = (100.0 + contrastValue) / 100.0;
     if (factor < 0.0) {
@@ -251,7 +251,7 @@ void Function::Contrast(std::vector<uint8_t> &contrastImageData, double_t contra
     }
 }
 
-void Function::Saturation(std::vector<uint8_t> &saturationImageData, int32_t width, int32_t height, double_t saturationValue)
+void ImageOps::Saturation(std::vector<uint8_t> &saturationImageData, int32_t width, int32_t height, double_t saturationValue)
 {
     if (width <= 0 || height <= 0) {
         return;
@@ -284,7 +284,7 @@ void Function::Saturation(std::vector<uint8_t> &saturationImageData, int32_t wid
     }
 }
 
-void Function::HSVtoRGB(double h, double s, double v, uint8_t &r, uint8_t &g, uint8_t &b)
+void ImageOps::HSVtoRGB(double h, double s, double v, uint8_t &r, uint8_t &g, uint8_t &b)
 {
     if (s == 0.0) {
         r = g = b = static_cast<uint8_t>(std::max(0.0, std::min(255.0, v)));
@@ -307,7 +307,7 @@ void Function::HSVtoRGB(double h, double s, double v, uint8_t &r, uint8_t &g, ui
     }
 }
 
-void Function::RGBtoHSV(uint8_t r, uint8_t g, uint8_t b, double &h, double &s, double &v)
+void ImageOps::RGBtoHSV(uint8_t r, uint8_t g, uint8_t b, double &h, double &s, double &v)
 {
     const double minVal = std::min({static_cast<double>(r), static_cast<double>(g), static_cast<double>(b)});
     const double maxVal = std::max({static_cast<double>(r), static_cast<double>(g), static_cast<double>(b)});
@@ -338,7 +338,7 @@ void Function::RGBtoHSV(uint8_t r, uint8_t g, uint8_t b, double &h, double &s, d
     }
 }
 
-void Function::ColorBalance(std::vector<uint8_t> &imageData, int32_t width, int32_t height)
+void ImageOps::ColorBalance(std::vector<uint8_t> &imageData, int32_t width, int32_t height)
 {
     if (width <= 0 || height <= 0) {
         return;
@@ -386,7 +386,7 @@ void Function::ColorBalance(std::vector<uint8_t> &imageData, int32_t width, int3
     }
 }
 
-void Function::InvertColors(std::vector<uint8_t>& imageData, size_t startPixel, size_t endPixel) {
+void ImageOps::InvertColors(std::vector<uint8_t>& imageData, size_t startPixel, size_t endPixel) {
     const size_t total = imageData.size() / 3;
     const size_t last = std::min(endPixel, total);
     for (size_t p = startPixel; p < last; ++p) {
@@ -397,7 +397,7 @@ void Function::InvertColors(std::vector<uint8_t>& imageData, size_t startPixel, 
     }
 }
 
-void Function::Complementary(std::vector<uint8_t> &imageData, size_t startPixel, size_t endPixel)
+void ImageOps::Complementary(std::vector<uint8_t> &imageData, size_t startPixel, size_t endPixel)
 {
     const size_t total = imageData.size() / 3;
     const size_t last = std::min(endPixel, total);
@@ -414,7 +414,7 @@ void Function::Complementary(std::vector<uint8_t> &imageData, size_t startPixel,
     }
 }
 
-void Function::Fisheye(const std::vector<uint8_t> &imageData, std::promise<std::vector<uint8_t>>& result, int32_t width, int32_t height)
+void ImageOps::Fisheye(const std::vector<uint8_t> &imageData, std::promise<std::vector<uint8_t>>& result, int32_t width, int32_t height)
 {
     if (width <= 0 || height <= 0) {
         result.set_value(std::vector<uint8_t>());
@@ -466,7 +466,7 @@ void Function::Fisheye(const std::vector<uint8_t> &imageData, std::promise<std::
     result.set_value(fisheyeImage);
 }
 
-double Function::Gaussian(double sigma, int x, int y)
+double ImageOps::Gaussian(double sigma, int x, int y)
 {
     if (sigma <= 1e-6) {
         return (x == 0 && y == 0) ? 1.0 : 0.0;
@@ -474,7 +474,7 @@ double Function::Gaussian(double sigma, int x, int y)
     return exp(-(x * x + y * y) / (2.0 * sigma * sigma)) / (2.0 * M_PI * sigma * sigma);
 }
 
-void Function::Gauss(const std::vector<uint8_t> &imageData, std::promise<std::vector<uint8_t>> &result, int width, int height, double sigma)
+void ImageOps::Gauss(const std::vector<uint8_t> &imageData, std::promise<std::vector<uint8_t>> &result, int width, int height, double sigma)
 {
     if (width <= 0 || height <= 0) {
         result.set_value(std::vector<uint8_t>());
@@ -526,7 +526,7 @@ void Function::Gauss(const std::vector<uint8_t> &imageData, std::promise<std::ve
     result.set_value(blurImageData);
 }
 
-void Function::HighContrast(const std::vector<uint8_t> &imageData, std::promise<std::vector<uint8_t>> &result, const std::vector<uint8_t> &blurImageData)
+void ImageOps::HighContrast(const std::vector<uint8_t> &imageData, std::promise<std::vector<uint8_t>> &result, const std::vector<uint8_t> &blurImageData)
 {
     const size_t n = std::min(imageData.size(), blurImageData.size());
     std::vector<uint8_t> highContrastImageData(n);
@@ -539,7 +539,7 @@ void Function::HighContrast(const std::vector<uint8_t> &imageData, std::promise<
     result.set_value(highContrastImageData);
 }
 
-bool Function::RotateImage(std::vector<uint8_t> &imageData, int32_t &width, int32_t &height,
+bool ImageOps::RotateImage(std::vector<uint8_t> &imageData, int32_t &width, int32_t &height,
                            double_t angle, ContentQuad &quad)
 {
     if (width <= 0 || height <= 0 || imageData.empty()) {
@@ -731,14 +731,14 @@ bool Function::RotateImage(std::vector<uint8_t> &imageData, int32_t &width, int3
     return true;
 }
 
-void Function::RotateReverse(std::vector<uint8_t> &imageData, int32_t &width, int32_t &height,
+void ImageOps::RotateReverse(std::vector<uint8_t> &imageData, int32_t &width, int32_t &height,
                               double_t angle, ContentQuad &quad)
 {
     const double_t clockwiseAngle = 360.0 - angle;
     RotateImage(imageData, width, height, clockwiseAngle, quad);
 }
 
-uint8_t Function::CalculateMedian(std::vector<uint8_t>& window)
+uint8_t ImageOps::CalculateMedian(std::vector<uint8_t>& window)
 {
     if (window.empty()) {
         return 0;
@@ -747,7 +747,7 @@ uint8_t Function::CalculateMedian(std::vector<uint8_t>& window)
     return window[window.size() / 2];
 }
 
-void Function::MedianBlur(std::vector<uint8_t>& imageData, uint32_t width, uint32_t height)
+void ImageOps::MedianBlur(std::vector<uint8_t>& imageData, uint32_t width, uint32_t height)
 {
     if (width < 3 || height < 3) {
         return;
@@ -771,7 +771,7 @@ void Function::MedianBlur(std::vector<uint8_t>& imageData, uint32_t width, uint3
     imageData = blurImage;
 }
 
-void Function::MakeShadow(std::vector<uint8_t>& imageData, std::vector<uint8_t> &shadowImageData, double_t shadowValue)
+void ImageOps::MakeShadow(std::vector<uint8_t>& imageData, std::vector<uint8_t> &shadowImageData, double_t shadowValue)
 {
     shadowImageData.resize(imageData.size());
     const double_t amount = std::max(0.0, std::min(255.0, shadowValue));
@@ -782,7 +782,7 @@ void Function::MakeShadow(std::vector<uint8_t>& imageData, std::vector<uint8_t> 
     }
 }
 
-void Function::HighLight(std::vector<uint8_t>& imageData, std::vector<uint8_t> &highLightImageData, double_t pixel)
+void ImageOps::HighLight(std::vector<uint8_t>& imageData, std::vector<uint8_t> &highLightImageData, double_t pixel)
 {
     const int reductionAmount = 50;
     highLightImageData.resize(imageData.size());
@@ -799,7 +799,7 @@ void Function::HighLight(std::vector<uint8_t>& imageData, std::vector<uint8_t> &
     }
 }
 
-void Function::Sharpen(const std::vector<uint8_t> &imageData, std::promise<std::vector<uint8_t>> &result, const std::vector<uint8_t> &highContrastImageData)
+void ImageOps::Sharpen(const std::vector<uint8_t> &imageData, std::promise<std::vector<uint8_t>> &result, const std::vector<uint8_t> &highContrastImageData)
 {
     // 高反差图 = 原图 - 模糊图 + 128，所以 (高反差 - 128) 就是原图与模糊图的差值。
     // 锐化 = 原图 + 差值，再钳制到 0-255。
@@ -814,7 +814,7 @@ void Function::Sharpen(const std::vector<uint8_t> &imageData, std::promise<std::
     result.set_value(sharpenImageData);
 }
 
-std::vector<uint8_t> Function::SobelEdge(const std::vector<uint8_t> &imageData, int width, int height)
+std::vector<uint8_t> ImageOps::SobelEdge(const std::vector<uint8_t> &imageData, int width, int height)
 {
     std::vector<uint8_t> edgeImageData(imageData.size(), 0);
     if (width < 3 || height < 3) {
@@ -852,7 +852,7 @@ std::vector<uint8_t> Function::SobelEdge(const std::vector<uint8_t> &imageData, 
     return edgeImageData;
 }
 
-void Function::ApplyThreshold(std::vector<uint8_t>& imageData, double_t threshold, size_t startPixel, size_t endPixel)
+void ImageOps::ApplyThreshold(std::vector<uint8_t>& imageData, double_t threshold, size_t startPixel, size_t endPixel)
 {
     const size_t total = imageData.size() / 3;
     const size_t last = std::min(endPixel, total);
@@ -884,7 +884,7 @@ void Function::ApplyThreshold(std::vector<uint8_t>& imageData, double_t threshol
     }
 }
 
-void Function::FullMosaic(std::vector<uint8_t> &imageData, uint32_t width, uint32_t height, uint32_t degree)
+void ImageOps::FullMosaic(std::vector<uint8_t> &imageData, uint32_t width, uint32_t height, uint32_t degree)
 {
     if (width == 0 || height == 0 || degree == 0) {
         return;
@@ -930,7 +930,7 @@ void Function::FullMosaic(std::vector<uint8_t> &imageData, uint32_t width, uint3
 // 所有坐标均按【视觉】约定(y 向下)，内部再换算成自底向上的内存行，
 // 保证与显示/保存结果一致。
 // ------------------------------------------------------------------
-void Function::FlipImage(std::vector<uint8_t> &imageData, int32_t &width, int32_t &height,
+void ImageOps::FlipImage(std::vector<uint8_t> &imageData, int32_t &width, int32_t &height,
                          FlipMode mode, ContentQuad &quad)
 {
     if (width <= 0 || height <= 0) {
@@ -980,7 +980,7 @@ void Function::FlipImage(std::vector<uint8_t> &imageData, int32_t &width, int32_
     }
 }
 
-void Function::CropImage(std::vector<uint8_t> &imageData, int32_t &width, int32_t &height,
+void ImageOps::CropImage(std::vector<uint8_t> &imageData, int32_t &width, int32_t &height,
                          int32_t x, int32_t y, int32_t cw, int32_t ch, ContentQuad &quad)
 {
     if (width <= 0 || height <= 0 || imageData.empty()) {
@@ -1012,7 +1012,7 @@ void Function::CropImage(std::vector<uint8_t> &imageData, int32_t &width, int32_
 // ------------------------------------------------------------------
 // 增强(P2-A)：直方图均衡 / 形态学 / 卷积 / USM
 // ------------------------------------------------------------------
-void Function::BuildEqualizeLUT(const std::vector<uint8_t> &imageData, uint8_t lut[256])
+void ImageOps::BuildEqualizeLUT(const std::vector<uint8_t> &imageData, uint8_t lut[256])
 {
     for (int i = 0; i < 256; ++i) {
         lut[i] = static_cast<uint8_t>(i);   // 默认恒等映射
@@ -1051,7 +1051,7 @@ void Function::BuildEqualizeLUT(const std::vector<uint8_t> &imageData, uint8_t l
     }
 }
 
-void Function::ApplyLUT(std::vector<uint8_t> &imageData, const uint8_t lut[256],
+void ImageOps::ApplyLUT(std::vector<uint8_t> &imageData, const uint8_t lut[256],
                         size_t startPixel, size_t endPixel)
 {
     const size_t total = imageData.size() / 3;
@@ -1064,7 +1064,7 @@ void Function::ApplyLUT(std::vector<uint8_t> &imageData, const uint8_t lut[256],
     }
 }
 
-void Function::HistogramEqualize(std::vector<uint8_t> &imageData, int32_t width, int32_t height)
+void ImageOps::HistogramEqualize(std::vector<uint8_t> &imageData, int32_t width, int32_t height)
 {
     if (width <= 0 || height <= 0) {
         return;
@@ -1074,7 +1074,7 @@ void Function::HistogramEqualize(std::vector<uint8_t> &imageData, int32_t width,
     ApplyLUT(imageData, lut, 0, imageData.size() / 3);
 }
 
-void Function::Morphology(std::vector<uint8_t> &imageData, int32_t width, int32_t height,
+void ImageOps::Morphology(std::vector<uint8_t> &imageData, int32_t width, int32_t height,
                           MorphType type, size_t startPixel, size_t endPixel)
 {
     if (width <= 0 || height <= 0 || imageData.empty()) {
@@ -1130,7 +1130,7 @@ void Function::Morphology(std::vector<uint8_t> &imageData, int32_t width, int32_
     }
 }
 
-void Function::Convolve3x3(const std::vector<uint8_t> &src, std::vector<uint8_t> &dst,
+void ImageOps::Convolve3x3(const std::vector<uint8_t> &src, std::vector<uint8_t> &dst,
                            int32_t width, int32_t height, const double *kernel,
                            double scale, double offset, size_t startPixel, size_t endPixel)
 {
@@ -1165,7 +1165,7 @@ void Function::Convolve3x3(const std::vector<uint8_t> &src, std::vector<uint8_t>
     }
 }
 
-void Function::USMSharpen(const std::vector<uint8_t> &src, std::vector<uint8_t> &dst,
+void ImageOps::USMSharpen(const std::vector<uint8_t> &src, std::vector<uint8_t> &dst,
                           int32_t width, int32_t height,
                           double radius, double amount, double threshold)
 {

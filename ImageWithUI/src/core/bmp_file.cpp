@@ -1,12 +1,12 @@
 //加载BMP文件
-#include "BMPFile.h"
+#include "bmp_file.h"
 #include <QFileInfo>
 #include <QImage>
 #include <QImageReader>
 #include <cstdio>
 
 //读取BMP文件
-bool MYFunction::ReadBMPFile(const std::string &fileName, MyValue &outValue, QString &errMsg)
+bool BmpIO::ReadBMPFile(const std::string &fileName, BitmapImage &outValue, QString &errMsg)
 {
     errMsg.clear();
 
@@ -119,7 +119,7 @@ bool MYFunction::ReadBMPFile(const std::string &fileName, MyValue &outValue, QSt
 }
 
 
-bool MYFunction::ReadImageFile(const std::string &fileName, MyValue &outValue, QString &errMsg)
+bool BmpIO::ReadImageFile(const std::string &fileName, BitmapImage &outValue, QString &errMsg)
 {
     errMsg.clear();
     const QString path = QString::fromStdString(fileName);
@@ -175,7 +175,7 @@ bool MYFunction::ReadImageFile(const std::string &fileName, MyValue &outValue, Q
     return true;
 }
 
-bool MYFunction::WriteBMPFile(const std::string &filePath, const std::vector<uint8_t> &imageData, BMP &bmp, BMPInfo &bmpInfo)
+bool BmpIO::WriteBMPFile(const std::string &filePath, const std::vector<uint8_t> &imageData, BMP &bmp, BMPInfo &bmpInfo)
 {
     if (filePath.empty()) {
         return false;
@@ -198,7 +198,7 @@ bool MYFunction::WriteBMPFile(const std::string &filePath, const std::vector<uin
     return ok;
 }
 
-void MYFunction::SetBMPHeaderValues(BMP &bmp, BMPInfo &bmpInfo, int width, int height, uint16_t bitsPerPixel)
+void BmpIO::SetBMPHeaderValues(BMP &bmp, BMPInfo &bmpInfo, int width, int height, uint16_t bitsPerPixel)
 {
 
     // 设置 BMP 文件头信息

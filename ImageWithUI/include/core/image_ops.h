@@ -1,8 +1,8 @@
 #ifndef FUNCTION_H
 #define FUNCTION_H
-#include "BMPFile.h"
-#include "stdcpp.h"
-#include "QTHeader.h"
+#include "bmp_file.h"
+#include "std_headers.h"
+#include "qt_headers.h"
 
 // 图像内存布局约定：
 //   BMP 为自底向上存储，imageData 的第 0 行是画面的最底行；
@@ -72,10 +72,10 @@ struct ContentQuad {
     }
 };
 
-class Function
+class ImageOps
 {
 public:
-    Function();
+    ImageOps();
     //create messagebox; 返回 true 表示用户未点"确定"(即关闭/取消)
     bool CreateMessagebox(QString title,QString message);
 

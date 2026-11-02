@@ -1,9 +1,9 @@
 
 #ifndef DEBUG_H
 #define DEBUG_H
-#include "BMPFile.h"
+#include "bmp_file.h"
 
-#include "QTHeader.h"
+#include "qt_headers.h"
 class Debug{
 public:
 
