@@ -58,6 +58,8 @@ Retouch::Retouch(MainWindow* mainWindow, BitmapImage myValue, QWidget *parent)
 
     setWindowTitle(QString("图片微调"));
     setWindowIcon(QIcon(":/icon/logo.png"));
+    // 图片居中显示：控件坐标换算成图像坐标时，用"居中"的偏移量才对得上
+    ui->imageLabel->setAlignment(Qt::AlignCenter);
     imageData = mainWindow->imageData;
     m_work = imageData;
     newValue = myValue;
