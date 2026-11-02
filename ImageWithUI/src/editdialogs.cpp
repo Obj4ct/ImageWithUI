@@ -9,6 +9,162 @@
 #include <QSpinBox>
 #include <QComboBox>
 #include <QSignalBlocker>
+#include <QSlider>
+#include <QLabel>
+#include <cmath>
+
+// ------------------------------------------------------------------
+// 滑块 + 数值框(所有数值参数统一走这一套控件)
+// ------------------------------------------------------------------
+namespace {
+
+QSlider *NewSlider(QWidget *parent)
+{
+    QSlider *slider = new QSlider(Qt::Horizontal, parent);
+    slider->setMinimumHeight(18);
+    return slider;
+}
+
+void BindSliderToSpin(QSlider *slider, QSpinBox *spin)
+{
+    slider->setRange(spin->minimum(), spin->maximum());
+    slider->setValue(spin->value());
+    QObject::connect(slider, &QSlider::valueChanged, spin, [spin](int value) {
+        if (spin->value() != value) {
+            QSignalBlocker blocker(spin);
+            spin->setValue(value);
+        }
+    });
+    QObject::connect(spin, QOverload<int>::of(&QSpinBox::valueChanged), slider,
+                     [slider](int value) {
+                         if (slider->value() != value) {
+                             QSignalBlocker blocker(slider);
+                             slider->setValue(value);
+                         }
+                     });
+}
+
+// 小数参数：滑块按 10^decimals 换算成整数刻度
+void BindSliderToSpin(QSlider *slider, QDoubleSpinBox *spin)
+{
+    const int scale = static_cast<int>(std::lround(std::pow(10.0, spin->decimals())));
+    slider->setRange(static_cast<int>(std::lround(spin->minimum() * scale)),
+                     static_cast<int>(std::lround(spin->maximum() * scale)));
+    slider->setValue(static_cast<int>(std::lround(spin->value() * scale)));
+    QObject::connect(slider, &QSlider::valueChanged, spin, [spin, scale](int value) {
+        QSignalBlocker blocker(spin);
+        spin->setValue(static_cast<double>(value) / scale);
+    });
+    QObject::connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), slider,
+                     [slider, scale](double value) {
+                         QSignalBlocker blocker(slider);
+                         slider->setValue(static_cast<int>(std::lround(value * scale)));
+                     });
+}
+
+}   // namespace
+
+QWidget *MakeSliderRow(const QString &label, QSpinBox *spin, QWidget *parent)
+{
+    QWidget *box = new QWidget(parent);
+    QVBoxLayout *layout = new QVBoxLayout(box);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(3);
+
+    QHBoxLayout *top = new QHBoxLayout();
+    top->setContentsMargins(0, 0, 0, 0);
+    top->addWidget(new QLabel(label, box));
+    top->addStretch();
+    top->addWidget(spin);
+    layout->addLayout(top);
+
+    QSlider *slider = NewSlider(box);
+    BindSliderToSpin(slider, spin);
+    layout->addWidget(slider);
+    return box;
+}
+
+QWidget *MakeSliderRow(const QString &label, QDoubleSpinBox *spin, QWidget *parent)
+{
+    QWidget *box = new QWidget(parent);
+    QVBoxLayout *layout = new QVBoxLayout(box);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(3);
+
+    QHBoxLayout *top = new QHBoxLayout();
+    top->setContentsMargins(0, 0, 0, 0);
+    top->addWidget(new QLabel(label, box));
+    top->addStretch();
+    top->addWidget(spin);
+    layout->addLayout(top);
+
+    QSlider *slider = NewSlider(box);
+    BindSliderToSpin(slider, spin);
+    layout->addWidget(slider);
+    return box;
+}
+
+QWidget *MakeSliderCell(QSpinBox *spin, QWidget *parent)
+{
+    QWidget *box = new QWidget(parent);
+    QVBoxLayout *layout = new QVBoxLayout(box);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(2);
+    layout->addWidget(spin);
+    QSlider *slider = NewSlider(box);
+    BindSliderToSpin(slider, spin);
+    layout->addWidget(slider);
+    return box;
+}
+
+QWidget *MakeSliderCell(QDoubleSpinBox *spin, QWidget *parent)
+{
+    QWidget *box = new QWidget(parent);
+    QVBoxLayout *layout = new QVBoxLayout(box);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(2);
+    layout->addWidget(spin);
+    QSlider *slider = NewSlider(box);
+    BindSliderToSpin(slider, spin);
+    layout->addWidget(slider);
+    return box;
+}
+
+// ------------------------------------------------------------------
+// NumberDialog
+// ------------------------------------------------------------------
+NumberDialog::NumberDialog(const QString &title, const QList<NumberParam> &params,
+                           QWidget *parent)
+    : QDialog(parent)
+{
+    setWindowTitle(title);
+    QVBoxLayout *root = new QVBoxLayout(this);
+    for (const NumberParam &param : params) {
+        QDoubleSpinBox *spin = new QDoubleSpinBox(this);
+        spin->setRange(param.min, param.max);
+        spin->setDecimals(param.decimals);
+        spin->setSingleStep(param.step);
+        spin->setValue(param.value);
+        spin->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        root->addWidget(MakeSliderRow(param.label, spin, this));
+        m_spins.append(spin);
+    }
+
+    QDialogButtonBox *box = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    box->button(QDialogButtonBox::Ok)->setText(QString("应用"));
+    box->button(QDialogButtonBox::Cancel)->setText(QString("取消"));
+    connect(box, &QDialogButtonBox::accepted, this, &QDialog::accept);
+    connect(box, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    root->addWidget(box);
+}
+
+double NumberDialog::value(int index) const
+{
+    if (index < 0 || index >= m_spins.size()) {
+        return 0.0;
+    }
+    return m_spins.at(index)->value();
+}
 
 // ------------------------------------------------------------------
 // CropDialog
@@ -187,23 +343,21 @@ KernelDialog::KernelDialog(QWidget *parent)
         spin->setValue(i == 4 ? 1.0 : 0.0);
         spin->setAlignment(Qt::AlignCenter);
         m_cells[i] = spin;
-        grid->addWidget(spin, i / 3, i % 3);
+        grid->addWidget(MakeSliderCell(spin, this), i / 3, i % 3);
     }
     root->addLayout(grid);
 
-    QFormLayout *form = new QFormLayout();
     m_scaleSpin = new QDoubleSpinBox(this);
     m_scaleSpin->setRange(0.01, 100.0);
     m_scaleSpin->setDecimals(2);
     m_scaleSpin->setValue(1.0);
-    form->addRow(QString("亮度缩放"), m_scaleSpin);
+    root->addWidget(MakeSliderRow(QString("亮度缩放"), m_scaleSpin, this));
 
     m_offsetSpin = new QDoubleSpinBox(this);
     m_offsetSpin->setRange(-255.0, 255.0);
     m_offsetSpin->setDecimals(1);
     m_offsetSpin->setValue(0.0);
-    form->addRow(QString("整体变亮/变暗"), m_offsetSpin);
-    root->addLayout(form);
+    root->addWidget(MakeSliderRow(QString("整体变亮/变暗"), m_offsetSpin, this));
 
     QLabel *tip = new QLabel(QString("每个像素 = 周围 9 个像素按权重相加 ÷ 亮度缩放 + 整体变亮/变暗，越界按边缘像素处理。"), this);
     tip->setWordWrap(true);
@@ -297,27 +451,24 @@ USMDialog::USMDialog(QWidget *parent)
     setWindowTitle("智能锐化");
 
     QVBoxLayout *root = new QVBoxLayout(this);
-    QFormLayout *form = new QFormLayout();
 
     m_radius = new QDoubleSpinBox(this);
     m_radius->setRange(0.1, 20.0);
     m_radius->setDecimals(1);
     m_radius->setSingleStep(0.1);
     m_radius->setValue(1.2);
-    form->addRow(QString("锐化半径"), m_radius);
+    root->addWidget(MakeSliderRow(QString("锐化半径"), m_radius, this));
 
     m_amount = new QSpinBox(this);
     m_amount->setRange(0, 300);
     m_amount->setSuffix(QString(" %"));
     m_amount->setValue(100);
-    form->addRow(QString("锐化程度"), m_amount);
+    root->addWidget(MakeSliderRow(QString("锐化程度"), m_amount, this));
 
     m_threshold = new QSpinBox(this);
     m_threshold->setRange(0, 255);
     m_threshold->setValue(6);
-    form->addRow(QString("差异阈值（越大越只处理强边缘）"), m_threshold);
-
-    root->addLayout(form);
+    root->addWidget(MakeSliderRow(QString("差异阈值（越大越只处理强边缘）"), m_threshold, this));
     QLabel *tip = new QLabel(QString("细部反差低于差异阈值时不参与锐化，可避免把噪点一起放大。"), this);
     tip->setWordWrap(true);
     root->addWidget(tip);
@@ -356,31 +507,31 @@ ScaleDialog::ScaleDialog(int currentWidth, int currentHeight, QWidget *parent)
     setWindowTitle("缩放图像");
 
     QVBoxLayout *root = new QVBoxLayout(this);
-    QFormLayout *form = new QFormLayout();
 
     m_widthSpin = new QSpinBox(this);
     m_widthSpin->setRange(1, 8192);
     m_widthSpin->setSuffix(QString(" px"));
     m_widthSpin->setValue(m_initialWidth);
-    form->addRow(QString("宽度"), m_widthSpin);
+    root->addWidget(MakeSliderRow(QString("宽度"), m_widthSpin, this));
 
     m_heightSpin = new QSpinBox(this);
     m_heightSpin->setRange(1, 8192);
     m_heightSpin->setSuffix(QString(" px"));
     m_heightSpin->setValue(m_initialHeight);
-    form->addRow(QString("高度"), m_heightSpin);
+    root->addWidget(MakeSliderRow(QString("高度"), m_heightSpin, this));
 
     m_lockRatio = new QCheckBox(QString("锁定比例"), this);
     m_lockRatio->setChecked(true);
-    form->addRow(QString(), m_lockRatio);
+    root->addWidget(m_lockRatio);
 
+    QHBoxLayout *algoRow = new QHBoxLayout();
+    algoRow->addWidget(new QLabel(QString("算法"), this));
     m_algorithm = new QComboBox(this);
     m_algorithm->addItems({QString("快速（像素画/图标）"),
                            QString("平滑（照片）"),
                            QString("最佳（照片放大）")});
-    form->addRow(QString("算法"), m_algorithm);
-
-    root->addLayout(form);
+    algoRow->addWidget(m_algorithm, 1);
+    root->addLayout(algoRow);
 
     // 锁定比例时同步另一边的尺寸；blockSignals 避免互相触发
     connect(m_widthSpin, QOverload<int>::of(&QSpinBox::valueChanged),

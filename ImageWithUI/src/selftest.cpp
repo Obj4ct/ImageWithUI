@@ -10,6 +10,7 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QLabel>
+#include <QSlider>
 #include <QApplication>
 #include <QMouseEvent>
 #include <QTabBar>
@@ -2253,6 +2254,37 @@ int Run(const QString &imagePath)
         } else {
             ++g_fail;
             out() << "[FAIL] 全局撤销跨标签 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
+    // ---------- 23. 参数滑块与数值框双向同步 ----------
+    {
+        MainWindow win;
+        QString failReason;
+        QSlider *slider = win.findChild<QSlider *>("slider_brightness");
+        QLineEdit *edit = win.findChild<QLineEdit *>("lineEdit_brightness");
+        if (slider == nullptr || edit == nullptr) {
+            failReason = "找不到亮度滑块/数值框";
+        } else {
+            // 拖滑块 → 数值框显示对应数值
+            slider->setValue(40);
+            if (edit->text().trimmed() != QString("40")) {
+                failReason = QString("滑块为 40 时数值框显示 %1").arg(edit->text());
+            } else {
+                // 改数值框 → 滑块跟随
+                edit->setText(QString("-30"));
+                if (slider->value() != -30) {
+                    failReason = QString("数值框为 -30 时滑块为 %1").arg(slider->value());
+                }
+            }
+        }
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 参数滑块同步 : 拖滑块写数值、改数值滑块跟随\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 参数滑块同步 : " << failReason << "\n";
         }
         out().flush();
     }

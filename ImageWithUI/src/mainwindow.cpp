@@ -4,6 +4,7 @@
 #include "ui_mainwindow.h"
 #include "Theme.h"
 #include "editdialogs.h"
+#include "SliderField.h"
 #include <QAction>
 #include <QActionGroup>
 #include <QMenu>
@@ -22,7 +23,7 @@
 #include <QColorDialog>
 #include <QTransform>
 #include <QFontMetrics>
-#include <QInputDialog>
+#include <QSlider>
 #include <algorithm>
 
 namespace {
@@ -1196,11 +1197,10 @@ void MainWindow::SetupSelectionTool()
         if (!color.isValid()) {
             return;
         }
-        bool ok = false;
-        const int width = QInputDialog::getInt(this, QString("给选区描边"),
-                                               QString("宽度(像素 1 ~ 50)："), 2, 1, 50, 1, &ok);
-        if (ok) {
-            StrokeSelection(color, width);
+        NumberDialog dlg(QString("给选区描边"),
+                         { NumberParam{QString("宽度（像素）"), 1, 50, 2, 1, 0} }, this);
+        if (dlg.exec() == QDialog::Accepted) {
+            StrokeSelection(color, static_cast<int>(dlg.value(0)));
         }
     });
     QAction *transformAction = addItem(QString("自由变换…"), QKeySequence(), [this]() {
@@ -1208,20 +1208,14 @@ void MainWindow::SetupSelectionTool()
             UpdateStatus("请先建立选区");
             return;
         }
-        bool ok = false;
-        const double scale = QInputDialog::getDouble(this, QString("自由变换"),
-                                                    QString("缩放百分比(10 ~ 400)："),
-                                                    100.0, 10.0, 400.0, 0, &ok);
-        if (!ok) {
+        NumberDialog dlg(QString("自由变换"),
+                         { NumberParam{QString("缩放（%）"), 10, 400, 100, 1, 0},
+                           NumberParam{QString("旋转（度）"), -180, 180, 0, 1, 0} },
+                         this);
+        if (dlg.exec() != QDialog::Accepted) {
             return;
         }
-        const double angle = QInputDialog::getDouble(this, QString("自由变换"),
-                                                     QString("旋转角度(-180 ~ 180 度)："),
-                                                     0.0, -180.0, 180.0, 0, &ok);
-        if (!ok) {
-            return;
-        }
-        FreeTransformSelection(scale, angle);
+        FreeTransformSelection(dlg.value(0), dlg.value(1));
     });
     QAction *cropAction = addItem(QString("裁到选区"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_X),
                                   [this]() { CropToSelection(); });
@@ -1234,12 +1228,10 @@ void MainWindow::SetupSelectionTool()
             UpdateStatus("请先建立选区");
             return;
         }
-        bool ok = false;
-        const double radius = QInputDialog::getDouble(this, QString("让边缘柔和"),
-                                                      QString("柔和半径（像素，0.5 ~ 64）："),
-                                                      4.0, 0.5, 64.0, 1, &ok);
-        if (ok) {
-            FeatherSelection(radius);
+        NumberDialog dlg(QString("让边缘柔和"),
+                         { NumberParam{QString("柔和半径（像素）"), 0.5, 64, 4, 0.5, 1} }, this);
+        if (dlg.exec() == QDialog::Accepted) {
+            FeatherSelection(dlg.value(0));
         }
     });
     auto promptRefine = [this](int mode) {
@@ -1249,13 +1241,11 @@ void MainWindow::SetupSelectionTool()
         }
         const QString label = (mode == 0) ? QString("扩大选区") : (mode == 1) ? QString("缩小选区")
                                                                              : QString("磨平边缘");
-        bool ok = false;
-        const int radius = QInputDialog::getInt(this, label,
-                                                QString("半径(像素 1 ~ 200)："),
-                                                2, 1, 200, 1, &ok);
-        if (!ok) {
+        NumberDialog dlg(label, { NumberParam{QString("半径（像素）"), 1, 200, 2, 1, 0} }, this);
+        if (dlg.exec() != QDialog::Accepted) {
             return;
         }
+        const int radius = static_cast<int>(dlg.value(0));
         if (mode == 0) {
             GrowSelection(radius);
         } else if (mode == 1) {
@@ -2697,6 +2687,38 @@ void MainWindow::SetupLivePreview()
         d.edit->installEventFilter(this);   // Esc 取消预览
     }
 
+    // 每个参数行下面挂一条滑块：拖滑块写数值框(触发实时预览)，
+    // 手动改数值框时滑块同步跟随；数值框同时承担数值显示。
+    struct SliderDesk {
+        QWidget *row;
+        QLineEdit *edit;
+        const char *name;
+        int minimum;
+        int maximum;
+        int initial;
+    };
+    const SliderDesk sliderDesks[] = {
+        { ui->widget_4,  ui->lineEdit_brightness, "slider_brightness", -150, 150, 0 },
+        { ui->widget_5,  ui->lineEdit_contrast,   "slider_contrast",    -50, 100, 0 },
+        { ui->widget_6,  ui->lineEdit_saturation, "slider_saturation", -100, 100, 0 },
+        { ui->widget_21, ui->lineEdit_shadow,     "slider_shadow",         0, 100, 0 },
+        { ui->widget_9,  ui->lineEdit_highlight,  "slider_highlight",      0, 255, 128 },
+        { ui->widget_8,  ui->lineEdit_sharpen,    "slider_sharpen",        0, 200, 0 },
+        { ui->widget_10, ui->lineEdit_threshold,  "slider_threshold",      0, 255, 128 },
+        { ui->widget_17, ui->lineEdit_rotate,     "slider_rotate",         0, 360, 0 },
+        { ui->widget_18, ui->lineEdit_rotate_r,   "slider_rotate_r",       0, 360, 0 },
+    };
+    for (const SliderDesk &d : sliderDesks) {
+        QSlider *slider = SliderField::Make(ui->widget_14, d.minimum, d.maximum, d.initial);
+        slider->setObjectName(QString::fromLatin1(d.name));
+        if (!SliderField::InsertAfter(d.row, slider)) {
+            continue;
+        }
+        QSignalBlocker blocker(d.edit);   // 初始化数值不算用户输入，不触发预览
+        d.edit->setText(QString::number(d.initial));
+        SliderField::Bind(slider, d.edit);
+    }
+
     // 焦点离开右侧调整面板(或窗口失去焦点)时回滚到已提交的图像
     connect(qApp, &QApplication::focusChanged, this, [this](QWidget *, QWidget *now) {
         if (!m_previewActive) {
@@ -4010,13 +4032,12 @@ void MainWindow::on_actionfishEye_triggered()
 
 void MainWindow::on_actiongauss_triggered()
 {
-    bool ok = false;
-    const double degree = QInputDialog::getDouble(this, tr("输入数值"), tr("强度："), 0, 0, 10, 1, &ok);
-    if (!ok) {
-        qDebug() << "用户取消输入";
+    NumberDialog dlg(QString("高斯模糊"),
+                     { NumberParam{QString("强度"), 0, 10, 0, 0.1, 1} }, this);
+    if (dlg.exec() != QDialog::Accepted) {
         return;
     }
-    qDebug() << "用户输入的程度:" << degree;
+    const double degree = dlg.value(0);
     ApplyOperator("高斯模糊", [degree](std::vector<uint8_t> &d, const OpContext &ctx) {
         Function f;
         std::promise<std::vector<uint8_t>> promise;
@@ -4066,13 +4087,12 @@ void MainWindow::on_actionmedian_triggered()
 
 void MainWindow::on_actionmosaic_triggered()
 {
-    bool ok = false;
-    const double degree = QInputDialog::getDouble(this, tr("输入数值"), tr("强度："), 4, 1, 100, 1, &ok);
-    if (!ok) {
-        qDebug() << "用户取消输入";
+    NumberDialog dlg(QString("打马赛克"),
+                     { NumberParam{QString("强度"), 1, 100, 4, 1, 0} }, this);
+    if (dlg.exec() != QDialog::Accepted) {
         return;
     }
-    const uint32_t step = static_cast<uint32_t>(std::max(1.0, degree));
+    const uint32_t step = static_cast<uint32_t>(std::max(1.0, dlg.value(0)));
     ApplyOperator("打马赛克", [this, step](std::vector<uint8_t> &d, const OpContext &ctx) {
         this->function.FullMosaic(d, static_cast<uint32_t>(ctx.width),
                                   static_cast<uint32_t>(ctx.height), step);

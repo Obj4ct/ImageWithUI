@@ -49,6 +49,7 @@ set(PROJECT_SOURCES
 
         include/editdialogs.h
         src/editdialogs.cpp
+        include/SliderField.h
 
 
 )

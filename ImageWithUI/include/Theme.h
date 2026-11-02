@@ -249,6 +249,7 @@ QComboBox QAbstractItemView {
 }
 
 /* ================= 滑块 ================= */
+QSlider { min-height: 18px; }
 QSlider::groove:horizontal { height: 4px; background: #232830; border-radius: 2px; }
 QSlider::sub-page:horizontal { background: #22d3ee; border-radius: 2px; }
 QSlider::add-page:horizontal { background: #232830; border-radius: 2px; }
@@ -547,6 +548,7 @@ QComboBox QAbstractItemView {
     background-color: #ffffff; border: 1px solid #dfe3e8; border-radius: 8px;
     selection-background-color: #e3f4f8; selection-color: #0b7285; padding: 4px; outline: none;
 }
+QSlider { min-height: 18px; }
 QSlider::groove:horizontal { height: 4px; background: #e2e7ec; border-radius: 2px; }
 QSlider::sub-page:horizontal { background: #22b8cf; border-radius: 2px; }
 QSlider::handle:horizontal {

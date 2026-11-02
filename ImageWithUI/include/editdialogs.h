@@ -7,6 +7,37 @@
 #include <QCheckBox>
 #include <QComboBox>
 
+// ---- 统一的「滑块 + 数值框」参数控件 ----
+// 滑块与数值框始终双向同步：拖滑块数字跟着变，改数字滑块跟着走
+// 数值框在上、滑块在下的一整行(带标签)
+QWidget *MakeSliderRow(const QString &label, QSpinBox *spin, QWidget *parent = nullptr);
+QWidget *MakeSliderRow(const QString &label, QDoubleSpinBox *spin, QWidget *parent = nullptr);
+// 只有数值框 + 滑块的紧凑单元(用于 3×3 网格)
+QWidget *MakeSliderCell(QSpinBox *spin, QWidget *parent = nullptr);
+QWidget *MakeSliderCell(QDoubleSpinBox *spin, QWidget *parent = nullptr);
+
+// 通用数值对话框：每行一个「标签 + 数值框 + 滑块」，确认后按序号取值
+struct NumberParam {
+    QString label;
+    double min = 0.0;
+    double max = 1.0;
+    double value = 0.0;
+    double step = 1.0;
+    int decimals = 0;   // 0 表示整数
+};
+
+class NumberDialog : public QDialog
+{
+    Q_OBJECT
+public:
+    explicit NumberDialog(const QString &title, const QList<NumberParam> &params,
+                          QWidget *parent = nullptr);
+    double value(int index) const;
+
+private:
+    QList<QDoubleSpinBox *> m_spins;
+};
+
 // 裁剪对话框：在缩放后的预览图上拖拽框选，返回“图片像素坐标”下的选区
 class CropDialog : public QDialog
 {

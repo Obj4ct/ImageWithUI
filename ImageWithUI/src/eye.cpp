@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "eye.h"
 #include "ui_eye.h"
+#include "SliderField.h"
 
 eye::eye(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     : QWidget(parent), ui(new Ui::eye), mainWindow(mainWindow), myValue(myValue)
@@ -28,6 +29,22 @@ eye::eye(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     connect(previewTimer, &QTimer::timeout, this, [this]() { RunPreview(false); });
     connect(ui->lineEdit_range, &QLineEdit::textChanged, this, &eye::SchedulePreview);
     connect(ui->lineEdit_increase, &QLineEdit::textChanged, this, &eye::SchedulePreview);
+
+    // 参数滑块：拖滑块写数值并触发预览，改数值时滑块跟着走
+    QSlider *rangeSlider = SliderField::Make(ui->widget_2, 1, 300, 40);
+    rangeSlider->setObjectName(QStringLiteral("slider_range"));
+    QSlider *increaseSlider = SliderField::Make(ui->widget_2, 0, 100, 30);
+    increaseSlider->setObjectName(QStringLiteral("slider_increase"));
+    if (SliderField::InsertAfter(ui->lineEdit_range, rangeSlider)) {
+        QSignalBlocker blocker(ui->lineEdit_range);
+        ui->lineEdit_range->setText(QStringLiteral("40"));
+        SliderField::Bind(rangeSlider, ui->lineEdit_range);
+    }
+    if (SliderField::InsertAfter(ui->lineEdit_increase, increaseSlider)) {
+        QSignalBlocker blocker(ui->lineEdit_increase);
+        ui->lineEdit_increase->setText(QStringLiteral("0.30"));
+        SliderField::Bind(increaseSlider, ui->lineEdit_increase, 100.0, 2);
+    }
 }
 
 void eye::mousePressEvent(QMouseEvent* event)

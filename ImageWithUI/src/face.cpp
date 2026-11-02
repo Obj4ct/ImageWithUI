@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "face.h"
 #include "ui_face.h"
+#include "SliderField.h"
 
 
 
@@ -29,6 +30,15 @@ Face::Face(MainWindow* mainWindow, MyValue myValue, QWidget *parent)
     previewTimer->setInterval(250);
     connect(previewTimer, &QTimer::timeout, this, [this]() { RunPreview(false); });
     connect(ui->lineEdit_radius, &QLineEdit::textChanged, this, &Face::SchedulePreview);
+
+    // 影响范围滑块：拖滑块写数值并触发预览，改数值时滑块跟着走
+    QSlider *radiusSlider = SliderField::Make(ui->widget_2, 1, 300, 80);
+    radiusSlider->setObjectName(QStringLiteral("slider_radius"));
+    if (SliderField::InsertAfter(ui->lineEdit_radius, radiusSlider)) {
+        QSignalBlocker blocker(ui->lineEdit_radius);
+        ui->lineEdit_radius->setText(QStringLiteral("80"));
+        SliderField::Bind(radiusSlider, ui->lineEdit_radius);
+    }
 }
 
 void Face::mousePressEvent(QMouseEvent* event)
