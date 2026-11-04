@@ -1,4 +1,4 @@
-/*
+﻿/*
  * SPDX-License-Identifier: MIT
  * Copyright (c) 2023 素曜
  *
@@ -1595,6 +1595,95 @@ int Run(const QString &imagePath)
         } else {
             ++g_fail;
             out() << "[FAIL] 选区通道 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
+    // ---------- 13.3 画笔/橡皮：绘制、撤销、选区限制、橡皮 ----------
+    {
+        const QString brushPath = QDir::tempPath() + "/imagewithui_brush.png";
+        {
+            QImage img(64, 48, QImage::Format_RGB32);
+            img.fill(qRgb(100, 150, 200));
+            img.save(brushPath, "PNG");
+        }
+
+        QString failReason;
+        {
+            MainWindow win;
+            if (!win.OpenImage(brushPath)) {
+                failReason = "无法打开测试图";
+            } else {
+                const int32_t w = 64;
+                const int32_t h = 48;
+                auto pixel = [&win, w, h](int x, int y, int channel) -> int {
+                    const size_t i = (static_cast<size_t>(h - 1 - y) * static_cast<size_t>(w) +
+                                      static_cast<size_t>(x)) * 3 +
+                                     static_cast<size_t>(channel);
+                    const std::vector<uint8_t> &data = win.CurrentImageData();
+                    return (i < data.size()) ? static_cast<int>(data[i]) : -1;
+                };
+                auto isOriginal = [&pixel](int x, int y) {
+                    return pixel(x, y, 0) == 200 && pixel(x, y, 1) == 150 &&
+                           pixel(x, y, 2) == 100;
+                };
+                auto isRed = [&pixel](int x, int y) {
+                    return pixel(x, y, 0) < 40 && pixel(x, y, 1) < 40 &&
+                           pixel(x, y, 2) > 215;
+                };
+
+                win.SetBrushParams(10, 100, 1.0, QColor(255, 0, 0));
+                win.PaintBrushStroke(QPoint(10, 20), QPoint(30, 20), false);
+                if (!isRed(20, 20)) {
+                    failReason = "画笔未把像素涂成指定颜色";
+                } else if (!isOriginal(5, 5)) {
+                    failReason = "画笔影响到了笔迹之外的像素";
+                } else {
+                    win.UndoImageProcessing();
+                    if (!isOriginal(20, 20)) {
+                        failReason = "撤销画笔后像素未还原";
+                    } else {
+                        // 选区限制：只允许在 x >= 25 的区域绘制
+                        win.SetSelection(QRect(25, 10, 20, 20));
+                        win.PaintBrushStroke(QPoint(20, 20), QPoint(35, 20), false);
+                        if (!isOriginal(20, 20)) {
+                            failReason = "画笔没有遵守选区限制";
+                        } else if (!isRed(30, 20)) {
+                            failReason = "选区内没有被画笔涂到";
+                        } else {
+                            win.UndoImageProcessing();
+                            win.ClearSelection();
+                            // 橡皮：在红色笔迹上以白色覆盖
+                            win.PaintBrushStroke(QPoint(20, 20), QPoint(20, 20), false);
+                            if (!isRed(20, 20)) {
+                                failReason = "橡皮测试前的画笔失败";
+                            } else {
+                                win.PaintBrushStroke(QPoint(20, 20), QPoint(20, 20), true);
+                                const bool white = pixel(20, 20, 0) >= 250 &&
+                                                   pixel(20, 20, 1) >= 250 &&
+                                                   pixel(20, 20, 2) >= 250;
+                                if (!white) {
+                                    failReason = "橡皮没有用白色覆盖笔迹";
+                                } else {
+                                    win.UndoImageProcessing();
+                                    if (!isRed(20, 20)) {
+                                        failReason = "撤销橡皮后未回到红色笔迹";
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        QFile::remove(brushPath);
+
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 画笔/橡皮 : 绘制 / 撤销 / 选区限制 / 橡皮覆盖\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 画笔/橡皮 : " << failReason << "\n";
         }
         out().flush();
     }

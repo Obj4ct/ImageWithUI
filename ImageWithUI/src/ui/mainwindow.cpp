@@ -492,7 +492,28 @@ public:
         update();
     }
 
-    // ---- 交互式变换会话：画布上拖拽手柄完成缩放与旋转 ----
+    // ---- 画笔/橡皮：0 关闭 / 1 画笔 / 2 橡皮 ----
+    void setBrushMode(int mode)
+    {
+        m_brushMode = qBound(0, mode, 2);
+        m_brushDrawing = false;
+        m_brushPoints.clear();
+        m_drag = None;
+        m_hoverValid = false;
+        update();
+    }
+
+    void setBrushParams(int size, int hardness, double opacity, const QColor &color)
+    {
+        m_brushSize = qBound(1, size, 200);
+        m_brushHardness = qBound(0, hardness, 100);
+        m_brushOpacity = qBound(0.0, opacity, 1.0);
+        m_brushColor = color;
+        update();
+    }
+
+    int brushMode() const { return m_brushMode; }
+
     void beginTransform(const QRect &baseRect, const QImage &whiteFill, const QImage &content)
     {
         if (baseRect.isEmpty() || whiteFill.isNull() || content.isNull()) {
@@ -524,6 +545,10 @@ public:
 
     // 用户拖拽建立选区后回调(add = 按住 Shift，表示并入已有选区)
     std::function<void(const QRect &, bool)> onSelectionChanged;
+    // 画笔笔画：按下、拖动(上一采样点, 当前点)、松开；坐标均为图像像素
+    std::function<void(const QPoint &)> onBrushStart;
+    std::function<void(const QPoint &, const QPoint &)> onBrushSegment;
+    std::function<void()> onBrushEnd;
     // 用户拖动整体移动选区后回调(图像像素位移；content=true 表示同时搬动像素)
     std::function<void(int, int, bool)> onSelectionMoved;
     // 套索松开后回调(add = Shift 加选，subtract = Alt 减选)
@@ -631,6 +656,44 @@ protected:
         p.drawPolyline(trail);
     }
 
+    // 画笔预览：用圆头折线近似"胶囊"笔迹，并在笔尖画一圈定位环
+    void drawBrushPreview(QPainter &p) const
+    {
+        if (m_brushPoints.isEmpty()) {
+            return;
+        }
+        QPolygonF trail;
+        for (const QPoint &ip : m_brushPoints) {
+            trail << QPointF(toWidgetPoint(ip));
+        }
+        QColor color = (m_brushMode == 2) ? QColor(255, 255, 255) : m_brushColor;
+        color.setAlphaF(m_brushOpacity);
+        const QRect dr = displayRect();
+        const double sx = (dr.isEmpty() || m_imgW <= 0) ? 1.0
+                                                        : static_cast<double>(dr.width()) / m_imgW;
+        const double sy = (dr.isEmpty() || m_imgH <= 0) ? 1.0
+                                                        : static_cast<double>(dr.height()) / m_imgH;
+        const double penWidth = std::max(1.0, m_brushSize * (sx + sy) / 2.0);
+        QPen pen(color);
+        pen.setWidthF(penWidth);
+        pen.setCapStyle(Qt::RoundCap);
+        pen.setJoinStyle(Qt::RoundJoin);
+        p.setPen(pen);
+        p.setBrush(Qt::NoBrush);
+        if (trail.size() == 1) {
+            p.drawEllipse(trail.first(), penWidth / 2.0, penWidth / 2.0);
+        } else {
+            p.drawPolyline(trail);
+        }
+
+        // 笔尖定位环(始终可见，便于控制大小)
+        const QPointF tip = trail.last();
+        p.setBrush(Qt::NoBrush);
+        p.setPen(QPen(QColor(34, 211, 238, 200), 1));
+        p.drawEllipse(tip, std::max(1.5, m_brushSize * sx / 2.0),
+                      std::max(1.5, m_brushSize * sy / 2.0));
+    }
+
     void paintEvent(QPaintEvent *) override
     {
         if (m_imgW <= 0 || m_imgH <= 0) {
@@ -642,6 +705,11 @@ protected:
         if (m_transform) {
             paintTransform(p);
             return;
+        }
+
+        // 画笔/橡皮：笔迹预览画在选区蚂蚁线之下
+        if (m_brushMode != 0) {
+            drawBrushPreview(p);
         }
 
         // 多边形套索正在取点：画已确定的边 + 到光标的橡皮筋
@@ -763,6 +831,23 @@ protected:
             const QPointF ip = toImageF(event->pos());
             m_startPointerAngle = qRadiansToDegrees(qAtan2(ip.y() - center.y(), ip.x() - center.x()));
             setCursor(cursorForHandle(handle));
+            update();
+            return;
+        }
+        if (m_brushMode != 0 && m_imgW > 0 && m_imgH > 0) {
+            const QRect dr = displayRect();
+            if (dr.isEmpty() || !dr.adjusted(-2, -2, 2, 2).contains(event->pos())) {
+                return;
+            }
+            QPoint ip = toImage(event->pos());
+            ip.setX(qBound(0, ip.x(), m_imgW - 1));
+            ip.setY(qBound(0, ip.y(), m_imgH - 1));
+            m_brushDrawing = true;
+            m_brushPoints.clear();
+            m_brushPoints.append(ip);
+            if (onBrushStart) {
+                onBrushStart(ip);
+            }
             update();
             return;
         }
@@ -889,6 +974,27 @@ protected:
             }
             return;
         }
+        if (m_brushMode != 0) {
+            if (!m_brushDrawing) {
+                setCursor(Qt::CrossCursor);
+                return;
+            }
+            if (!(event->buttons() & Qt::LeftButton)) {
+                return;
+            }
+            QPoint ip = toImage(pos);
+            ip.setX(qBound(0, ip.x(), m_imgW - 1));
+            ip.setY(qBound(0, ip.y(), m_imgH - 1));
+            if (!m_brushPoints.isEmpty() && m_brushPoints.last() == ip) {
+                return;
+            }
+            if (!m_brushPoints.isEmpty() && onBrushSegment) {
+                onBrushSegment(m_brushPoints.last(), ip);
+            }
+            m_brushPoints.append(ip);
+            update();
+            return;
+        }
         if (!m_toolActive) {
             return;
         }
@@ -937,7 +1043,24 @@ protected:
 
     void mouseReleaseEvent(QMouseEvent *event) override
     {
-        Q_UNUSED(event);
+        if (m_brushMode != 0) {
+            if (m_brushDrawing) {
+                QPoint ip = toImage(event->pos());
+                ip.setX(qBound(0, ip.x(), std::max(0, m_imgW - 1)));
+                ip.setY(qBound(0, ip.y(), std::max(0, m_imgH - 1)));
+                if (!m_brushPoints.isEmpty() && m_brushPoints.last() != ip &&
+                    onBrushSegment) {
+                    onBrushSegment(m_brushPoints.last(), ip);
+                }
+                m_brushDrawing = false;
+                if (onBrushEnd) {
+                    onBrushEnd();
+                }
+            }
+            m_brushPoints.clear();
+            update();
+            return;
+        }
         if (m_transform) {
             if (m_drag == TransformScale || m_drag == TransformRotate) {
                 m_drag = None;
@@ -1256,6 +1379,14 @@ private:
     QImage m_maskImage;          // 掩码半透明缩略图(由主窗口生成)
     DragMode m_drag = None;
     int m_tool = 0;              // 0 矩形 / 1 自由套索 / 2 多边形套索 / 3 磁性套索
+    // ---- 画笔/橡皮 ----
+    int m_brushMode = 0;           // 0 关闭 / 1 画笔 / 2 橡皮
+    bool m_brushDrawing = false;
+    QPolygon m_brushPoints;        // 当前笔画的预览轨迹(图像像素)
+    int m_brushSize = 20;          // 直径(图像像素)
+    int m_brushHardness = 70;      // 0~100，边缘由硬到柔
+    double m_brushOpacity = 0.8;   // 0.0~1.0
+    QColor m_brushColor = QColor(20, 20, 20);
     QPolygon m_points;           // 套索轨迹(图像像素坐标)
     QPolygon m_poly;             // 多边形套索已确定的顶点(图像像素坐标)
     QPoint m_hover;              // 多边形套索的橡皮筋终点
@@ -1342,6 +1473,7 @@ MainWindow::MainWindow(QWidget *parent)
     SetupSelectionTool();   // 矩形选区覆盖层 + "选择"菜单
     SetupLayerPanel();      // 右侧图层面板 + "图层"菜单
     SetupChannelPanel();    // 右侧通道面板(存储/载入选区)
+    SetupBrushPanel();      // 右侧画笔参数面板
 
     // ---- 右侧面板放进滚动区 ----
     // 窗口变矮时面板可以滚动，而不是把控件压扁或把窗口撑出屏幕
@@ -1554,6 +1686,13 @@ void MainWindow::SetupSelectionTool()
     m_overlay->onTransformFinished = [this](bool commit, double sx, double sy, double angle) {
         FinishInteractiveTransform(commit, sx, sy, angle);
     };
+    // 画笔/橡皮：笔画开始记录快照，松开时合并为一步历史
+    m_overlay->onBrushStart = [this](const QPoint &p) { BeginBrushStroke(p); };
+    m_overlay->onBrushSegment = [this](const QPoint &from, const QPoint &to) {
+        BrushSegmentTo(from, to);
+    };
+    m_overlay->onBrushEnd = [this]() { EndBrushStroke(); };
+    m_overlay->setBrushParams(m_brushSize, m_brushHardness, m_brushOpacity, m_brushColor);
     ui->imageLabel->installEventFilter(this);
 
     // 工具栏：矩形选框 / 自由套索 / 多边形套索 / 磁性套索(勾选后才在图像上拖拽，避免误触)
@@ -1577,9 +1716,17 @@ void MainWindow::SetupSelectionTool()
     m_magnetToolAction->setCheckable(true);
     m_magnetToolAction->setToolTip(QString("沿目标边缘拖动，轨迹点会自动吸附到 8 px 内最强的边缘上；松开闭合；Shift 加选，Alt 减选"));
 
-    // 四个工具共用一套状态同步：任一被勾选时启用覆盖层，并切换工具类型
+    m_brushToolAction = new QAction(QString("画笔"), this);
+    m_brushToolAction->setCheckable(true);
+    m_brushToolAction->setToolTip(QString("在活动图层上按住左键绘制；笔迹遵守当前选区覆盖度"));
+
+    m_eraserToolAction = new QAction(QString("橡皮"), this);
+    m_eraserToolAction->setCheckable(true);
+    m_eraserToolAction->setToolTip(QString("用白色覆盖活动图层(当前没有透明通道)；笔迹遵守当前选区覆盖度"));
+
+    // 所有画布工具共用一套状态同步：任一被勾选时启用覆盖层，并切换工具类型
     auto applyToolState = [this]() {
-        // 切换选区工具时放弃未提交的拖拽变换，避免手柄状态残留
+        // 切换工具时放弃未提交的拖拽变换，避免手柄状态残留
         if (m_overlay != nullptr && m_overlay->isTransformActive()) {
             CancelInteractiveTransform();
         }
@@ -1587,12 +1734,19 @@ void MainWindow::SetupSelectionTool()
         const bool lasso = m_lassoToolAction->isChecked();
         const bool poly = m_polyToolAction->isChecked();
         const bool magnet = m_magnetToolAction->isChecked();
+        const bool brush = m_brushToolAction->isChecked();
+        const bool eraser = m_eraserToolAction->isChecked();
         const int kind = magnet ? 3 : poly ? 2 : lasso ? 1 : 0;
         if (m_overlay != nullptr) {
             m_overlay->setToolKind(kind);
-            m_overlay->setToolActive(rect || lasso || poly || magnet);
+            m_overlay->setBrushMode(brush ? 1 : (eraser ? 2 : 0));
+            m_overlay->setToolActive(rect || lasso || poly || magnet || brush || eraser);
         }
-        if (magnet) {
+        if (brush) {
+            UpdateStatus(QString("画笔：按住左键在活动图层上绘制；笔迹遵守选区"));
+        } else if (eraser) {
+            UpdateStatus(QString("橡皮：用白色覆盖活动图层；笔迹遵守选区"));
+        } else if (magnet) {
             UpdateStatus(QString("自动贴边选区：沿边缘拖动，轨迹会自动贴过去；Shift 加选、Alt 减选"));
         } else if (poly) {
             UpdateStatus(QString("多边形选区：单击落点，点回起点/双击/回车闭合；退格撤点、Esc 取消"));
@@ -1601,20 +1755,26 @@ void MainWindow::SetupSelectionTool()
         } else if (rect) {
             UpdateStatus(QString("矩形选区：在图像上拖动框出选区；按住 Shift 加选"));
         } else {
-            UpdateStatus(QString("选区工具已关闭"));
+            UpdateStatus(QString("画布工具已关闭"));
         }
     };
     toolGroup->addAction(m_lassoToolAction);
     toolGroup->addAction(m_polyToolAction);
     toolGroup->addAction(m_magnetToolAction);
+    toolGroup->addAction(m_brushToolAction);
+    toolGroup->addAction(m_eraserToolAction);
     connect(m_selectionToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
     connect(m_lassoToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
     connect(m_polyToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
     connect(m_magnetToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
+    connect(m_brushToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
+    connect(m_eraserToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
     ui->toolBox->addAction(m_selectionToolAction);
     ui->toolBox->addAction(m_lassoToolAction);
     ui->toolBox->addAction(m_polyToolAction);
     ui->toolBox->addAction(m_magnetToolAction);
+    ui->toolBox->addAction(m_brushToolAction);
+    ui->toolBox->addAction(m_eraserToolAction);
 
     // "选择"菜单(放在"编辑"之后、"图像模糊"之前)
     m_selectionMenu = new QMenu(QString("选择"), this);
@@ -1775,6 +1935,12 @@ void MainWindow::SetupSelectionTool()
         shrinkAction->setEnabled(has);
         smoothAction->setEnabled(has);
     });
+
+    // "工具"菜单：画笔/橡皮
+    QMenu *toolMenu = new QMenu(QString("工具"), this);
+    toolMenu->addAction(m_brushToolAction);
+    toolMenu->addAction(m_eraserToolAction);
+    menuBar()->insertMenu(m_selectionMenu->menuAction(), toolMenu);
 
     menuBar()->insertMenu(ui->menu_blur->menuAction(), m_selectionMenu);
     m_selectionMenu->menuAction()->setVisible(!imageData.empty());
@@ -2730,8 +2896,11 @@ void MainWindow::BeginInteractiveTransform()
 
 bool MainWindow::AnySelectionToolChecked() const
 {
+    const bool brush = (m_brushToolAction != nullptr) && m_brushToolAction->isChecked();
+    const bool eraser = (m_eraserToolAction != nullptr) && m_eraserToolAction->isChecked();
     return m_selectionToolAction->isChecked() || m_lassoToolAction->isChecked() ||
-           m_polyToolAction->isChecked() || m_magnetToolAction->isChecked();
+           m_polyToolAction->isChecked() || m_magnetToolAction->isChecked() ||
+           brush || eraser;
 }
 
 // 变换结束：提交走 ApplyFreeTransform，取消只退出会话(画布本来就没被改过)
@@ -3487,6 +3656,294 @@ void MainWindow::RemoveLayerMask()
     layer.mask.clear();
     layer.maskEnabled = true;
     CommitLayerStructure("删除图层蒙版", before);
+}
+
+// ------------------------------------------------------------------
+// 画笔 / 橡皮
+// 笔画先累积到一张 0~255 的覆盖度掩码(视觉坐标)，
+// 松开时一次性按选区覆盖度与不透明度混入活动图层，避免重复采样加深。
+// ------------------------------------------------------------------
+
+void MainWindow::SetBrushParams(int size, int hardness, double opacity, const QColor &color)
+{
+    m_brushSize = qBound(1, size, 200);
+    m_brushHardness = qBound(0, hardness, 100);
+    m_brushOpacity = qBound(0.0, opacity, 1.0);
+    if (color.isValid()) {
+        m_brushColor = color;
+    }
+    UpdateBrushParams();
+}
+
+void MainWindow::UpdateBrushParams()
+{
+    if (m_overlay != nullptr) {
+        m_overlay->setBrushParams(m_brushSize, m_brushHardness, m_brushOpacity, m_brushColor);
+    }
+}
+
+void MainWindow::StampBrushCapsule(const QPoint &from, const QPoint &to)
+{
+    if (!m_brushStrokeActive || m_brushMaskW <= 0 || m_brushMaskH <= 0 ||
+        m_brushMask.size() != static_cast<size_t>(m_brushMaskW) * m_brushMaskH) {
+        return;
+    }
+    const double radius = std::max(0.5, m_brushSize / 2.0);
+    const double inner = radius * (m_brushHardness / 100.0);
+    const int pad = static_cast<int>(std::ceil(radius)) + 1;
+    const int minX = std::max(0, std::min(from.x(), to.x()) - pad);
+    const int maxX = std::min(m_brushMaskW - 1, std::max(from.x(), to.x()) + pad);
+    const int minY = std::max(0, std::min(from.y(), to.y()) - pad);
+    const int maxY = std::min(m_brushMaskH - 1, std::max(from.y(), to.y()) + pad);
+    const double dx = to.x() - from.x();
+    const double dy = to.y() - from.y();
+    const double len2 = dx * dx + dy * dy;
+
+    for (int y = minY; y <= maxY; ++y) {
+        uint8_t *row = m_brushMask.data() + static_cast<size_t>(y) * m_brushMaskW;
+        for (int x = minX; x <= maxX; ++x) {
+            // 点到线段的距离(线段退化为点时就是点到点)
+            double t = 0.0;
+            if (len2 > 1e-9) {
+                t = ((x - from.x()) * dx + (y - from.y()) * dy) / len2;
+                t = qBound(0.0, t, 1.0);
+            }
+            const double px = from.x() + t * dx;
+            const double py = from.y() + t * dy;
+            const double dist = std::hypot(x - px, y - py);
+            if (dist > radius) {
+                continue;
+            }
+            double coverage = 255.0;
+            if (dist > inner && radius > inner) {
+                coverage = 255.0 * (radius - dist) / (radius - inner);
+            }
+            row[x] = std::max(row[x], static_cast<uint8_t>(qBound(0, static_cast<int>(coverage), 255)));
+        }
+    }
+}
+
+void MainWindow::BeginBrushStroke(const QPoint &point)
+{
+    if (imageData.empty() || myValue.bmpInfo.GetWidth() <= 0 || myValue.bmpInfo.GetHeight() <= 0) {
+        return;
+    }
+    if (m_busy) {
+        UpdateStatus("正在处理，请稍候…");
+        return;
+    }
+    CancelPreview();   // 笔画基于已提交的像素
+    m_brushBefore = CurrentSnapshot();
+    m_brushErase = (m_eraserToolAction != nullptr) && m_eraserToolAction->isChecked();
+    m_brushMaskW = myValue.bmpInfo.GetWidth();
+    m_brushMaskH = myValue.bmpInfo.GetHeight();
+    m_brushMask.assign(static_cast<size_t>(m_brushMaskW) * m_brushMaskH, 0);
+    m_brushStrokeActive = true;
+    StampBrushCapsule(point, point);
+}
+
+void MainWindow::BrushSegmentTo(const QPoint &from, const QPoint &to)
+{
+    if (m_brushStrokeActive) {
+        StampBrushCapsule(from, to);
+    }
+}
+
+// 把笔画掩码混入活动图层；返回是否真的改动了像素
+bool MainWindow::ApplyPendingBrush()
+{
+    if (m_brushMaskW <= 0 || m_brushMaskH <= 0 || imageData.empty() ||
+        m_brushMask.size() != static_cast<size_t>(m_brushMaskW) * m_brushMaskH) {
+        return false;
+    }
+    const bool selValid = !m_mask.isEmpty() && m_mask.width == m_brushMaskW &&
+                          m_mask.height == m_brushMaskH &&
+                          m_mask.data.size() == m_brushMask.size();
+    const int opacity = qBound(0, static_cast<int>(m_brushOpacity * 255.0 + 0.5), 255);
+    if (opacity <= 0) {
+        return false;
+    }
+    const uint8_t colorB = static_cast<uint8_t>(m_brushColor.blue());
+    const uint8_t colorG = static_cast<uint8_t>(m_brushColor.green());
+    const uint8_t colorR = static_cast<uint8_t>(m_brushColor.red());
+    bool changed = false;
+    const size_t rowBytes = static_cast<size_t>(m_brushMaskW) * 3;
+
+    for (int y = 0; y < m_brushMaskH; ++y) {
+        const size_t maskRow = static_cast<size_t>(y) * m_brushMaskW;
+        const size_t off = static_cast<size_t>(m_brushMaskH - 1 - y) * rowBytes;
+        for (int x = 0; x < m_brushMaskW; ++x) {
+            int cov = m_brushMask[maskRow + x];
+            if (cov == 0) {
+                continue;
+            }
+            if (selValid) {
+                cov = cov * m_mask.data[maskRow + x] / 255;
+            }
+            cov = cov * opacity / 255;
+            if (cov <= 0) {
+                continue;
+            }
+            const size_t i = off + static_cast<size_t>(x) * 3;
+            for (int c = 0; c < 3; ++c) {
+                const int target = m_brushErase ? 255
+                                                : (c == 0 ? colorB : (c == 1 ? colorG : colorR));
+                imageData[i + c] = static_cast<uint8_t>(
+                    (static_cast<int>(imageData[i + c]) * (255 - cov) + target * cov) / 255);
+            }
+            changed = true;
+        }
+    }
+    return changed;
+}
+
+void MainWindow::EndBrushStroke()
+{
+    if (!m_brushStrokeActive) {
+        return;
+    }
+    m_brushStrokeActive = false;
+    const bool changed = ApplyPendingBrush();
+    std::vector<uint8_t>().swap(m_brushMask);
+    m_brushMaskW = 0;
+    m_brushMaskH = 0;
+    if (!changed) {
+        UpdateStatus("笔画没有产生改动");
+        return;
+    }
+    CommitLayerStructure(m_brushErase ? QString("橡皮") : QString("画笔"), m_brushBefore);
+}
+
+void MainWindow::PaintBrushStroke(const QPoint &from, const QPoint &to, bool erase)
+{
+    if (imageData.empty() || myValue.bmpInfo.GetWidth() <= 0 || myValue.bmpInfo.GetHeight() <= 0) {
+        UpdateStatus("请先打开一张图像");
+        return;
+    }
+    if (m_busy) {
+        UpdateStatus("正在处理，请稍候…");
+        return;
+    }
+    CancelPreview();
+    m_brushBefore = CurrentSnapshot();
+    m_brushErase = erase;
+    m_brushMaskW = myValue.bmpInfo.GetWidth();
+    m_brushMaskH = myValue.bmpInfo.GetHeight();
+    m_brushMask.assign(static_cast<size_t>(m_brushMaskW) * m_brushMaskH, 0);
+    m_brushStrokeActive = true;
+    StampBrushCapsule(from, to);
+    EndBrushStroke();
+}
+
+void MainWindow::SetupBrushPanel()
+{
+    QWidget *host = ui->group_layers->parentWidget();
+    QVBoxLayout *hostLayout = (host != nullptr) ? qobject_cast<QVBoxLayout *>(host->layout())
+                                                : nullptr;
+    if (host == nullptr || hostLayout == nullptr) {
+        return;
+    }
+
+    m_brushGroup = new QGroupBox(QString("画笔"), host);
+    m_brushGroup->setObjectName("group_brush");
+    QVBoxLayout *box = new QVBoxLayout(m_brushGroup);
+    box->setContentsMargins(8, 10, 8, 8);
+    box->setSpacing(6);
+
+    auto addSliderRow = [this, box](const QString &name, int minValue, int maxValue,
+                                    int value, const QString &suffix,
+                                    QLabel **valueOut = nullptr) -> QSlider * {
+        QWidget *row = new QWidget(m_brushGroup);
+        QHBoxLayout *lay = new QHBoxLayout(row);
+        lay->setContentsMargins(0, 0, 0, 0);
+        lay->setSpacing(8);
+        QLabel *title = new QLabel(name, row);
+        title->setMinimumWidth(42);
+        QSlider *slider = new QSlider(Qt::Horizontal, row);
+        slider->setRange(minValue, maxValue);
+        slider->setValue(value);
+        QLabel *valueLabel = new QLabel(QString("%1%2").arg(value).arg(suffix), row);
+        valueLabel->setObjectName("layerInfoLabel");
+        valueLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        valueLabel->setMinimumWidth(44);
+        lay->addWidget(title);
+        lay->addWidget(slider, 1);
+        lay->addWidget(valueLabel);
+        box->addWidget(row);
+        if (valueOut != nullptr) {
+            *valueOut = valueLabel;
+        }
+        return slider;
+    };
+
+    QLabel *sizeValue = nullptr;
+    QSlider *sizeSlider = addSliderRow(QString("大小"), 1, 200, m_brushSize,
+                                       QString(" px"), &sizeValue);
+    connect(sizeSlider, &QSlider::valueChanged, this, [this, sizeValue](int v) {
+        m_brushSize = v;
+        UpdateBrushParams();
+        if (sizeValue != nullptr) {
+            sizeValue->setText(QString("%1 px").arg(v));
+        }
+    });
+
+    QLabel *hardnessValue = nullptr;
+    QSlider *hardnessSlider = addSliderRow(QString("硬度"), 0, 100, m_brushHardness,
+                                           QString("%"), &hardnessValue);
+    connect(hardnessSlider, &QSlider::valueChanged, this, [this, hardnessValue](int v) {
+        m_brushHardness = v;
+        UpdateBrushParams();
+        if (hardnessValue != nullptr) {
+            hardnessValue->setText(QString("%1%").arg(v));
+        }
+    });
+
+    QLabel *opacityValue = nullptr;
+    QSlider *opacitySlider = addSliderRow(QString("不透明"), 0, 100,
+                                          qRound(m_brushOpacity * 100.0),
+                                          QString("%"), &opacityValue);
+    connect(opacitySlider, &QSlider::valueChanged, this, [this, opacityValue](int v) {
+        m_brushOpacity = v / 100.0;
+        UpdateBrushParams();
+        if (opacityValue != nullptr) {
+            opacityValue->setText(QString("%1%").arg(v));
+        }
+    });
+
+    // 颜色
+    QWidget *colorRow = new QWidget(m_brushGroup);
+    QHBoxLayout *colorLay = new QHBoxLayout(colorRow);
+    colorLay->setContentsMargins(0, 0, 0, 0);
+    colorLay->setSpacing(8);
+    QLabel *colorTitle = new QLabel(QString("颜色"), colorRow);
+    colorTitle->setMinimumWidth(42);
+    QPushButton *colorButton = new QPushButton(QString("选择…"), colorRow);
+    colorButton->setObjectName("layerBtn");
+    colorButton->setCursor(Qt::PointingHandCursor);
+    QLabel *swatch = new QLabel(colorRow);
+    swatch->setFixedSize(26, 18);
+    swatch->setStyleSheet(QString("background:%1;border:1px solid #3b4455;border-radius:3px;")
+                              .arg(m_brushColor.name()));
+    colorLay->addWidget(colorTitle);
+    colorLay->addWidget(colorButton);
+    colorLay->addWidget(swatch, 1);
+    box->addWidget(colorRow);
+    connect(colorButton, &QPushButton::clicked, this, [this, swatch]() {
+        const QColor color = QColorDialog::getColor(m_brushColor, this, QString("画笔颜色"));
+        if (!color.isValid()) {
+            return;
+        }
+        m_brushColor = color;
+        swatch->setStyleSheet(
+            QString("background:%1;border:1px solid #3b4455;border-radius:3px;")
+                .arg(color.name()));
+        UpdateBrushParams();
+    });
+
+    // 放在图层面板上方
+    const int layerIndex = hostLayout->indexOf(ui->group_layers);
+    hostLayout->insertWidget(layerIndex < 0 ? 0 : layerIndex, m_brushGroup);
+    UpdateBrushParams();
 }
 
 std::vector<uint8_t> MainWindow::CompositePixels()

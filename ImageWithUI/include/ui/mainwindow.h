@@ -248,6 +248,13 @@ public:
     bool LoadSelectionChannel(int index);              // 载入为当前选区
     bool DeleteSelectionChannel(int index);
 
+    // ---- 画笔/橡皮(在活动图层上绘制；遵守选区覆盖度) ----
+    // 用当前画笔参数画一条直线笔画；供交互提交与自检复用。
+    // 按下时记录快照，松开时作为一步历史提交。
+    void PaintBrushStroke(const QPoint &from, const QPoint &to, bool erase = false);
+    int BrushSize() const { return m_brushSize; }
+    void SetBrushParams(int size, int hardness, double opacity, const QColor &color);
+
 public:
     std::string BMPPath;
     std::list<HistoryEntry> imageDataHistory;      // 全局撤销栈(操作前状态)
@@ -497,6 +504,7 @@ private:
     void FinishInteractiveTransform(bool commit, double scaleX, double scaleY, double angleDegrees);
     void CancelInteractiveTransform();
     bool AnySelectionToolChecked() const;
+
     SelectionMask m_mask;                  // 选区掩码(唯一真值)
     QRect m_selection;                     // 掩码包围盒(供复制/裁剪/绘制使用)
     QAction *m_selectionToolAction = nullptr;
@@ -520,6 +528,29 @@ private:
     void PromptStoreChannel();
     // 画布尺寸变化后丢弃尺寸不再匹配的通道，避免载入时错位
     void PruneChannelsForCanvas();
+
+    // ---- 画笔/橡皮 ----
+    void SetupBrushPanel();                 // 右侧画笔参数面板
+    void UpdateBrushParams();               // 把当前参数同步给画布覆盖层
+    void BeginBrushStroke(const QPoint &point);
+    void BrushSegmentTo(const QPoint &from, const QPoint &to);
+    void EndBrushStroke();
+    // 把一条"胶囊"笔迹按硬度写进笔画掩码(取最大值，避免重复加深)
+    void StampBrushCapsule(const QPoint &from, const QPoint &to);
+    bool ApplyPendingBrush();
+    QAction *m_brushToolAction = nullptr;
+    QAction *m_eraserToolAction = nullptr;
+    QGroupBox *m_brushGroup = nullptr;
+    int m_brushSize = 20;                  // 直径(图像像素)
+    int m_brushHardness = 70;              // 0~100
+    double m_brushOpacity = 0.8;           // 0.0~1.0
+    QColor m_brushColor = QColor(20, 20, 20);
+    bool m_brushStrokeActive = false;
+    bool m_brushErase = false;
+    std::vector<uint8_t> m_brushMask;      // 视觉坐标，0~255
+    int32_t m_brushMaskW = 0;
+    int32_t m_brushMaskH = 0;
+    ImageSnapshot m_brushBefore;           // 笔画开始时的快照(撤销用)
     // 保存/导出用像素：多图层时为合成结果
     const std::vector<uint8_t> &DisplayPixels();
     // 用"当前图层栈 + 新像素"构造快照(活动图层像素单独存 data)
