@@ -144,18 +144,6 @@ ImageWithUI/
 
 欢迎提交 Issue 与 Pull Request。
 
-1. Fork 本仓库并从 `main` 创建功能分支。
-2. 代码风格：C++17 + Qt 5；注释与提交说明使用中文；图像算法优先放在 `include/core/image_ops.h` 与 `src/core/image_ops.cpp`。
-3. 保持既有约定：BGR 紧凑缓冲、自底向上存储、几何变换同步更新 `ContentQuad`、参数预览与提交共用同一算子实现。
-4. 提交前必须完成：
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File ImageWithUI\scripts\build.ps1 -VSBuild
-   ImageWithUI\build-vs\Release\ImageWithUI.exe --selftest <本地测试图>
-   ```
-   自检需全部通过（当前 68 项）。
-5. 不要提交 `build*/`、`*.user`、IDE 配置、测试图片等本地文件。
-6. 除非另有说明，贡献的代码默认按本项目的 MIT 许可证授权。
-
 ## License
 
 本项目采用 **MIT License**，版权人：素曜。许可证全文见 [LICENSE](LICENSE)。
