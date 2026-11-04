@@ -1408,6 +1408,128 @@ int Run(const QString &imagePath)
         out().flush();
     }
 
+    // ---------- 13.1 图层蒙版：从选区生成 / 停用 / 反相 / 删除与撤销 ----------
+    {
+        const QString maskPath = QDir::tempPath() + "/imagewithui_selftest_layermask.png";
+        {
+            QImage img(80, 60, QImage::Format_RGB32);
+            img.fill(qRgb(40, 120, 200));   // 内存里是 BGR(200,120,40)
+            img.save(maskPath, "PNG");
+        }
+
+        QString failReason;
+        {
+            MainWindow win;
+            if (!win.OpenImage(maskPath)) {
+                failReason = "无法打开测试图";
+            } else {
+                const int32_t w = win.myValue.bmpInfo.GetWidth();
+                const int32_t h = win.myValue.bmpInfo.GetHeight();
+                // 视觉坐标 -> 自底向上内存偏移
+                auto idx = [w, h](int x, int y) {
+                    return (static_cast<size_t>(h - 1 - y) * static_cast<size_t>(w) +
+                            static_cast<size_t>(x)) * 3;
+                };
+                auto match = [&](const std::vector<uint8_t> &flat, int x, int y,
+                                 int r, int g, int b) {
+                    const size_t i = idx(x, y);
+                    return i + 2 < flat.size() && flat[i + 2] == r &&
+                           flat[i + 1] == g && flat[i] == b;
+                };
+
+                // 单图层 + 蒙版：选区内显示蓝色，选区外隐藏(露出白底)
+                win.SetSelection(QRect(10, 10, 20, 20));
+                const size_t histBeforeMask = win.imageDataHistory.size();
+                win.AddLayerMaskFromSelection();
+                if (!win.HasLayerMask(0) || !win.IsLayerMaskEnabled(0)) {
+                    failReason = "从选区添加蒙版失败";
+                } else if (win.imageDataHistory.size() != histBeforeMask + 1) {
+                    failReason = "添加蒙版后历史未增加";
+                } else {
+                    const std::vector<uint8_t> flat = win.CompositePixels();
+                    if (!match(flat, 15, 15, 40, 120, 200)) {
+                        failReason = "蒙版选区内像素未保留";
+                    } else if (!match(flat, 5, 5, 255, 255, 255)) {
+                        failReason = "蒙版选区外像素未隐藏";
+                    }
+                }
+
+                // 停用蒙版：显示属性变化，不写历史，画面恢复整层
+                if (failReason.isEmpty()) {
+                    const size_t histBeforeToggle = win.imageDataHistory.size();
+                    win.ToggleLayerMask();
+                    if (win.IsLayerMaskEnabled(0)) {
+                        failReason = "停用蒙版后仍处于启用状态";
+                    } else if (win.imageDataHistory.size() != histBeforeToggle) {
+                        failReason = "停用蒙版不应写入历史";
+                    } else {
+                        const std::vector<uint8_t> flat = win.CompositePixels();
+                        if (!match(flat, 5, 5, 40, 120, 200)) {
+                            failReason = "停用蒙版后选区外未恢复显示";
+                        }
+                    }
+                    win.ToggleLayerMask();   // 恢复启用，供后续步骤
+                }
+
+                // 反相：选区内外互换，可撤销
+                if (failReason.isEmpty()) {
+                    const size_t histBeforeInvert = win.imageDataHistory.size();
+                    win.InvertLayerMask();
+                    if (win.imageDataHistory.size() != histBeforeInvert + 1) {
+                        failReason = "蒙版反相后历史未增加";
+                    } else {
+                        const std::vector<uint8_t> flat = win.CompositePixels();
+                        if (!match(flat, 15, 15, 255, 255, 255) ||
+                            !match(flat, 5, 5, 40, 120, 200)) {
+                            failReason = "蒙版反相后合成结果不对";
+                        }
+                    }
+                }
+                if (failReason.isEmpty()) {
+                    win.UndoImageProcessing();
+                    const std::vector<uint8_t> flat = win.CompositePixels();
+                    if (!win.HasLayerMask(0) || !match(flat, 15, 15, 40, 120, 200) ||
+                        !match(flat, 5, 5, 255, 255, 255)) {
+                        failReason = "撤销蒙版反相后未恢复原蒙版";
+                    }
+                }
+
+                // 删除蒙版：整层显示；撤销后蒙版连同数据一起恢复
+                if (failReason.isEmpty()) {
+                    const size_t histBeforeRemove = win.imageDataHistory.size();
+                    win.RemoveLayerMask();
+                    if (win.HasLayerMask(0)) {
+                        failReason = "删除蒙版后仍存在蒙版";
+                    } else if (win.imageDataHistory.size() != histBeforeRemove + 1) {
+                        failReason = "删除蒙版后历史未增加";
+                    } else {
+                        const std::vector<uint8_t> flat = win.CompositePixels();
+                        if (!match(flat, 5, 5, 40, 120, 200) ||
+                            !match(flat, 15, 15, 40, 120, 200)) {
+                            failReason = "删除蒙版后画面未恢复整层";
+                        }
+                    }
+                }
+                if (failReason.isEmpty()) {
+                    win.UndoImageProcessing();
+                    if (!win.HasLayerMask(0) || !win.IsLayerMaskEnabled(0)) {
+                        failReason = "撤销删除蒙版后未恢复";
+                    }
+                }
+            }
+        }
+        QFile::remove(maskPath);
+
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 图层蒙版 : 选区生成 / 停用 / 反相 / 删除 / 撤销\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 图层蒙版 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
     // ---------- 14. 选区限制：调整类算子只改选区内 ----------
     {
         const QString selOpPath = QDir::tempPath() + "/imagewithui_selftest_selop.png";

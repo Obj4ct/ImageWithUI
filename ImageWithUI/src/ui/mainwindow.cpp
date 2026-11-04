@@ -172,28 +172,73 @@ std::vector<uint8_t> BgrFromQImage(const QImage &image)
 constexpr size_t kPreviewMaxPixels = 2000000;
 
 // 把一个图层按不透明度/混合模式叠到合成缓冲上(dst 初始为白，尺寸与图层一致)
+// mask 非空且尺寸与画布一致时，按蒙版覆盖度进一步衰减该像素的混合强度：
+// 蒙版 0 → 该像素完全不参与合成，255 → 与不透明度正常混合，中间值线性过渡。
 void BlendLayerInto(std::vector<uint8_t> &dst, const std::vector<uint8_t> &src,
-                    double opacity, int blend)
+                    double opacity, int blend, const SelectionMask *mask = nullptr)
 {
     const size_t bytes = std::min(dst.size(), src.size());
     const int op = qBound(0, static_cast<int>(opacity * 255.0 + 0.5), 255);
     if (op == 0) {
         return;
     }
-    if (op == 255 && blend == 0) {
-        dst.assign(src.begin(), src.begin() + static_cast<ptrdiff_t>(bytes));
+    const bool useMask = (mask != nullptr && !mask->isEmpty() &&
+                          mask->width > 0 && mask->height > 0 &&
+                          mask->data.size() ==
+                              static_cast<size_t>(mask->width) * static_cast<size_t>(mask->height));
+    if (!useMask) {
+        if (op == 255 && blend == 0) {
+            dst.assign(src.begin(), src.begin() + static_cast<ptrdiff_t>(bytes));
+            return;
+        }
+        for (size_t i = 0; i < bytes; ++i) {
+            const int d = dst[i];
+            const int s = src[i];
+            int blended = s;
+            if (blend == 1) {           // 正片叠底
+                blended = d * s / 255;
+            } else if (blend == 2) {    // 滤色
+                blended = 255 - (255 - d) * (255 - s) / 255;
+            }
+            dst[i] = static_cast<uint8_t>((blended * op + d * (255 - op)) / 255);
+        }
         return;
     }
-    for (size_t i = 0; i < bytes; ++i) {
-        const int d = dst[i];
-        const int s = src[i];
-        int blended = s;
-        if (blend == 1) {           // 正片叠底
-            blended = d * s / 255;
-        } else if (blend == 2) {    // 滤色
-            blended = 255 - (255 - d) * (255 - s) / 255;
+
+    // 有蒙版：逐像素把不透明度再乘以覆盖度。
+    // 蒙版按【视觉坐标】存储(y 向下)，内存缓冲是自底向上，所以视觉行 y 对应内存行 h-1-y。
+    const int32_t w = mask->width;
+    const int32_t h = mask->height;
+    const size_t rowBytes = static_cast<size_t>(w) * 3;
+    if (bytes < rowBytes * static_cast<size_t>(h)) {
+        return;
+    }
+    for (int32_t y = 0; y < h; ++y) {
+        const uint8_t *mrow = mask->data.data() + static_cast<size_t>(y) * static_cast<size_t>(w);
+        const size_t off = static_cast<size_t>(h - 1 - y) * rowBytes;
+        for (int32_t x = 0; x < w; ++x) {
+            const int a = mrow[x];
+            if (a == 0) {
+                continue;   // 完全隐藏在蒙版里，保留下层结果
+            }
+            const int eff = op * a / 255;
+            if (eff <= 0) {
+                continue;
+            }
+            const size_t i = off + static_cast<size_t>(x) * 3;
+            for (int c = 0; c < 3; ++c) {
+                const int d = dst[i + static_cast<size_t>(c)];
+                const int s = src[i + static_cast<size_t>(c)];
+                int blended = s;
+                if (blend == 1) {
+                    blended = d * s / 255;
+                } else if (blend == 2) {
+                    blended = 255 - (255 - d) * (255 - s) / 255;
+                }
+                dst[i + static_cast<size_t>(c)] =
+                    static_cast<uint8_t>((blended * eff + d * (255 - eff)) / 255);
+            }
         }
-        dst[i] = static_cast<uint8_t>((blended * op + d * (255 - op)) / 255);
     }
 }
 
@@ -341,6 +386,8 @@ bool SameLayerStack(const std::vector<Layer> &a, const std::vector<Layer> &b)
     for (size_t i = 0; i < a.size(); ++i) {
         if (a[i].name != b[i].name || a[i].visible != b[i].visible ||
             a[i].blend != b[i].blend || std::abs(a[i].opacity - b[i].opacity) > 1e-9 ||
+            a[i].maskEnabled != b[i].maskEnabled || a[i].mask.width != b[i].mask.width ||
+            a[i].mask.height != b[i].mask.height || a[i].mask.data != b[i].mask.data ||
             a[i].data != b[i].data) {
             return false;
         }
@@ -2763,6 +2810,65 @@ void MainWindow::SetupLayerPanel()
     addButton(row2, QString("合并"), [this]() { MergeAllLayers(); });
     box->addLayout(row2);
 
+    // ---- 蒙版菜单：面板按钮与"图层"菜单共用同一份动作 ----
+    m_layerMaskMenu = new QMenu(QString("蒙版"), this);
+    auto maskAction = [this](const QString &text, std::function<void()> handler) {
+        QAction *action = m_layerMaskMenu->addAction(text);
+        connect(action, &QAction::triggered, this, handler);
+        return action;
+    };
+    m_maskFromSelectionAction = maskAction(QString("从选区添加蒙版"),
+                                           [this]() { AddLayerMaskFromSelection(); });
+    maskAction(QString("添加蒙版（全白）"), [this]() { AddLayerMaskFill(true); });
+    maskAction(QString("添加蒙版（全黑）"), [this]() { AddLayerMaskFill(false); });
+    m_layerMaskMenu->addSeparator();
+    m_maskRevealSelectionAction = maskAction(QString("用选区显示"),
+                                             [this]() { ApplySelectionToLayerMask(true); });
+    m_maskHideSelectionAction = maskAction(QString("用选区隐藏"),
+                                           [this]() { ApplySelectionToLayerMask(false); });
+    m_maskInvertAction = maskAction(QString("蒙版反相"), [this]() { InvertLayerMask(); });
+    m_layerMaskMenu->addSeparator();
+    m_maskToggleAction = maskAction(QString("停用蒙版"), [this]() { ToggleLayerMask(); });
+    m_maskRemoveAction = maskAction(QString("删除蒙版"), [this]() { RemoveLayerMask(); });
+    // 弹出前按当前图层/选区刷新可用性，避免展示一堆无效命令
+    connect(m_layerMaskMenu, &QMenu::aboutToShow, this, [this]() {
+        const bool hasImage = !imageData.empty();
+        const bool hasMask = hasImage && HasLayerMask(m_activeLayer);
+        const bool hasSelection = hasImage && HasSelection();
+        const bool maskEnabled = IsLayerMaskEnabled(m_activeLayer);
+        if (m_maskFromSelectionAction != nullptr) {
+            m_maskFromSelectionAction->setEnabled(hasSelection);
+        }
+        if (m_maskRevealSelectionAction != nullptr) {
+            m_maskRevealSelectionAction->setEnabled(hasSelection);
+        }
+        if (m_maskHideSelectionAction != nullptr) {
+            m_maskHideSelectionAction->setEnabled(hasSelection);
+        }
+        if (m_maskInvertAction != nullptr) {
+            m_maskInvertAction->setEnabled(hasMask);
+        }
+        if (m_maskRemoveAction != nullptr) {
+            m_maskRemoveAction->setEnabled(hasMask);
+        }
+        if (m_maskToggleAction != nullptr) {
+            m_maskToggleAction->setEnabled(hasMask);
+            m_maskToggleAction->setText(maskEnabled ? QString("停用蒙版")
+                                                    : QString("启用蒙版"));
+        }
+    });
+
+    QHBoxLayout *row3 = new QHBoxLayout();
+    row3->setContentsMargins(0, 0, 0, 0);
+    row3->setSpacing(6);
+    QPushButton *maskButton = new QPushButton(QString("蒙版"), panel);
+    maskButton->setObjectName("layerBtn");
+    maskButton->setCursor(Qt::PointingHandCursor);
+    maskButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    maskButton->setMenu(m_layerMaskMenu);
+    row3->addWidget(maskButton);
+    box->addLayout(row3);
+
     QLayout *groupLayout = ui->group_layers->layout();
     if (groupLayout != nullptr) {
         delete groupLayout->replaceWidget(ui->label_layers_hint, panel);
@@ -2819,6 +2925,10 @@ void MainWindow::SetupLayerPanel()
     m_layerMenu->addSeparator();
     addAction(QString("合并所有图层"), QKeySequence(Qt::CTRL | Qt::Key_E),
               [this]() { MergeAllLayers(); });
+    m_layerMenu->addSeparator();
+    if (m_layerMaskMenu != nullptr) {
+        m_layerMenu->addMenu(m_layerMaskMenu);   // 与图层面板的"蒙版"按钮共用动作
+    }
 
     if (m_selectionMenu != nullptr) {
         menuBar()->insertMenu(m_selectionMenu->menuAction(), m_layerMenu);
@@ -2844,7 +2954,11 @@ void MainWindow::UpdateLayerPanel()
     const int n = LayerCount();
     for (int index = n - 1; index >= 0; --index) {   // 顶层排在最上面
         const Layer &layer = m_layers[static_cast<size_t>(index)];
-        QListWidgetItem *item = new QListWidgetItem(layer.name, m_layerList);
+        QString label = layer.name;
+        if (!layer.mask.isEmpty()) {
+            label += layer.maskEnabled ? QString("  [蒙版]") : QString("  [蒙版·停用]");
+        }
+        QListWidgetItem *item = new QListWidgetItem(label, m_layerList);
         item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
         item->setCheckState(layer.visible ? Qt::Checked : Qt::Unchecked);
     }
@@ -2869,11 +2983,23 @@ void MainWindow::UpdateLayerPanel()
 // 约定：imageData 永远是【当前活动图层】的像素；画面与保存都走合成结果
 // ------------------------------------------------------------------
 
+bool MainWindow::AnyLayerMaskEnabled() const
+{
+    for (const Layer &layer : m_layers) {
+        if (layer.maskEnabled && !layer.mask.isEmpty()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 const std::vector<uint8_t> &MainWindow::BuildComposite()
 {
     const int32_t w = myValue.bmpInfo.GetWidth();
     const int32_t h = myValue.bmpInfo.GetHeight();
-    if (m_layers.size() <= 1 || w <= 0 || h <= 0 || imageData.empty()) {
+    // 单图层且没有生效蒙版时不需要合成，直接显示 imageData
+    const bool needComposite = (m_layers.size() > 1) || AnyLayerMaskEnabled();
+    if (!needComposite || w <= 0 || h <= 0 || imageData.empty()) {
         m_composite.clear();
         return imageData;
     }
@@ -2889,14 +3015,20 @@ const std::vector<uint8_t> &MainWindow::BuildComposite()
         if (src.size() != bytes) {
             continue;
         }
-        BlendLayerInto(m_composite, src, layer.opacity, layer.blend);
+        // 蒙版尺寸必须与画布一致；画布尺寸变化后由 MakeSnapshot 清理旧蒙版
+        const SelectionMask *mask = nullptr;
+        if (layer.maskEnabled && !layer.mask.isEmpty() &&
+            layer.mask.width == w && layer.mask.height == h) {
+            mask = &layer.mask;
+        }
+        BlendLayerInto(m_composite, src, layer.opacity, layer.blend, mask);
     }
     return m_composite;
 }
 
 const std::vector<uint8_t> &MainWindow::DisplayPixels()
 {
-    if (m_layers.size() > 1) {
+    if (m_layers.size() > 1 || AnyLayerMaskEnabled()) {
         return BuildComposite();
     }
     return imageData;
@@ -2911,6 +3043,14 @@ ImageSnapshot MainWindow::MakeSnapshot(std::vector<uint8_t> pixels, int32_t widt
     snap.quad = quad;
     snap.layers = m_layers;
     snap.activeLayer = m_activeLayer;
+    // 画布尺寸刚改变时(旋转/缩放/裁剪)，旧蒙版尺寸已不匹配，直接丢弃避免错位显示。
+    // "操作前"的快照仍按旧尺寸保存蒙版，撤销回到旧尺寸时能完整恢复。
+    for (Layer &layer : snap.layers) {
+        if (!layer.mask.isEmpty() &&
+            (layer.mask.width != width || layer.mask.height != height)) {
+            layer.mask.clear();
+        }
+    }
     if (!snap.layers.empty()) {
         const int idx = qBound(0, snap.activeLayer, static_cast<int>(snap.layers.size()) - 1);
         snap.layers[static_cast<size_t>(idx)].data.clear();   // 像素统一存在 snap.data 里
@@ -2950,13 +3090,22 @@ void MainWindow::RepaintComposite()
 
 bool MainWindow::RequireSingleLayer(const QString &opName)
 {
-    if (m_layers.size() <= 1) {
+    const bool multiLayer = m_layers.size() > 1;
+    const bool hasMask = HasLayerMask(m_activeLayer);
+    if (!multiLayer && !hasMask) {
         return true;
     }
-    UpdateStatus(opName + "：多图层下需要先合并图层");
-    function.CreateMessagebox("提示",
-                              opName + " 会改变画布几何，多图层下暂不支持。\n"
-                              "请先执行「图层 → 合并所有图层」后再试。");
+    if (multiLayer) {
+        UpdateStatus(opName + "：多图层下需要先合并图层");
+        function.CreateMessagebox("提示",
+                                  opName + " 会改变画布几何，多图层下暂不支持。\n"
+                                  "请先执行「图层 → 合并所有图层」后再试。");
+    } else {
+        UpdateStatus(opName + "：带蒙版时需要先删除蒙版");
+        function.CreateMessagebox("提示",
+                                  opName + " 会翻转/改变画布几何，无法保持图层蒙版对齐。\n"
+                                  "请先执行「图层 → 蒙版 → 删除蒙版」后再试。");
+    }
     return false;
 }
 
@@ -3160,9 +3309,160 @@ void MainWindow::SetLayerBlend(int index, int blend)
     RepaintComposite();
 }
 
+// ------------------------------------------------------------------
+// 图层蒙版
+// 蒙版与画布同尺寸、按视觉坐标存储；0 表示该像素被隐藏，255 表示完全显示。
+// 蒙版的增删改都走 CommitLayerStructure，因此可以撤销/重做。
+// ------------------------------------------------------------------
+
+bool MainWindow::HasLayerMask(int index) const
+{
+    if (index < 0 || index >= static_cast<int>(m_layers.size())) {
+        return false;
+    }
+    return !m_layers[static_cast<size_t>(index)].mask.isEmpty();
+}
+
+bool MainWindow::IsLayerMaskEnabled(int index) const
+{
+    if (!HasLayerMask(index)) {
+        return false;
+    }
+    return m_layers[static_cast<size_t>(index)].maskEnabled;
+}
+
+void MainWindow::AddLayerMaskFromSelection()
+{
+    if (m_busy || imageData.empty()) {
+        UpdateStatus("请先打开一张图像");
+        return;
+    }
+    const int32_t w = myValue.bmpInfo.GetWidth();
+    const int32_t h = myValue.bmpInfo.GetHeight();
+    if (m_mask.isEmpty() || m_mask.width != w || m_mask.height != h) {
+        UpdateStatus("请先建立选区，再添加图层蒙版");
+        return;
+    }
+    CancelPreview();
+    const ImageSnapshot before = CurrentSnapshot();
+    Layer &layer = m_layers[static_cast<size_t>(m_activeLayer)];
+    layer.mask.width = w;
+    layer.mask.height = h;
+    layer.mask.data = m_mask.data;   // 选区内 255、选区外 0：只显示选区内容
+    layer.maskEnabled = true;
+    CommitLayerStructure("添加图层蒙版", before);
+}
+
+void MainWindow::AddLayerMaskFill(bool white)
+{
+    if (m_busy || imageData.empty()) {
+        UpdateStatus("请先打开一张图像");
+        return;
+    }
+    const int32_t w = myValue.bmpInfo.GetWidth();
+    const int32_t h = myValue.bmpInfo.GetHeight();
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+    CancelPreview();
+    const ImageSnapshot before = CurrentSnapshot();
+    Layer &layer = m_layers[static_cast<size_t>(m_activeLayer)];
+    layer.mask.width = w;
+    layer.mask.height = h;
+    layer.mask.data.assign(static_cast<size_t>(w) * static_cast<size_t>(h),
+                          white ? 255 : 0);
+    layer.maskEnabled = true;
+    CommitLayerStructure(white ? "添加全白蒙版" : "添加全黑蒙版", before);
+}
+
+void MainWindow::ApplySelectionToLayerMask(bool reveal)
+{
+    if (m_busy || imageData.empty()) {
+        UpdateStatus("请先打开一张图像");
+        return;
+    }
+    const int32_t w = myValue.bmpInfo.GetWidth();
+    const int32_t h = myValue.bmpInfo.GetHeight();
+    if (m_mask.isEmpty() || m_mask.width != w || m_mask.height != h) {
+        UpdateStatus("请先建立选区，再编辑图层蒙版");
+        return;
+    }
+    CancelPreview();
+    const ImageSnapshot before = CurrentSnapshot();
+    Layer &layer = m_layers[static_cast<size_t>(m_activeLayer)];
+    // 还没有蒙版时先补一张全白蒙版，选区操作在其上叠加
+    if (layer.mask.isEmpty() || layer.mask.width != w || layer.mask.height != h) {
+        layer.mask.width = w;
+        layer.mask.height = h;
+        layer.mask.data.assign(static_cast<size_t>(w) * static_cast<size_t>(h), 255);
+    }
+    for (size_t i = 0; i < layer.mask.data.size(); ++i) {
+        const int a = m_mask.data[i];
+        if (reveal) {
+            // 显示选区：取较大值，羽化边缘也能平滑过渡
+            layer.mask.data[i] = static_cast<uint8_t>(std::max<int>(layer.mask.data[i], a));
+        } else {
+            // 隐藏选区：按选区覆盖度衰减
+            layer.mask.data[i] = static_cast<uint8_t>(
+                static_cast<int>(layer.mask.data[i]) * (255 - a) / 255);
+        }
+    }
+    layer.maskEnabled = true;
+    CommitLayerStructure(reveal ? "蒙版显示选区" : "蒙版隐藏选区", before);
+}
+
+void MainWindow::InvertLayerMask()
+{
+    if (m_busy || !HasLayerMask(m_activeLayer)) {
+        UpdateStatus("当前图层没有蒙版");
+        return;
+    }
+    const int32_t w = myValue.bmpInfo.GetWidth();
+    const int32_t h = myValue.bmpInfo.GetHeight();
+    Layer &layer = m_layers[static_cast<size_t>(m_activeLayer)];
+    if (layer.mask.width != w || layer.mask.height != h) {
+        UpdateStatus("蒙版尺寸与画布不一致，请重新添加蒙版");
+        return;
+    }
+    CancelPreview();
+    const ImageSnapshot before = CurrentSnapshot();
+    for (uint8_t &v : layer.mask.data) {
+        v = static_cast<uint8_t>(255 - v);
+    }
+    CommitLayerStructure("蒙版反相", before);
+}
+
+void MainWindow::ToggleLayerMask()
+{
+    if (!HasLayerMask(m_activeLayer)) {
+        UpdateStatus("当前图层没有蒙版");
+        return;
+    }
+    Layer &layer = m_layers[static_cast<size_t>(m_activeLayer)];
+    layer.maskEnabled = !layer.maskEnabled;
+    // 与可见性/不透明度一致：显示属性变化不写历史，只重绘
+    RepaintComposite();
+    UpdateLayerPanel();
+    UpdateStatus(layer.maskEnabled ? "已启用图层蒙版" : "已停用图层蒙版");
+}
+
+void MainWindow::RemoveLayerMask()
+{
+    if (m_busy || !HasLayerMask(m_activeLayer)) {
+        UpdateStatus("当前图层没有蒙版");
+        return;
+    }
+    CancelPreview();
+    const ImageSnapshot before = CurrentSnapshot();
+    Layer &layer = m_layers[static_cast<size_t>(m_activeLayer)];
+    layer.mask.clear();
+    layer.maskEnabled = true;
+    CommitLayerStructure("删除图层蒙版", before);
+}
+
 std::vector<uint8_t> MainWindow::CompositePixels()
 {
-    if (m_layers.size() <= 1) {
+    if (m_layers.size() <= 1 && !AnyLayerMaskEnabled()) {
         return imageData;
     }
     return BuildComposite();
@@ -3290,8 +3590,8 @@ void MainWindow::OnPreviewTextChanged(int fieldIndex)
     if (imageData.empty() || m_busy) {
         return;
     }
-    // 多图层时打开实时预览会与"只改活动图层"的提交结果不一致，直接跳过预览
-    if (m_layers.size() > 1) {
+    // 多图层或生效中的图层蒙版下，实时预览会与"只改活动图层"的提交结果不一致，直接跳过预览
+    if (m_layers.size() > 1 || AnyLayerMaskEnabled()) {
         return;
     }
     m_pendingFieldIndex = fieldIndex;
@@ -3305,7 +3605,7 @@ void MainWindow::OnPreviewTextChanged(int fieldIndex)
 void MainWindow::PreviewCustomOp(const QString &title,
                                  std::function<void(std::vector<uint8_t> &, OpContext &)> op)
 {
-    if (imageData.empty() || m_busy || m_layers.size() > 1 || !op) {
+    if (imageData.empty() || m_busy || m_layers.size() > 1 || AnyLayerMaskEnabled() || !op) {
         CancelPreview();
         return;
     }
@@ -3345,7 +3645,7 @@ void MainWindow::RunPreview()
         CancelPreview();
         return;
     }
-    if (m_layers.size() > 1) {   // 多图层不做实时预览，提交时直接作用于活动图层
+    if (m_layers.size() > 1 || AnyLayerMaskEnabled()) {   // 多图层/有蒙版不做实时预览
         CancelPreview();
         return;
     }

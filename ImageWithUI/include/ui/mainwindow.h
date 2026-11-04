@@ -39,16 +39,6 @@ struct OpContext {
     ContentQuad quad;         // 内容区域(旋转会更新它)
 };
 
-// 图层：与画布同尺寸的 BGR 像素 + 叠放属性
-// 约定：所有图层尺寸都与文档画布一致；imageData 始终是【当前活动图层】的像素
-struct Layer {
-    QString name;
-    std::vector<uint8_t> data;
-    bool visible = true;
-    double opacity = 1.0;   // 0.0 ~ 1.0
-    int blend = 0;          // 0 正常 / 1 正片叠底 / 2 滤色
-};
-
 // 选区掩码：0~255 表示覆盖度(0 = 完全不在选区内，255 = 完全在选区内)
 // 与图像同尺寸，按【视觉坐标】行优先存储(y 向下)；
 // data 为空表示"没有选区"(此时调整类算子作用于整幅图)
@@ -63,6 +53,20 @@ struct SelectionMask {
         height = 0;
         std::vector<uint8_t>().swap(data);
     }
+};
+
+// 图层：与画布同尺寸的 BGR 像素 + 叠放属性
+// 约定：所有图层尺寸都与文档画布一致；imageData 始终是【当前活动图层】的像素
+struct Layer {
+    QString name;
+    std::vector<uint8_t> data;
+    bool visible = true;
+    double opacity = 1.0;   // 0.0 ~ 1.0
+    int blend = 0;          // 0 正常 / 1 正片叠底 / 2 滤色
+    // 图层蒙版：与画布同尺寸的覆盖度(0 = 该像素完全隐藏，255 = 完全显示)
+    // 空蒙版表示该图层没有蒙版；maskEnabled=false 时临时停用(保留数据)
+    SelectionMask mask;
+    bool maskEnabled = true;
 };
 
 // 历史快照：必须连同尺寸一起保存，
@@ -218,6 +222,16 @@ public:
     void SetLayerBlend(int index, int blend);          // 0 正常 / 1 正片叠底 / 2 滤色
     // 当前各图层合成后的像素(供保存与自检使用)
     std::vector<uint8_t> CompositePixels();
+
+    // ---- 图层蒙版(作用于当前活动图层；0 = 隐藏，255 = 显示) ----
+    bool HasLayerMask(int index) const;         // 该图层是否带蒙版(无论是否停用)
+    bool IsLayerMaskEnabled(int index) const;   // 蒙版当前是否生效
+    void AddLayerMaskFromSelection();           // 用当前选区生成蒙版(选区内显示)
+    void AddLayerMaskFill(bool white);          // 添加全白/全黑蒙版
+    void ApplySelectionToLayerMask(bool reveal);// 用当前选区显示/隐藏蒙版内容
+    void InvertLayerMask();                     // 蒙版反相
+    void ToggleLayerMask();                     // 停用/启用蒙版(仅显示属性，不写历史)
+    void RemoveLayerMask();                     // 删除蒙版
 
 public:
     std::string BMPPath;
@@ -480,8 +494,10 @@ private:
     void SetupLayerPanel();      // 右侧图层面板(替换"开发中"占位)
     void UpdateLayerPanel();     // 刷新列表/不透明度/混合模式(不触发信号)
     void RepaintComposite();     // 重新合成并刷新画面(不改历史)
-    // 重新合成所有图层；返回可直接显示的像素(单图层时就是 imageData 本身)
+    // 重新合成所有图层；返回可直接显示的像素(单图层且无蒙版时就是 imageData 本身)
     const std::vector<uint8_t> &BuildComposite();
+    // 是否有生效中的图层蒙版(有蒙版时不能走单图层快速路径/实时预览)
+    bool AnyLayerMaskEnabled() const;
     // 保存/导出用像素：多图层时为合成结果
     const std::vector<uint8_t> &DisplayPixels();
     // 用"当前图层栈 + 新像素"构造快照(活动图层像素单独存 data)
@@ -502,5 +518,13 @@ private:
     QLabel *m_layerOpacityLabel = nullptr;
     QComboBox *m_layerBlendCombo = nullptr;
     QMenu *m_layerMenu = nullptr;
+    // 蒙版子菜单及其状态相关项(菜单弹出时按当前图层/选区刷新可用性)
+    QMenu *m_layerMaskMenu = nullptr;
+    QAction *m_maskFromSelectionAction = nullptr;
+    QAction *m_maskRevealSelectionAction = nullptr;
+    QAction *m_maskHideSelectionAction = nullptr;
+    QAction *m_maskToggleAction = nullptr;
+    QAction *m_maskInvertAction = nullptr;
+    QAction *m_maskRemoveAction = nullptr;
 };
 #endif // MAINWINDOW_H
