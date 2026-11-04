@@ -11,6 +11,7 @@
 #include"qt_headers.h"
 #include <QListWidgetItem>
 #include <QListWidget>
+#include <QGroupBox>
 #include <QSlider>
 #include <QComboBox>
 #include <QLabel>
@@ -53,6 +54,12 @@ struct SelectionMask {
         height = 0;
         std::vector<uint8_t>().swap(data);
     }
+};
+
+// 选区通道：把一份选区掩码命名保存，之后可重新载入
+struct SelectionChannel {
+    QString name;
+    SelectionMask mask;
 };
 
 // 图层：与画布同尺寸的 BGR 像素 + 叠放属性
@@ -122,6 +129,7 @@ struct Document {
     double rotTotal = 0.0;
     bool canSave = false;
     SelectionMask mask;                       // 选区掩码(图像像素坐标，视觉，y 向下)
+    std::vector<SelectionChannel> channels;   // 已保存的选区通道(随文档切换)
     std::vector<Layer> layers;                // 图层栈(自底向上)
     int activeLayer = 0;
 };
@@ -232,6 +240,13 @@ public:
     void InvertLayerMask();                     // 蒙版反相
     void ToggleLayerMask();                     // 停用/启用蒙版(仅显示属性，不写历史)
     void RemoveLayerMask();                     // 删除蒙版
+
+    // ---- 选区通道(把选区命名保存，之后可重新载入) ----
+    int ChannelCount() const { return static_cast<int>(m_channels.size()); }
+    QString ChannelName(int index) const;
+    bool StoreSelectionChannel(const QString &name);   // 存储当前选区
+    bool LoadSelectionChannel(int index);              // 载入为当前选区
+    bool DeleteSelectionChannel(int index);
 
 public:
     std::string BMPPath;
@@ -498,6 +513,13 @@ private:
     const std::vector<uint8_t> &BuildComposite();
     // 是否有生效中的图层蒙版(有蒙版时不能走单图层快速路径/实时预览)
     bool AnyLayerMaskEnabled() const;
+    // 右侧通道面板：列表 + 存储/载入/删除
+    void SetupChannelPanel();
+    void UpdateChannelPanel();
+    // 弹窗输入名称后存储当前选区(面板按钮与菜单共用)
+    void PromptStoreChannel();
+    // 画布尺寸变化后丢弃尺寸不再匹配的通道，避免载入时错位
+    void PruneChannelsForCanvas();
     // 保存/导出用像素：多图层时为合成结果
     const std::vector<uint8_t> &DisplayPixels();
     // 用"当前图层栈 + 新像素"构造快照(活动图层像素单独存 data)
@@ -526,5 +548,10 @@ private:
     QAction *m_maskToggleAction = nullptr;
     QAction *m_maskInvertAction = nullptr;
     QAction *m_maskRemoveAction = nullptr;
+    // 选区通道
+    std::vector<SelectionChannel> m_channels;
+    QMenu *m_channelMenu = nullptr;
+    QGroupBox *m_channelGroup = nullptr;
+    QListWidget *m_channelList = nullptr;
 };
 #endif // MAINWINDOW_H

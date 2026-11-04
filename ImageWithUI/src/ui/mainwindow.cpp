@@ -1341,6 +1341,7 @@ MainWindow::MainWindow(QWidget *parent)
     UpdateStatusInfo();
     SetupSelectionTool();   // 矩形选区覆盖层 + "选择"菜单
     SetupLayerPanel();      // 右侧图层面板 + "图层"菜单
+    SetupChannelPanel();    // 右侧通道面板(存储/载入选区)
 
     // ---- 右侧面板放进滚动区 ----
     // 窗口变矮时面板可以滚动，而不是把控件压扁或把窗口撑出屏幕
@@ -1726,6 +1727,34 @@ void MainWindow::SetupSelectionTool()
         ClearSelection();
         UpdateStatus("已取消选区");
     });
+
+    // 选区通道：每次弹出时按当前通道列表重建，避免增删后索引失效
+    m_channelMenu = new QMenu(QString("选区通道"), this);
+    connect(m_channelMenu, &QMenu::aboutToShow, this, [this]() {
+        m_channelMenu->clear();
+        QAction *storeAction = m_channelMenu->addAction(QString("存储当前选区…"));
+        storeAction->setEnabled(HasSelection());
+        connect(storeAction, &QAction::triggered, this, [this]() { PromptStoreChannel(); });
+        m_channelMenu->addSeparator();
+        if (m_channels.empty()) {
+            QAction *noneAction = m_channelMenu->addAction(QString("（暂无通道）"));
+            noneAction->setEnabled(false);
+            return;
+        }
+        QMenu *loadMenu = m_channelMenu->addMenu(QString("载入选区"));
+        QMenu *deleteMenu = m_channelMenu->addMenu(QString("删除通道"));
+        for (int i = 0; i < static_cast<int>(m_channels.size()); ++i) {
+            const QString name = m_channels[static_cast<size_t>(i)].name;
+            QAction *loadAction = loadMenu->addAction(name);
+            connect(loadAction, &QAction::triggered, this, [this, i]() { LoadSelectionChannel(i); });
+            QAction *deleteAction = deleteMenu->addAction(name);
+            connect(deleteAction, &QAction::triggered, this, [this, i]() {
+                DeleteSelectionChannel(i);
+            });
+        }
+    });
+    m_selectionMenu->addSeparator();
+    m_selectionMenu->addMenu(m_channelMenu);
 
     // 没有选区时禁用需要选区的操作
     connect(m_selectionMenu, &QMenu::aboutToShow, this,
@@ -3469,6 +3498,190 @@ std::vector<uint8_t> MainWindow::CompositePixels()
 }
 
 // ------------------------------------------------------------------
+// 选区通道
+// 通道保存的是选区掩码本身，不随图层/像素编辑变化；随文档一起切换。
+// 存储/载入/删除属于文档级操作，不写入图像历史(与选区本身的编辑一致)。
+// ------------------------------------------------------------------
+
+QString MainWindow::ChannelName(int index) const
+{
+    if (index < 0 || index >= static_cast<int>(m_channels.size())) {
+        return QString();
+    }
+    return m_channels[static_cast<size_t>(index)].name;
+}
+
+bool MainWindow::StoreSelectionChannel(const QString &name)
+{
+    if (m_busy) {
+        UpdateStatus("正在处理，请稍候…");
+        return false;
+    }
+    const int32_t w = myValue.bmpInfo.GetWidth();
+    const int32_t h = myValue.bmpInfo.GetHeight();
+    if (imageData.empty() || m_mask.isEmpty() || m_mask.width != w || m_mask.height != h) {
+        UpdateStatus("请先建立选区，再存储为通道");
+        return false;
+    }
+    QString finalName = name.trimmed();
+    if (finalName.isEmpty()) {
+        finalName = QString("通道 %1").arg(static_cast<int>(m_channels.size()) + 1);
+    }
+    SelectionChannel channel;
+    channel.name = finalName;
+    channel.mask = m_mask;   // 拷贝一份，后续选区变化不影响已存通道
+    m_channels.push_back(std::move(channel));
+    UpdateChannelPanel();
+    UpdateStatus(QString("已存储选区通道「%1」").arg(finalName));
+    return true;
+}
+
+bool MainWindow::LoadSelectionChannel(int index)
+{
+    if (index < 0 || index >= static_cast<int>(m_channels.size())) {
+        return false;
+    }
+    const int32_t w = myValue.bmpInfo.GetWidth();
+    const int32_t h = myValue.bmpInfo.GetHeight();
+    const SelectionChannel &channel = m_channels[static_cast<size_t>(index)];
+    if (imageData.empty() || channel.mask.width != w || channel.mask.height != h) {
+        UpdateStatus(QString("通道「%1」与当前画布尺寸不一致，无法载入").arg(channel.name));
+        return false;
+    }
+    SetSelectionMask(channel.mask);
+    UpdateStatus(QString("已载入通道「%1」").arg(channel.name));
+    return HasSelection();
+}
+
+bool MainWindow::DeleteSelectionChannel(int index)
+{
+    if (index < 0 || index >= static_cast<int>(m_channels.size())) {
+        return false;
+    }
+    const QString name = m_channels[static_cast<size_t>(index)].name;
+    m_channels.erase(m_channels.begin() + index);
+    UpdateChannelPanel();
+    UpdateStatus(QString("已删除通道「%1」").arg(name));
+    return true;
+}
+
+void MainWindow::PromptStoreChannel()
+{
+    if (!HasSelection()) {
+        UpdateStatus("请先建立选区");
+        return;
+    }
+    bool ok = false;
+    const QString defaultName = QString("通道 %1").arg(static_cast<int>(m_channels.size()) + 1);
+    const QString name = QInputDialog::getText(this, QString("存储选区"),
+                                               QString("通道名称："), QLineEdit::Normal,
+                                               defaultName, &ok);
+    if (ok) {
+        StoreSelectionChannel(name);
+    }
+}
+
+void MainWindow::SetupChannelPanel()
+{
+    QWidget *host = ui->group_layers->parentWidget();
+    QVBoxLayout *hostLayout = (host != nullptr) ? qobject_cast<QVBoxLayout *>(host->layout())
+                                                : nullptr;
+    if (host == nullptr || hostLayout == nullptr) {
+        return;
+    }
+
+    m_channelGroup = new QGroupBox(QString("通道"), host);
+    m_channelGroup->setObjectName("group_channels");
+    QVBoxLayout *box = new QVBoxLayout(m_channelGroup);
+    box->setContentsMargins(8, 10, 8, 8);
+    box->setSpacing(6);
+
+    m_channelList = new QListWidget(m_channelGroup);
+    m_channelList->setObjectName("channelList");
+    m_channelList->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_channelList->setMinimumHeight(70);
+    m_channelList->setMaximumHeight(110);
+    m_channelList->setToolTip(QString("选中的通道可点「载入」重新套用为选区"));
+    box->addWidget(m_channelList);
+
+    QHBoxLayout *row = new QHBoxLayout();
+    row->setContentsMargins(0, 0, 0, 0);
+    row->setSpacing(6);
+    auto addButton = [this, group = m_channelGroup](QHBoxLayout *lay, const QString &text,
+                                                    std::function<void()> handler) {
+        QPushButton *btn = new QPushButton(text, group);
+        btn->setObjectName("layerBtn");
+        btn->setCursor(Qt::PointingHandCursor);
+        btn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        connect(btn, &QPushButton::clicked, this, handler);
+        lay->addWidget(btn);
+    };
+    addButton(row, QString("存储"), [this]() { PromptStoreChannel(); });
+    addButton(row, QString("载入"), [this]() {
+        const int rowIndex = (m_channelList != nullptr) ? m_channelList->currentRow() : -1;
+        if (rowIndex < 0) {
+            UpdateStatus("请先选择一个通道");
+            return;
+        }
+        LoadSelectionChannel(rowIndex);
+    });
+    addButton(row, QString("删除"), [this]() {
+        const int rowIndex = (m_channelList != nullptr) ? m_channelList->currentRow() : -1;
+        if (rowIndex < 0) {
+            UpdateStatus("请先选择一个通道");
+            return;
+        }
+        DeleteSelectionChannel(rowIndex);
+    });
+    box->addLayout(row);
+
+    // 双击通道直接载入
+    connect(m_channelList, &QListWidget::itemDoubleClicked, this,
+            [this](QListWidgetItem *item) {
+                if (item != nullptr) {
+                    LoadSelectionChannel(m_channelList->row(item));
+                }
+            });
+
+    // 放在图层面板下方、底部弹簧之前
+    const int layerIndex = hostLayout->indexOf(ui->group_layers);
+    hostLayout->insertWidget(layerIndex < 0 ? 0 : layerIndex + 1, m_channelGroup);
+    UpdateChannelPanel();
+}
+
+void MainWindow::UpdateChannelPanel()
+{
+    if (m_channelList == nullptr) {
+        return;
+    }
+    const int keepRow = m_channelList->currentRow();
+    QSignalBlocker blocker(m_channelList);
+    m_channelList->clear();
+    for (const SelectionChannel &channel : m_channels) {
+        m_channelList->addItem(channel.name);
+    }
+    if (!m_channels.empty()) {
+        m_channelList->setCurrentRow(qBound(0, keepRow, static_cast<int>(m_channels.size()) - 1));
+    }
+}
+
+void MainWindow::PruneChannelsForCanvas()
+{
+    const int32_t w = myValue.bmpInfo.GetWidth();
+    const int32_t h = myValue.bmpInfo.GetHeight();
+    const size_t before = m_channels.size();
+    m_channels.erase(
+        std::remove_if(m_channels.begin(), m_channels.end(),
+                       [w, h](const SelectionChannel &channel) {
+                           return channel.mask.width != w || channel.mask.height != h;
+                       }),
+        m_channels.end());
+    if (m_channels.size() != before) {
+        UpdateChannelPanel();
+    }
+}
+
+// ------------------------------------------------------------------
 // 参数实时预览
 // ------------------------------------------------------------------
 
@@ -3975,6 +4188,7 @@ void MainWindow::ApplyStateSnapshot(const ImageSnapshot &snap, bool keepRotateBa
     myValue.bmp.SetFileSize(sizeof(BMP) + sizeof(BMPInfo) +
                             static_cast<uint32_t>(snap.width) * static_cast<uint32_t>(snap.height) * 3);
     RestoreSnapshot(snap);
+    PruneChannelsForCanvas();   // 画布尺寸变了，旧通道尺寸不再匹配
     ShowImage(imageData, myValue, snap.width, snap.height);
     UpdateLayerPanel();
     UpdateHistoryPanel();
@@ -4262,11 +4476,13 @@ void MainWindow::ResetDocumentState()
     segmentSize = 0;
     m_selection = QRect();
     m_mask.clear();
+    m_channels.clear();
     m_layers.clear();
     m_activeLayer = 0;
     m_composite.clear();
     UpdateSelectionOverlay();
     UpdateLayerPanel();
+    UpdateChannelPanel();
 }
 
 // 切换标签：把当前状态整体换出、把目标文档状态换入(移动语义，不拷贝像素)
@@ -4303,6 +4519,7 @@ void MainWindow::ActivateDocument(int index)
         cur.rotTotal = m_rotTotal;
         cur.canSave = canSave;
         cur.mask = std::move(m_mask);
+        cur.channels = std::move(m_channels);
         cur.layers = std::move(m_layers);
         cur.activeLayer = m_activeLayer;
         ResetDocumentState();   // 成员里不再保留旧文档的副本
@@ -4325,6 +4542,7 @@ void MainWindow::ActivateDocument(int index)
     m_rotTotal = doc.rotTotal;
     canSave = doc.canSave;
     m_mask = std::move(doc.mask);
+    m_channels = std::move(doc.channels);
     m_layers = std::move(doc.layers);
     m_activeLayer = doc.activeLayer;
     if (m_layers.empty() && !imageData.empty()) {
@@ -4351,6 +4569,7 @@ void MainWindow::ActivateDocument(int index)
     UpdateStatusInfo();
     UpdateHistoryPanel();
     UpdateLayerPanel();
+    UpdateChannelPanel();
     UpdateTabBar();
 }
 

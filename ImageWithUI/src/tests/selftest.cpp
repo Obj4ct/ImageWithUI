@@ -1530,6 +1530,75 @@ int Run(const QString &imagePath)
         out().flush();
     }
 
+    // ---------- 13.2 选区通道：存储 / 跨文档保留 / 载入 / 删除 ----------
+    {
+        const QString channelAPath = QDir::tempPath() + "/imagewithui_channel_a.png";
+        const QString channelBPath = QDir::tempPath() + "/imagewithui_channel_b.png";
+        {
+            QImage a(64, 48, QImage::Format_RGB32);
+            a.fill(qRgb(40, 120, 200));
+            a.save(channelAPath, "PNG");
+            QImage b(80, 60, QImage::Format_RGB32);
+            b.fill(qRgb(200, 120, 40));
+            b.save(channelBPath, "PNG");
+        }
+
+        QString failReason;
+        {
+            MainWindow win;
+            if (!win.OpenImage(channelAPath) || !win.OpenImage(channelBPath)) {
+                failReason = "无法打开测试图";
+            } else {
+                QTabBar *bar = win.findChild<QTabBar *>("documentTabBar");
+                if (bar == nullptr || bar->count() != 2) {
+                    failReason = "标签栏没有正确创建";
+                } else {
+                    bar->setCurrentIndex(0);   // 切到文档 A
+                    const QRect storedRect(10, 10, 20, 20);
+                    win.SetSelection(storedRect);
+                    if (win.ChannelCount() != 0) {
+                        failReason = "初始不应有已存通道";
+                    } else if (!win.StoreSelectionChannel(QString("测试通道"))) {
+                        failReason = "存储选区通道失败";
+                    } else if (win.ChannelCount() != 1 ||
+                               win.ChannelName(0) != QString("测试通道")) {
+                        failReason = "存储后通道数量/名称不对";
+                    } else {
+                        // 改掉当前选区，确认通道保存的是快照而不是引用
+                        win.SetSelection(QRect(40, 30, 10, 10));
+                        bar->setCurrentIndex(1);   // 切到文档 B：A 的通道不应跟随
+                        if (win.ChannelCount() != 0) {
+                            failReason = "切换文档后通道没有随文档隔离";
+                        } else {
+                            bar->setCurrentIndex(0);   // 切回文档 A
+                            if (win.ChannelCount() != 1) {
+                                failReason = "切回文档后通道丢失";
+                            } else if (!win.LoadSelectionChannel(0)) {
+                                failReason = "载入通道失败";
+                            } else if (win.SelectionRect() != storedRect) {
+                                failReason = "载入通道后选区未还原";
+                            } else if (!win.DeleteSelectionChannel(0) ||
+                                       win.ChannelCount() != 0) {
+                                failReason = "删除通道失败";
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        QFile::remove(channelAPath);
+        QFile::remove(channelBPath);
+
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 选区通道 : 存储 / 跨文档保留 / 载入 / 删除\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 选区通道 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
     // ---------- 14. 选区限制：调整类算子只改选区内 ----------
     {
         const QString selOpPath = QDir::tempPath() + "/imagewithui_selftest_selop.png";
