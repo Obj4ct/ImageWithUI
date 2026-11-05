@@ -132,6 +132,7 @@ struct Document {
     BitmapImage value;                            // 文件头信息 + 原始像素
     std::vector<uint8_t> imageData;           // 当前像素
     std::vector<uint8_t> originalImageData;   // 打开时的原始像素(重置用)
+    SelectionMask originalAlpha;              // 打开时图片自带的 alpha(重置用)
     int32_t originalWidth = 0;
     int32_t originalHeight = 0;
     ContentQuad quad;
@@ -312,6 +313,8 @@ public:
     std::vector<uint8_t>imageData;
     //store original image data
     std::vector<uint8_t> originalImageData;
+    // 原图自带的 alpha(导入带透明图片时保留，重置时恢复)
+    SelectionMask m_originalAlpha;
 
     //create a object of object
     ImageOps function;

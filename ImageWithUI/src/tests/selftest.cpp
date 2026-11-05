@@ -20,7 +20,6 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QLabel>
-#include <QListWidget>
 #include <QSlider>
 #include <QDoubleSpinBox>
 #include <QComboBox>
@@ -2290,6 +2289,98 @@ int Run(const QString &imagePath)
         } else {
             ++g_fail;
             out() << "[FAIL] 透明显示 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
+    // ---------- 13.12 PNG 导入保留透明 ----------
+    {
+        const QString srcPath = QDir::tempPath() + "/imagewithui_import_alpha_src.png";
+        const QString outPath = QDir::tempPath() + "/imagewithui_import_alpha_out.png";
+        {
+            QImage img(64, 48, QImage::Format_ARGB32);
+            img.fill(qRgba(200, 40, 40, 255));
+            for (int y = 16; y < 32; ++y) {
+                for (int x = 16; x < 32; ++x) {
+                    img.setPixel(x, y, qRgba(0, 0, 0, 0));
+                }
+            }
+            img.save(srcPath, "PNG");
+        }
+
+        QString failReason;
+        {
+            BitmapImage loaded;
+            QString err;
+            if (!BmpIO::ReadImageFile(srcPath.toStdString(), loaded, err)) {
+                failReason = "读取带透明 PNG 失败：" + err;
+            } else {
+                const int w = 64;
+                const int h = 48;
+                const size_t transIdx = static_cast<size_t>(h - 1 - 20) * static_cast<size_t>(w) + 20;
+                const size_t solidIdx = static_cast<size_t>(h - 1 - 10) * static_cast<size_t>(w) + 10;
+                if (loaded.alphaData.size() != static_cast<size_t>(w) * static_cast<size_t>(h)) {
+                    failReason = "导入后没有保留 alpha 数据";
+                } else if (loaded.alphaData[transIdx] > 10 || loaded.alphaData[solidIdx] < 245) {
+                    failReason = "导入的 alpha 数值不正确";
+                } else if (loaded.imageData[solidIdx * 3 + 2] < 150) {
+                    failReason = "导入的颜色被白底改写";
+                } else {
+                    MainWindow win;
+                    win.OpenImage(srcPath);
+                    QListWidget *list = win.findChild<QListWidget *>("layerList");
+                    QLabel *label = win.findChild<QLabel *>("imageLabel");
+                    if (list == nullptr || list->count() != 1 ||
+                        !list->item(0)->text().contains("[透明]")) {
+                        failReason = "导入后图层没有 [透明] 标记";
+                    } else if (label == nullptr || label->pixmap() == nullptr || label->pixmap()->isNull()) {
+                        failReason = "画布没有显示内容";
+                    } else {
+                        const QImage pm = label->pixmap()->toImage();
+                        const int ex = static_cast<int>((20.0 + 0.5) * pm.width() / 64.0);
+                        const int ey = static_cast<int>((20.0 + 0.5) * pm.height() / 48.0);
+                        if (ex < 0 || ey < 0 || ex >= pm.width() || ey >= pm.height()) {
+                            failReason = "画布尺寸异常";
+                        } else {
+                            const QColor erased = pm.pixelColor(ex, ey);
+                            const bool isChecker =
+                                (erased.red() == 255 && erased.green() == 255 && erased.blue() == 255) ||
+                                (erased.red() == 204 && erased.green() == 204 && erased.blue() == 204);
+                            if (!isChecker) {
+                                failReason = "导入的透明区域没有显示棋盘格";
+                            } else {
+                                QString saveErr;
+                                if (!win.SaveImageTo(outPath, saveErr)) {
+                                    failReason = "重新导出 PNG 失败：" + saveErr;
+                                } else {
+                                    const QImage pngOut(outPath);
+                                    if (pngOut.isNull() || !pngOut.hasAlphaChannel()) {
+                                        failReason = "重新导出的 PNG 没有 alpha 通道";
+                                    } else {
+                                        const QColor o = pngOut.pixelColor(20, 20);
+                                        const QColor s = pngOut.pixelColor(10, 10);
+                                        if (o.alpha() > 10) {
+                                            failReason = "往返导出后透明区域丢失 alpha";
+                                        } else if (s.alpha() < 245 || s.red() < 150) {
+                                            failReason = "往返导出后不透明区域颜色/alpha 不正确";
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        QFile::remove(srcPath);
+        QFile::remove(outPath);
+
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] PNG 导入 : 保留 alpha / 显示棋盘格 / 往返导出透明\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] PNG 导入 : " << failReason << "\n";
         }
         out().flush();
     }

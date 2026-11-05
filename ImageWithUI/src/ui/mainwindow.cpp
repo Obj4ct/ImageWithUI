@@ -5766,27 +5766,23 @@ void MainWindow::ResetAll(BitmapImage &myValue)
     const ImageSnapshot before = imageData.empty() ? ImageSnapshot() : CurrentSnapshot();
     CancelPreview();
     imageData = myValue.imageData;
-    // 重置后回到单图层
-    m_layers.clear();
-    m_layers.push_back(Layer{QString("图层 1"), imageData});
-    m_activeLayer = 0;
     // 恢复原始尺寸(旋转等算子可能改过画布大小)
     if (m_originalWidth > 0 && m_originalHeight > 0) {
         myValue.bmpInfo.SetWidth(m_originalWidth);
         myValue.bmpInfo.SetHeight(m_originalHeight);
         m_contentQuad.setRect(m_originalWidth, m_originalHeight);
     }
-    const QImage img = ImageOps::ToDisplayImage(imageData,
-                                                myValue.bmpInfo.GetWidth(),
-                                                myValue.bmpInfo.GetHeight());
-    QPixmap pixmap = QPixmap::fromImage(img);
-    if (m_fitToWindow) {
-        const QSize target = ui->imageLabel->size();
-        if (target.isValid() && !target.isEmpty()) {
-            pixmap = pixmap.scaled(target, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-        }
+    // 重置后回到单图层(导入时自带的透明区域一并恢复)
+    m_layers.clear();
+    Layer baseLayer{QString("图层 1"), imageData};
+    if (!m_originalAlpha.isEmpty() &&
+        m_originalAlpha.width == myValue.bmpInfo.GetWidth() &&
+        m_originalAlpha.height == myValue.bmpInfo.GetHeight()) {
+        baseLayer.alpha = m_originalAlpha;
     }
-    ui->imageLabel->setPixmap(pixmap);
+    m_layers.push_back(std::move(baseLayer));
+    m_activeLayer = 0;
+    SetCurrentDisplay();
     SyncSelectionToImage();
     InvalidateRotateBase();
     PushHistory("还原成原图", before);
@@ -6057,6 +6053,28 @@ bool MainWindow::LoadImage(const QString &path)
     qDebug() << "image size is:" << loaded.imageData.size()
              << "pixel count:" << loaded.imageData.size() / 3;
 
+    // 导入带透明的图片(PNG/TIFF/WebP 等)：把核心层的自底向上 alpha 转成视觉坐标的
+    // 选区掩码，作为初始图层的 alpha，避免透明像素被白底压平后丢失。
+    SelectionMask importedAlpha;
+    {
+        const int32_t w = loaded.bmpInfo.GetWidth();
+        const int32_t h = loaded.bmpInfo.GetHeight();
+        if (w > 0 && h > 0 && loaded.alphaData.size() ==
+                                   static_cast<size_t>(w) * static_cast<size_t>(h)) {
+            importedAlpha.width = w;
+            importedAlpha.height = h;
+            importedAlpha.data.resize(static_cast<size_t>(w) * static_cast<size_t>(h));
+            for (int32_t y = 0; y < h; ++y) {
+                for (int32_t x = 0; x < w; ++x) {
+                    importedAlpha.data[static_cast<size_t>(y) * static_cast<size_t>(w) + x] =
+                        loaded.alphaData[static_cast<size_t>(h - 1 - y) * static_cast<size_t>(w) + x];
+                }
+            }
+        }
+        // alpha 已转存到图层/原始快照，不再在 BitmapImage 里保留一份
+        loaded.alphaData.clear();
+    }
+
     // 每打开一张图就新建一个文档(标签页)
     Document doc;
     doc.id = m_nextDocId++;
@@ -6064,11 +6082,14 @@ bool MainWindow::LoadImage(const QString &path)
     doc.value = loaded;
     doc.imageData = loaded.imageData;
     doc.originalImageData = loaded.imageData;
+    doc.originalAlpha = importedAlpha;
     doc.originalWidth = loaded.bmpInfo.GetWidth();
     doc.originalHeight = loaded.bmpInfo.GetHeight();
     doc.quad.setRect(doc.originalWidth, doc.originalHeight);
     doc.canSave = true;
-    doc.layers.push_back(Layer{QString("图层 1"), doc.imageData});
+    Layer baseLayer{QString("图层 1"), doc.imageData};
+    baseLayer.alpha = std::move(importedAlpha);
+    doc.layers.push_back(std::move(baseLayer));
     doc.activeLayer = 0;
 
     m_docs.push_back(std::move(doc));
@@ -6164,6 +6185,7 @@ void MainWindow::ResetDocumentState()
     BMPPath.clear();
     imageData.clear();
     originalImageData.clear();
+    m_originalAlpha.clear();
     myValue = BitmapImage();
     m_originalWidth = 0;
     m_originalHeight = 0;
@@ -6212,6 +6234,7 @@ void MainWindow::ActivateDocument(int index)
         cur.value = std::move(myValue);
         cur.imageData = std::move(imageData);
         cur.originalImageData = std::move(originalImageData);
+        cur.originalAlpha = std::move(m_originalAlpha);
         cur.originalWidth = m_originalWidth;
         cur.originalHeight = m_originalHeight;
         cur.quad = m_contentQuad;
@@ -6235,6 +6258,7 @@ void MainWindow::ActivateDocument(int index)
     myValue = std::move(doc.value);
     imageData = std::move(doc.imageData);
     originalImageData = std::move(doc.originalImageData);
+    m_originalAlpha = std::move(doc.originalAlpha);
     m_originalWidth = doc.originalWidth;
     m_originalHeight = doc.originalHeight;
     m_contentQuad = doc.quad;
@@ -6266,8 +6290,7 @@ void MainWindow::ActivateDocument(int index)
         ui->imageLabel->setText(QString("双击此处，或按 Ctrl+N 打开图片"));
         ui->imageLabel->setPixmap(QPixmap());
     } else {
-        const std::vector<uint8_t> &shown = BuildComposite();
-        SetDisplayPixmap(shown, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+        SetCurrentDisplay();
     }
     SyncSelectionToImage();
     UpdateStatusInfo();

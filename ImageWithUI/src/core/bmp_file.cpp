@@ -157,20 +157,28 @@ bool BmpIO::ReadImageFile(const std::string &fileName, BitmapImage &outValue, QS
         return false;
     }
 
-    // 内部只有 24 位，统一转 RGBA8888 后取 RGB；透明像素与白底合成，避免出现纯黑底
+    // 统一转 RGBA8888：带透明的格式(PNG/TIFF/WebP/ICO 等)保留 alpha，
+    // 颜色按原值(不做白底合成)，这样导入后编辑器能继续透明擦除/导出。
+    const bool hasAlpha = image.hasAlphaChannel();
     const QImage rgba = image.convertToFormat(QImage::Format_RGBA8888);
     std::vector<uint8_t> data(static_cast<size_t>(width) * static_cast<size_t>(height) * 3);
+    std::vector<uint8_t> alpha;
+    if (hasAlpha) {
+        alpha.assign(static_cast<size_t>(width) * static_cast<size_t>(height), 255);
+    }
     for (int32_t y = 0; y < height; ++y) {
         // 内部第 0 行 = 画面最底行，因此从 QImage 的最后一行开始取
         const uchar *line = rgba.constScanLine(height - 1 - y);
         for (int32_t x = 0; x < width; ++x) {
             const uchar *px = line + static_cast<size_t>(x) * 4;
-            const int alpha = px[3];
-            const int inv = 255 - alpha;
-            const size_t i = (static_cast<size_t>(y) * static_cast<size_t>(width) + static_cast<size_t>(x)) * 3;
-            data[i + 0] = static_cast<uint8_t>((px[2] * alpha + 255 * inv) / 255);  // B
-            data[i + 1] = static_cast<uint8_t>((px[1] * alpha + 255 * inv) / 255);  // G
-            data[i + 2] = static_cast<uint8_t>((px[0] * alpha + 255 * inv) / 255);  // R
+            const size_t pixel = static_cast<size_t>(y) * static_cast<size_t>(width) + static_cast<size_t>(x);
+            const size_t i = pixel * 3;
+            data[i + 0] = px[2];  // B
+            data[i + 1] = px[1];  // G
+            data[i + 2] = px[0];  // R
+            if (hasAlpha) {
+                alpha[pixel] = px[3];
+            }
         }
     }
 
@@ -178,6 +186,7 @@ bool BmpIO::ReadImageFile(const std::string &fileName, BitmapImage &outValue, QS
     BMPInfo bmpInfo;
     SetBMPHeaderValues(bmp, bmpInfo, width, height, 24);
     outValue.imageData = std::move(data);
+    outValue.alphaData = std::move(alpha);
     outValue.bmp = bmp;
     outValue.bmpInfo = bmpInfo;
     return true;
