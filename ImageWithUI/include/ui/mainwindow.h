@@ -185,6 +185,8 @@ public:
     void UpdateStatus(const QString &text);
     // 供外部(命令行)载入图片
     bool OpenImage(const QString &path) { return LoadImage(path); }
+    // 按扩展名保存当前画面；PNG 在存在图层 alpha 时保留透明，其余格式按白底压平
+    bool SaveImageTo(const QString &filePath, QString &error);
     // 当前打开的文档数 / 活动文档下标(供自检使用)
     int DocumentCount() const { return static_cast<int>(m_docs.size()); }
     int ActiveDocumentIndex() const { return m_activeDoc; }
@@ -556,6 +558,8 @@ private:
     void RepaintComposite();     // 重新合成并刷新画面(不改历史)
     // 重新合成所有图层；返回可直接显示的像素(单图层且无蒙版时就是 imageData 本身)
     const std::vector<uint8_t> &BuildComposite();
+    // 带 alpha 的合成结果(用于 PNG 导出)：颜色与透明度按图层叠加，透明区域真正透明
+    QImage BuildCompositeRgba() const;
     // 是否有生效中的图层蒙版(有蒙版时不能走单图层快速路径/实时预览)
     bool AnyLayerMaskEnabled() const;
     // 是否有生效中的图层 alpha(有透明像素时同样不能走单图层快速路径)

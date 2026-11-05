@@ -2159,6 +2159,81 @@ int Run(const QString &imagePath)
         out().flush();
     }
 
+    // ---------- 13.10 PNG 导出保留图层 alpha；BMP 仍按白底压平 ----------
+    {
+        const QString srcPath = QDir::tempPath() + "/imagewithui_png_alpha_src.png";
+        const QString outPng = QDir::tempPath() + "/imagewithui_png_alpha_out.png";
+        const QString outBmp = QDir::tempPath() + "/imagewithui_png_alpha_out.bmp";
+        {
+            QImage img(64, 48, QImage::Format_RGB32);
+            img.fill(qRgb(200, 40, 40));
+            img.save(srcPath, "PNG");
+        }
+
+        QString failReason;
+        {
+            MainWindow win;
+            if (!win.OpenImage(srcPath)) {
+                failReason = "无法打开测试图";
+            } else {
+                win.SetBrushParams(9, 100, 1.0, QColor(0, 0, 0));
+                win.PaintBrushStroke(QPoint(20, 20), QPoint(20, 20), true);
+
+                QString err;
+                if (!win.SaveImageTo(outPng, err)) {
+                    failReason = "PNG 导出失败：" + err;
+                } else {
+                    const QImage saved(outPng);
+                    if (saved.isNull()) {
+                        failReason = "无法读取导出的 PNG";
+                    } else if (!saved.hasAlphaChannel()) {
+                        failReason = "导出的 PNG 没有 alpha 通道";
+                    } else {
+                        const QColor erased = saved.pixelColor(20, 20);
+                        const QColor kept = saved.pixelColor(10, 10);
+                        if (erased.alpha() > 10) {
+                            failReason = "擦除区域导出后仍不透明";
+                        } else if (kept.alpha() < 245 || kept.red() < 150) {
+                            failReason = "未擦除区域颜色或 alpha 不正确";
+                        } else if (!win.SaveImageTo(outBmp, err)) {
+                            failReason = "BMP 导出失败：" + err;
+                        } else {
+                            BitmapImage bmp;
+                            QString readErr;
+                            if (!BmpIO::ReadBMPFile(outBmp.toStdString(), bmp, readErr)) {
+                                failReason = "无法读取导出的 BMP";
+                            } else {
+                                const int w = 64;
+                                const int h = 48;
+                                const size_t idx =
+                                    (static_cast<size_t>(h - 1 - 20) * static_cast<size_t>(w) + 20) * 3;
+                                if (idx + 2 >= bmp.imageData.size()) {
+                                    failReason = "BMP 数据尺寸异常";
+                                } else if (!(bmp.imageData[idx] >= 250 &&
+                                             bmp.imageData[idx + 1] >= 250 &&
+                                             bmp.imageData[idx + 2] >= 250)) {
+                                    failReason = "BMP 擦除区域没有按白底压平";
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        QFile::remove(srcPath);
+        QFile::remove(outPng);
+        QFile::remove(outBmp);
+
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] PNG 导出 : 保留图层 alpha / BMP 白底压平\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] PNG 导出 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
     // ---------- 14. 选区限制：调整类算子只改选区内 ----------
     {
         const QString selOpPath = QDir::tempPath() + "/imagewithui_selftest_selop.png";

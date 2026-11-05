@@ -3661,6 +3661,90 @@ const std::vector<uint8_t> &MainWindow::DisplayPixels()
     return imageData;
 }
 
+QImage MainWindow::BuildCompositeRgba() const
+{
+    const int32_t w = myValue.bmpInfo.GetWidth();
+    const int32_t h = myValue.bmpInfo.GetHeight();
+    if (w <= 0 || h <= 0) {
+        return QImage();
+    }
+    QImage out(w, h, QImage::Format_ARGB32);
+    out.fill(Qt::transparent);
+
+    const size_t canvasBytes = static_cast<size_t>(w) * static_cast<size_t>(h) * 3;
+    for (int32_t y = 0; y < h; ++y) {
+        QRgb *line = reinterpret_cast<QRgb *>(out.scanLine(y));
+        const size_t srcRow = static_cast<size_t>(h - 1 - y) * static_cast<size_t>(w) * 3;
+        const size_t maskRow = static_cast<size_t>(y) * static_cast<size_t>(w);
+        for (int32_t x = 0; x < w; ++x) {
+            const size_t si = srcRow + static_cast<size_t>(x) * 3;
+            const size_t mi = maskRow + static_cast<size_t>(x);
+            int dA = 0, dR = 0, dG = 0, dB = 0;   // 已合成的不透明度与直通颜色(0~255)
+            for (int i = 0; i < static_cast<int>(m_layers.size()); ++i) {
+                const Layer &layer = m_layers[static_cast<size_t>(i)];
+                if (!layer.visible) {
+                    continue;
+                }
+                const std::vector<uint8_t> &src = (i == m_activeLayer) ? imageData : layer.data;
+                if (src.size() != canvasBytes) {
+                    continue;
+                }
+                int atten = qBound(0, static_cast<int>(layer.opacity * 255.0 + 0.5), 255);
+                if (atten == 0) {
+                    continue;
+                }
+                if (layer.maskEnabled && !layer.mask.isEmpty() &&
+                    layer.mask.width == w && layer.mask.height == h &&
+                    layer.mask.data.size() == static_cast<size_t>(w) * static_cast<size_t>(h)) {
+                    atten = atten * layer.mask.data[mi] / 255;
+                }
+                if (!layer.alpha.isEmpty() && layer.alpha.width == w && layer.alpha.height == h &&
+                    layer.alpha.data.size() == static_cast<size_t>(w) * static_cast<size_t>(h)) {
+                    atten = atten * layer.alpha.data[mi] / 255;
+                }
+                if (atten <= 0) {
+                    continue;
+                }
+
+                int sB = src[si];
+                int sG = src[si + 1];
+                int sR = src[si + 2];
+                // 混合模式需要一个已有内容的背景色；背景完全透明时直接使用源色
+                int bR = sR, bG = sG, bB = sB;
+                if (dA > 0 && layer.blend != 0) {
+                    const int br = dR * 255 / dA;
+                    const int bg = dG * 255 / dA;
+                    const int bb = dB * 255 / dA;
+                    if (layer.blend == 1) {           // 正片叠底
+                        bR = sR * br / 255;
+                        bG = sG * bg / 255;
+                        bB = sB * bb / 255;
+                    } else if (layer.blend == 2) {    // 滤色
+                        bR = 255 - (255 - sR) * (255 - br) / 255;
+                        bG = 255 - (255 - sG) * (255 - bg) / 255;
+                        bB = 255 - (255 - sB) * (255 - bb) / 255;
+                    }
+                }
+
+                // 源覆盖合成(source-over)：outA = aSrc + aDst*(1-aSrc)
+                const int dstMul = dA * (255 - atten) / 255;
+                const int outA = atten + dstMul;
+                if (outA <= 0) {
+                    dA = 0;
+                    dR = dG = dB = 0;
+                    continue;
+                }
+                dR = (bR * atten + dR * dstMul) / outA;
+                dG = (bG * atten + dG * dstMul) / outA;
+                dB = (bB * atten + dB * dstMul) / outA;
+                dA = outA;
+            }
+            line[x] = qRgba(dR, dG, dB, dA);
+        }
+    }
+    return out;
+}
+
 ImageSnapshot MainWindow::MakeSnapshot(std::vector<uint8_t> pixels, int32_t width, int32_t height,
                                        const ContentQuad &quad) const
 {
@@ -6249,6 +6333,66 @@ void MainWindow::on_openImage_triggered()
     LoadImage(path);
 }
 
+bool MainWindow::SaveImageTo(const QString &filePath, QString &error)
+{
+    if (imageData.empty()) {
+        error = "当前图像数据无效";
+        return false;
+    }
+    const int32_t width = myValue.bmpInfo.GetWidth();
+    const int32_t height = myValue.bmpInfo.GetHeight();
+    QString suffix = QFileInfo(filePath).suffix().toLower();
+    if (suffix.isEmpty()) {
+        suffix = "bmp";
+    }
+
+    // BMP：沿用项目自己的读写实现，保证自底向上的内存布局不被破坏(无 alpha，白底压平)
+    if (suffix == "bmp") {
+        const std::vector<uint8_t> &pixels = DisplayPixels();
+        BMP outBmp = myValue.bmp;
+        BMPInfo outInfo = myValue.bmpInfo;
+        BmpIO::SetBMPHeaderValues(outBmp, outInfo, width, height, outInfo.GetBitsPerPixel());
+        if (BmpIO::WriteBMPFile(filePath.toStdString(), pixels, outBmp, outInfo)) {
+            BMPPath = filePath.toStdString();
+            UpdateTabBar();
+            UpdateStatus(QString("已保存到 %1").arg(QFileInfo(filePath).fileName()));
+            return true;
+        }
+        error = "无法写入文件，请检查路径是否有效";
+        return false;
+    }
+
+    // PNG 在存在图层 alpha 时导出真正的透明通道；其余格式仍按白底压平
+    QImage image;
+    if (suffix == "png" && AnyLayerAlphaActive()) {
+        image = BuildCompositeRgba();
+    } else {
+        const std::vector<uint8_t> &pixels = DisplayPixels();
+        image = ImageOps::ToDisplayImage(pixels, width, height);
+    }
+    if (image.isNull()) {
+        error = "当前图像数据无效";
+        return false;
+    }
+    if (suffix == "jpg" || suffix == "jpeg") {
+        image = image.convertToFormat(QImage::Format_RGB32);   // JPEG 不支持透明
+    }
+    QImageWriter writer(filePath);
+    if (suffix == "jpg" || suffix == "jpeg") {
+        writer.setQuality(92);
+    }
+    if (writer.write(image)) {
+        BMPPath = filePath.toStdString();
+        UpdateTabBar();
+        UpdateStatus(QString("已导出 %1").arg(QFileInfo(filePath).fileName()));
+        return true;
+    }
+    error = "无法写入该格式：" + writer.errorString() +
+            "\n（部分格式需要对应的 Qt 图像插件支持）";
+    UpdateStatus("导出失败：" + QFileInfo(filePath).fileName());
+    return false;
+}
+
 void MainWindow::on_actionsave_triggered()
 {
     if (!canSave || imageData.empty()) {
@@ -6267,51 +6411,13 @@ void MainWindow::on_actionsave_triggered()
         return;
     }
 
-    QString suffix = QFileInfo(filePath).suffix().toLower();
-    if (suffix.isEmpty()) {
+    if (QFileInfo(filePath).suffix().isEmpty()) {
         filePath += ".bmp";
-        suffix = "bmp";
     }
 
-    const int32_t width = myValue.bmpInfo.GetWidth();
-    const int32_t height = myValue.bmpInfo.GetHeight();
-    // 保存的是"看到的画面"：多图层时先合成，单图层时就是当前图层
-    const std::vector<uint8_t> &pixels = DisplayPixels();
-
-    // BMP：沿用项目自己的读写实现，保证自底向上的内存布局不被破坏
-    if (suffix == "bmp") {
-        BMP outBmp = myValue.bmp;
-        BMPInfo outInfo = myValue.bmpInfo;
-        BmpIO::SetBMPHeaderValues(outBmp, outInfo, width, height, outInfo.GetBitsPerPixel());
-        if (BmpIO::WriteBMPFile(filePath.toStdString(), pixels, outBmp, outInfo)) {
-            BMPPath = filePath.toStdString();
-            UpdateTabBar();
-            UpdateStatus(QString("已保存到 %1").arg(QFileInfo(filePath).fileName()));
-        } else {
-            function.CreateMessagebox("保存失败", "无法写入文件，请检查路径是否有效");
-        }
-        return;
-    }
-
-    // 其它格式：交给 Qt 图像插件（PNG / JPEG / TIFF / WebP）
-    const QImage image = ImageOps::ToDisplayImage(pixels, width, height);
-    if (image.isNull()) {
-        function.CreateMessagebox("保存失败", "当前图像数据无效");
-        return;
-    }
-    QImageWriter writer(filePath);
-    if (suffix == "jpg" || suffix == "jpeg") {
-        writer.setQuality(92);
-    }
-    if (writer.write(image)) {
-        BMPPath = filePath.toStdString();
-        UpdateTabBar();
-        UpdateStatus(QString("已导出 %1").arg(QFileInfo(filePath).fileName()));
-    } else {
-        function.CreateMessagebox("保存失败",
-                                  "无法写入该格式：" + writer.errorString() +
-                                  "\n（部分格式需要对应的 Qt 图像插件支持）");
-        UpdateStatus("导出失败：" + QFileInfo(filePath).fileName());
+    QString error;
+    if (!SaveImageTo(filePath, error)) {
+        function.CreateMessagebox("保存失败", error);
     }
 }
 
