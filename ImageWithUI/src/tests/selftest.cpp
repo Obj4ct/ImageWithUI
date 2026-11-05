@@ -2385,6 +2385,55 @@ int Run(const QString &imagePath)
         out().flush();
     }
 
+    // ---------- 13.13 PNG 导出参数(压缩级别 / DPI) ----------
+    {
+        const QString fastPath = QDir::tempPath() + "/imagewithui_png_fast.png";
+        const QString smallPath = QDir::tempPath() + "/imagewithui_png_small.png";
+        QString failReason;
+        {
+            MainWindow win;
+            win.OpenImage(path);
+
+            PngExportOptions fast;
+            fast.compression = 0;   // 低压缩 → 大文件
+            fast.dpi = 0;           // 不写分辨率
+            PngExportOptions best;
+            best.compression = 9;   // 高压缩 → 小文件
+            best.dpi = 300;
+
+            QString err;
+            if (!win.SaveImageTo(fastPath, err, &fast)) {
+                failReason = "低压缩导出失败：" + err;
+            } else if (!win.SaveImageTo(smallPath, err, &best)) {
+                failReason = "高压缩导出失败：" + err;
+            } else {
+                const qint64 fastSize = QFileInfo(fastPath).size();
+                const qint64 smallSize = QFileInfo(smallPath).size();
+                const QImage reloaded(smallPath);
+                if (reloaded.isNull()) {
+                    failReason = "导出的 PNG 无法重新读取";
+                } else if (smallSize >= fastSize) {
+                    failReason = QString("压缩级别未生效(0 级 %1 字节，9 级 %2 字节)")
+                                     .arg(fastSize)
+                                     .arg(smallSize);
+                } else if (reloaded.dotsPerMeterX() < 11700 || reloaded.dotsPerMeterX() > 11900) {
+                    failReason = QString("DPI 未写入(读到 %1 像素/米)").arg(reloaded.dotsPerMeterX());
+                }
+            }
+        }
+        QFile::remove(fastPath);
+        QFile::remove(smallPath);
+
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] PNG 导出参数 : 压缩级别生效且 DPI=300 已写入\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] PNG 导出参数 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
     // ---------- 14. 选区限制：调整类算子只改选区内 ----------
     {
         const QString selOpPath = QDir::tempPath() + "/imagewithui_selftest_selop.png";

@@ -781,3 +781,49 @@ void TextDialog::updatePreview()
     }
     m_preview->setPixmap(pix);
 }
+
+// ------------------------------------------------------------------
+// PngExportDialog
+// ------------------------------------------------------------------
+PngExportDialog::PngExportDialog(int initialCompression, int initialDpi, QWidget *parent)
+    : QDialog(parent)
+{
+    setWindowTitle(QString("PNG 导出参数"));
+    setMinimumWidth(360);
+
+    QVBoxLayout *root = new QVBoxLayout(this);
+    root->addWidget(new QLabel(QString("压缩级别（越大文件越小，编码越慢）"), this));
+
+    m_compression = new QSpinBox(this);
+    m_compression->setRange(0, 9);
+    m_compression->setValue(qBound(0, initialCompression, 9));
+    root->addWidget(MakeSliderRow(QString("压缩级别"), m_compression, this));
+
+    m_dpi = new QSpinBox(this);
+    m_dpi->setRange(0, 2000);
+    m_dpi->setSuffix(QString(" DPI"));
+    m_dpi->setSpecialValueText(QString("不写入"));
+    m_dpi->setValue(qBound(0, initialDpi, 2000));
+    QHBoxLayout *dpiRow = new QHBoxLayout();
+    dpiRow->addWidget(new QLabel(QString("分辨率"), this));
+    dpiRow->addStretch();
+    dpiRow->addWidget(m_dpi);
+    root->addLayout(dpiRow);
+
+    QDialogButtonBox *box = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    box->button(QDialogButtonBox::Ok)->setText(QString("导出"));
+    box->button(QDialogButtonBox::Cancel)->setText(QString("取消"));
+    connect(box, &QDialogButtonBox::accepted, this, &QDialog::accept);
+    connect(box, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    root->addWidget(box);
+}
+
+int PngExportDialog::compression() const
+{
+    return m_compression->value();
+}
+
+int PngExportDialog::dpi() const
+{
+    return m_dpi->value();
+}

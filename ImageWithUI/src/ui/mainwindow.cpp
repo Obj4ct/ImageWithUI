@@ -6397,7 +6397,8 @@ void MainWindow::on_openImage_triggered()
     LoadImage(path);
 }
 
-bool MainWindow::SaveImageTo(const QString &filePath, QString &error)
+bool MainWindow::SaveImageTo(const QString &filePath, QString &error,
+                             const PngExportOptions *pngOptions)
 {
     if (imageData.empty()) {
         error = "当前图像数据无效";
@@ -6444,6 +6445,15 @@ bool MainWindow::SaveImageTo(const QString &filePath, QString &error)
     QImageWriter writer(filePath);
     if (suffix == "jpg" || suffix == "jpeg") {
         writer.setQuality(92);
+    } else if (suffix == "png" && pngOptions != nullptr) {
+        // 压缩级别 9 → 最小的文件；Qt 的 PNG 以 quality 反比例控制压缩
+        const int level = qBound(0, pngOptions->compression, 9);
+        writer.setQuality((9 - level) * 100 / 9);
+        if (pngOptions->dpi > 0) {
+            const int dpm = qRound(static_cast<double>(pngOptions->dpi) / 0.0254);
+            image.setDotsPerMeterX(dpm);
+            image.setDotsPerMeterY(dpm);
+        }
     }
     if (writer.write(image)) {
         BMPPath = filePath.toStdString();
@@ -6479,8 +6489,23 @@ void MainWindow::on_actionsave_triggered()
         filePath += ".bmp";
     }
 
+    // 导出 PNG 时询问压缩级别与 DPI(记住上次选择)
+    PngExportOptions pngOptions;
+    const PngExportOptions *pngPtr = nullptr;
+    if (QFileInfo(filePath).suffix().toLower() == "png") {
+        PngExportDialog dlg(m_pngCompression, m_pngDpi, this);
+        if (dlg.exec() != QDialog::Accepted) {
+            return;
+        }
+        m_pngCompression = dlg.compression();
+        m_pngDpi = dlg.dpi();
+        pngOptions.compression = m_pngCompression;
+        pngOptions.dpi = m_pngDpi;
+        pngPtr = &pngOptions;
+    }
+
     QString error;
-    if (!SaveImageTo(filePath, error)) {
+    if (!SaveImageTo(filePath, error, pngPtr)) {
         function.CreateMessagebox("保存失败", error);
     }
 }

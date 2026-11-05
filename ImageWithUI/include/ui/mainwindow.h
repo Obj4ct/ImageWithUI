@@ -25,6 +25,12 @@
 #include "retouch.h"
 #include "color_map.h"
 
+// PNG 导出参数（仅在保存/导出为 PNG 时使用）
+struct PngExportOptions {
+    int compression = 6;   // 压缩级别 0~9，越大文件越小、编码越慢
+    int dpi = 96;          // 写入 pHYs 的 DPI；0 表示不写分辨率信息
+};
+
 struct ReturnValue{
     bool isNull = true;
     bool isNumeric = false;
@@ -187,7 +193,9 @@ public:
     // 供外部(命令行)载入图片
     bool OpenImage(const QString &path) { return LoadImage(path); }
     // 按扩展名保存当前画面；PNG 在存在图层 alpha 时保留透明，其余格式按白底压平
-    bool SaveImageTo(const QString &filePath, QString &error);
+    // pngOptions 非空且导出 PNG 时，应用压缩级别与 DPI
+    bool SaveImageTo(const QString &filePath, QString &error,
+                     const PngExportOptions *pngOptions = nullptr);
     // 当前打开的文档数 / 活动文档下标(供自检使用)
     int DocumentCount() const { return static_cast<int>(m_docs.size()); }
     int ActiveDocumentIndex() const { return m_activeDoc; }
@@ -315,6 +323,9 @@ public:
     std::vector<uint8_t> originalImageData;
     // 原图自带的 alpha(导入带透明图片时保留，重置时恢复)
     SelectionMask m_originalAlpha;
+    // PNG 导出参数(记住上次选择)
+    int m_pngCompression = 6;
+    int m_pngDpi = 96;
 
     //create a object of object
     ImageOps function;

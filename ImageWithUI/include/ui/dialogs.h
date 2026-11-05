@@ -170,4 +170,18 @@ private:
     QColor m_color;
 };
 
+// PNG 导出参数：压缩级别(0 快 / 9 小)与 DPI
+class PngExportDialog : public QDialog
+{
+    Q_OBJECT
+public:
+    explicit PngExportDialog(int initialCompression, int initialDpi, QWidget *parent = nullptr);
+    int compression() const;
+    int dpi() const;
+
+private:
+    QSpinBox *m_compression = nullptr;
+    QSpinBox *m_dpi = nullptr;
+};
+
 #endif // EDITDIALOGS_H
