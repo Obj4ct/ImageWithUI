@@ -135,7 +135,7 @@ ImageWithUI/
    ├─ resources/
    │  ├─ icon.qrc               图标资源清单
    │  ├─ icon/                  界面图标
-   │  └─ image/                 本地测试图片（已 gitignore，不随仓库分发）
+   │  └─ donation/              捐赠二维码
    └─ scripts/
       └─ build.ps1              一键构建脚本
 ```
@@ -152,12 +152,12 @@ ImageWithUI/
 
 MIT 许可的覆盖范围仅限素曜拥有著作权的源代码、文档与 `ImageWithUI/resources/icon/` 下的自产图标；仓库历史提交中的上述自有内容同样按 MIT 授权。
 
-- `ImageWithUI/resources/image/` 已从当前版本移除并加入 `.gitignore`。Git 历史提交中仍可能包含 `Lenna.bmp`、`back.bmp`、`image.bmp`、`lrh.bmp` 等文件；其中 `Lenna.bmp` 为第三方测试图，其余文件来源无法确认，均不受 MIT 覆盖，使用前请自行确认授权。
+- `ImageWithUI/resources/image/` 已从当前版本移除并加入 `.gitignore`。Git 历史提交中仍包含 `Lenna.bmp`、`back.bmp`、`image.bmp`、`lrh.bmp` 等文件；其中 `Lenna.bmp` 为第三方测试图，其余文件来源无法确认，均不受 MIT 覆盖，使用前请自行确认授权。
 - Qt 5 采用 LGPLv3 / GPLv3 / 商业授权，不属于本项目，与 MIT 许可相互独立；分发二进制时需遵守其许可要求。
 - 第三方依赖与素材的完整说明见 [NOTICE](NOTICE)。
 
 ## 给作者加鸡腿
 
-| 支付宝 | 微信支付 |
-| :---: | :---: |
+| 支付宝                                                                            | 微信支付                                                                          |
+|:------------------------------------------------------------------------------:|:-----------------------------------------------------------------------------:|
 | <img src="ImageWithUI/resources/donation/alipay.jpg" alt="支付宝收款码" width="240"> | <img src="ImageWithUI/resources/donation/wechat.png" alt="微信收款码" width="240"> |
