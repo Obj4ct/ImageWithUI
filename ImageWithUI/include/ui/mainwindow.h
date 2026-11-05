@@ -474,6 +474,8 @@ private:
     void SetDisplayPixmap(const std::vector<uint8_t> &data, int32_t width, int32_t height);
     void ApplyDisplayPixmap(QPixmap pixmap);
     void RefreshDisplay();
+    // 按当前图层状态刷新画面：有 alpha 时铺棋盘格，否则沿用白底合成
+    void SetCurrentDisplay();
 
     // ---- 参数实时预览 ----
     // 右侧"图像调整"的 7 个输入框：停止输入约 280ms 后在【已提交的图像】上

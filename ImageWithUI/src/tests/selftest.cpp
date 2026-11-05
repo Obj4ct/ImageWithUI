@@ -20,6 +20,7 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QLabel>
+#include <QListWidget>
 #include <QSlider>
 #include <QDoubleSpinBox>
 #include <QComboBox>
@@ -2230,6 +2231,65 @@ int Run(const QString &imagePath)
         } else {
             ++g_fail;
             out() << "[FAIL] PNG 导出 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
+    // ---------- 13.11 透明区域显示棋盘格 + 图层 [透明] 标记 ----------
+    {
+        const QString srcPath = QDir::tempPath() + "/imagewithui_checker_src.png";
+        {
+            QImage img(64, 48, QImage::Format_RGB32);
+            img.fill(qRgb(200, 40, 40));
+            img.save(srcPath, "PNG");
+        }
+
+        QString failReason;
+        {
+            MainWindow win;
+            win.OpenImage(srcPath);
+            win.SetBrushParams(9, 100, 1.0, QColor(0, 0, 0));
+            win.PaintBrushStroke(QPoint(20, 20), QPoint(20, 20), true);
+
+            QListWidget *list = win.findChild<QListWidget *>("layerList");
+            QLabel *label = win.findChild<QLabel *>("imageLabel");
+            if (list == nullptr || list->count() != 1) {
+                failReason = "图层面板状态异常";
+            } else if (!list->item(0)->text().contains("[透明]")) {
+                failReason = "带 alpha 的图层没有 [透明] 标记";
+            } else if (label == nullptr || label->pixmap() == nullptr || label->pixmap()->isNull()) {
+                failReason = "画布没有显示内容";
+            } else {
+                const QImage pm = label->pixmap()->toImage();
+                const int ex = static_cast<int>((20.0 + 0.5) * pm.width() / 64.0);
+                const int ey = static_cast<int>((20.0 + 0.5) * pm.height() / 48.0);
+                const int kx = static_cast<int>((10.0 + 0.5) * pm.width() / 64.0);
+                const int ky = static_cast<int>((10.0 + 0.5) * pm.height() / 48.0);
+                if (ex < 0 || ey < 0 || ex >= pm.width() || ey >= pm.height() ||
+                    kx < 0 || ky < 0 || kx >= pm.width() || ky >= pm.height()) {
+                    failReason = "画布尺寸异常";
+                } else {
+                    const QColor erased = pm.pixelColor(ex, ey);
+                    const QColor kept = pm.pixelColor(kx, ky);
+                    const bool isChecker =
+                        (erased.red() == 255 && erased.green() == 255 && erased.blue() == 255) ||
+                        (erased.red() == 204 && erased.green() == 204 && erased.blue() == 204);
+                    if (!isChecker) {
+                        failReason = "擦除区域没有显示棋盘格";
+                    } else if (kept.red() < 150 || kept.green() > 120) {
+                        failReason = "未擦除区域颜色被棋盘格影响";
+                    }
+                }
+            }
+        }
+        QFile::remove(srcPath);
+
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 透明显示 : 棋盘格与图层 [透明] 标记\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 透明显示 : " << failReason << "\n";
         }
         out().flush();
     }

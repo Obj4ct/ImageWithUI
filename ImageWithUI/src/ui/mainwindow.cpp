@@ -232,7 +232,27 @@ void BgrAlphaFromQImage(const QImage &image, std::vector<uint8_t> &bgr, Selectio
     }
 }
 
-// 预览超过这个像素数就先缩小再算，避免大图拖动参数卡顿
+// 把带 alpha 的画面铺到棋盘格上，让编辑器里的透明区域一眼可辨
+QImage FlattenOnCheckerboard(const QImage &rgba, int cell = 12)
+{
+    if (rgba.isNull()) {
+        return QImage();
+    }
+    QImage canvas(rgba.size(), QImage::Format_RGB32);
+    canvas.fill(QColor(255, 255, 255));
+    QPainter painter(&canvas);
+    const QColor dark(204, 204, 204);
+    for (int y = 0; y < rgba.height(); y += cell) {
+        for (int x = 0; x < rgba.width(); x += cell) {
+            if (((x / cell) + (y / cell)) % 2 == 0) {
+                painter.fillRect(x, y, cell, cell, dark);
+            }
+        }
+    }
+    painter.drawImage(0, 0, rgba);
+    return canvas;
+}
+
 constexpr size_t kPreviewMaxPixels = 2000000;
 
 // 把一个图层按不透明度/混合模式叠到合成缓冲上(dst 初始为白，尺寸与图层一致)
@@ -1926,10 +1946,11 @@ void MainWindow::ShowImage(const std::vector<uint8_t> &inImageData, BitmapImage 
 {
     imageData = inImageData;
     myValue = value;
+    Q_UNUSED(width);
+    Q_UNUSED(height);
 
-    // 多图层时显示合成结果；单图层时就是 imageData 本身
-    const std::vector<uint8_t> &shown = BuildComposite();
-    SetDisplayPixmap(shown, width, height);
+    // 多图层或带 alpha 时显示合成结果；单图层且不透明时就是 imageData 本身
+    SetCurrentDisplay();
     SyncSelectionToImage();
     UpdateStatusInfo();
 }
@@ -1961,12 +1982,30 @@ void MainWindow::ApplyDisplayPixmap(QPixmap pixmap)
 // 画面回到"已提交"的图像状态
 void MainWindow::RefreshDisplay()
 {
+    SetCurrentDisplay();
+    SyncSelectionToImage();
+}
+
+// 有图层 alpha 时，透明区域用棋盘格显示；否则沿用白底合成
+void MainWindow::SetCurrentDisplay()
+{
     if (imageData.empty()) {
         return;
     }
+    const int32_t w = myValue.bmpInfo.GetWidth();
+    const int32_t h = myValue.bmpInfo.GetHeight();
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+    if (AnyLayerAlphaActive()) {
+        const QImage shown = FlattenOnCheckerboard(BuildCompositeRgba());
+        if (!shown.isNull()) {
+            ApplyDisplayPixmap(QPixmap::fromImage(shown));
+            return;
+        }
+    }
     const std::vector<uint8_t> &shown = BuildComposite();
-    SetDisplayPixmap(shown, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
-    SyncSelectionToImage();
+    SetDisplayPixmap(shown, w, h);
 }
 
 // ------------------------------------------------------------------
@@ -3564,6 +3603,9 @@ void MainWindow::UpdateLayerPanel()
         if (!layer.mask.isEmpty()) {
             label += layer.maskEnabled ? QString("  [蒙版]") : QString("  [蒙版·停用]");
         }
+        if (!layer.alpha.isEmpty()) {
+            label += QString("  [透明]");
+        }
         QListWidgetItem *item = new QListWidgetItem(label, m_layerList);
         item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
         item->setCheckState(layer.visible ? Qt::Checked : Qt::Unchecked);
@@ -3799,8 +3841,7 @@ void MainWindow::RepaintComposite()
     if (imageData.empty()) {
         return;
     }
-    const std::vector<uint8_t> &shown = BuildComposite();
-    SetDisplayPixmap(shown, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+    SetCurrentDisplay();
 }
 
 bool MainWindow::RequireSingleLayer(const QString &opName)
