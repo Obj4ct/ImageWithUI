@@ -527,6 +527,15 @@ public:
 
     bool gradientMode() const { return m_gradientMode; }
 
+    // ---- 文字工具：点击画布定位后由外部弹对话框 ----
+    void setTextMode(bool active)
+    {
+        m_textMode = active;
+        update();
+    }
+
+    bool textMode() const { return m_textMode; }
+
     void beginTransform(const QRect &baseRect, const QImage &whiteFill, const QImage &content)
     {
         if (baseRect.isEmpty() || whiteFill.isNull() || content.isNull()) {
@@ -564,6 +573,8 @@ public:
     std::function<void()> onBrushEnd;
     // 渐变拖拽结束：参数为图像像素坐标的起点与终点
     std::function<void(const QPoint &, const QPoint &)> onGradientFinished;
+    // 文字工具点击：参数为文字块左上角的图像像素坐标
+    std::function<void(const QPoint &)> onTextClick;
     // 用户拖动整体移动选区后回调(图像像素位移；content=true 表示同时搬动像素)
     std::function<void(int, int, bool)> onSelectionMoved;
     // 套索松开后回调(add = Shift 加选，subtract = Alt 减选)
@@ -880,6 +891,19 @@ protected:
             update();
             return;
         }
+        if (m_textMode && m_imgW > 0 && m_imgH > 0) {
+            const QRect dr = displayRect();
+            if (dr.isEmpty() || !dr.adjusted(-2, -2, 2, 2).contains(event->pos())) {
+                return;
+            }
+            QPoint ip = toImage(event->pos());
+            ip.setX(qBound(0, ip.x(), m_imgW - 1));
+            ip.setY(qBound(0, ip.y(), m_imgH - 1));
+            if (onTextClick) {
+                onTextClick(ip);
+            }
+            return;
+        }
         if (m_gradientMode && m_imgW > 0 && m_imgH > 0) {
             const QRect dr = displayRect();
             if (dr.isEmpty() || !dr.adjusted(-2, -2, 2, 2).contains(event->pos())) {
@@ -1031,6 +1055,12 @@ protected:
                 updateTransformStatus();
                 update();
                 return;
+            }
+            return;
+        }
+        if (m_textMode) {
+            if (m_imgW > 0 && m_imgH > 0) {
+                setCursor(Qt::IBeamCursor);
             }
             return;
         }
@@ -1486,6 +1516,8 @@ private:
     bool m_gradientDragging = false;
     QPoint m_gradientStart;        // 拖拽起点(图像像素)
     QPoint m_gradientEnd;          // 拖拽终点(图像像素)
+    // ---- 文字工具 ----
+    bool m_textMode = false;
     QPolygon m_points;           // 套索轨迹(图像像素坐标)
     QPolygon m_poly;             // 多边形套索已确定的顶点(图像像素坐标)
     QPoint m_hover;              // 多边形套索的橡皮筋终点
@@ -1796,6 +1828,7 @@ void MainWindow::SetupSelectionTool()
     m_overlay->onGradientFinished = [this](const QPoint &from, const QPoint &to) {
         ApplyGradientFill(from, to, m_gradientRadial);
     };
+    m_overlay->onTextClick = [this](const QPoint &pos) { PlaceTextLayer(pos); };
     ui->imageLabel->installEventFilter(this);
 
     // 工具栏：矩形选框 / 自由套索 / 多边形套索 / 磁性套索(勾选后才在图像上拖拽，避免误触)
@@ -1831,6 +1864,10 @@ void MainWindow::SetupSelectionTool()
     m_gradientToolAction->setCheckable(true);
     m_gradientToolAction->setToolTip(QString("在活动图层上按拖拽方向填充线性/径向渐变；遵守当前选区覆盖度"));
 
+    m_textToolAction = new QAction(QString("文字"), this);
+    m_textToolAction->setCheckable(true);
+    m_textToolAction->setToolTip(QString("在画布上点击定位，输入文字后生成独立文字图层"));
+
     // 所有画布工具共用一套状态同步：任一被勾选时启用覆盖层，并切换工具类型
     auto applyToolState = [this]() {
         // 切换工具时放弃未提交的拖拽变换，避免手柄状态残留
@@ -1844,12 +1881,14 @@ void MainWindow::SetupSelectionTool()
         const bool brush = m_brushToolAction->isChecked();
         const bool eraser = m_eraserToolAction->isChecked();
         const bool gradient = m_gradientToolAction->isChecked();
+        const bool text = m_textToolAction->isChecked();
         const int kind = magnet ? 3 : poly ? 2 : lasso ? 1 : 0;
         if (m_overlay != nullptr) {
             m_overlay->setToolKind(kind);
             m_overlay->setBrushMode(brush ? 1 : (eraser ? 2 : 0));
             m_overlay->setGradientMode(gradient);
-            m_overlay->setToolActive(rect || lasso || poly || magnet || brush || eraser || gradient);
+            m_overlay->setTextMode(text);
+            m_overlay->setToolActive(rect || lasso || poly || magnet || brush || eraser || gradient || text);
         }
         if (brush) {
             UpdateStatus(QString("画笔：按住左键在活动图层上绘制；笔迹遵守选区"));
@@ -1857,6 +1896,8 @@ void MainWindow::SetupSelectionTool()
             UpdateStatus(QString("橡皮：用白色覆盖活动图层；笔迹遵守选区"));
         } else if (gradient) {
             UpdateStatus(QString("渐变：在画布上拖拽定义方向/半径；松开后填充，遵守选区"));
+        } else if (text) {
+            UpdateStatus(QString("文字：在画布上点击定位，输入文字后生成独立文字图层"));
         } else if (magnet) {
             UpdateStatus(QString("自动贴边选区：沿边缘拖动，轨迹会自动贴过去；Shift 加选、Alt 减选"));
         } else if (poly) {
@@ -1875,6 +1916,7 @@ void MainWindow::SetupSelectionTool()
     toolGroup->addAction(m_brushToolAction);
     toolGroup->addAction(m_eraserToolAction);
     toolGroup->addAction(m_gradientToolAction);
+    toolGroup->addAction(m_textToolAction);
     connect(m_selectionToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
     connect(m_lassoToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
     connect(m_polyToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
@@ -1882,6 +1924,7 @@ void MainWindow::SetupSelectionTool()
     connect(m_brushToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
     connect(m_eraserToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
     connect(m_gradientToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
+    connect(m_textToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
     ui->toolBox->addAction(m_selectionToolAction);
     ui->toolBox->addAction(m_lassoToolAction);
     ui->toolBox->addAction(m_polyToolAction);
@@ -1889,6 +1932,7 @@ void MainWindow::SetupSelectionTool()
     ui->toolBox->addAction(m_brushToolAction);
     ui->toolBox->addAction(m_eraserToolAction);
     ui->toolBox->addAction(m_gradientToolAction);
+    ui->toolBox->addAction(m_textToolAction);
 
     // "选择"菜单(放在"编辑"之后、"图像模糊"之前)
     m_selectionMenu = new QMenu(QString("选择"), this);
@@ -2050,11 +2094,12 @@ void MainWindow::SetupSelectionTool()
         smoothAction->setEnabled(has);
     });
 
-    // "工具"菜单：画笔/橡皮/渐变
+    // "工具"菜单：画笔/橡皮/渐变/文字
     QMenu *toolMenu = new QMenu(QString("工具"), this);
     toolMenu->addAction(m_brushToolAction);
     toolMenu->addAction(m_eraserToolAction);
     toolMenu->addAction(m_gradientToolAction);
+    toolMenu->addAction(m_textToolAction);
     menuBar()->insertMenu(m_selectionMenu->menuAction(), toolMenu);
 
     menuBar()->insertMenu(ui->menu_blur->menuAction(), m_selectionMenu);
@@ -4190,6 +4235,102 @@ void MainWindow::ApplyGradientFill(const QPoint &from, const QPoint &to, bool ra
         return;
     }
     CommitLayerStructure(radial ? QString("径向渐变") : QString("线性渐变"), before);
+}
+
+// ------------------------------------------------------------------
+// 文字图层
+// 当前图层模型没有透明通道，所以新文字图层以"当前可见合成"为底图，
+// 再把文字栅格化进去；这样视觉上不会遮挡下层内容，合并/保存/撤销与普通图层一致。
+// ------------------------------------------------------------------
+
+void MainWindow::PlaceTextLayer(const QPoint &pos)
+{
+    if (imageData.empty() || m_busy) {
+        return;
+    }
+    TextDialog dialog(m_textFont, m_textColor, this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+    m_textFont = dialog.font();
+    m_textColor = dialog.color();
+    m_textAlign = dialog.alignment();
+    AddTextLayer(pos, dialog.text(), m_textFont, m_textColor, m_textAlign);
+}
+
+void MainWindow::AddTextLayer(const QPoint &topLeft, const QString &text, const QFont &font,
+                              const QColor &color, int alignment)
+{
+    if (imageData.empty() || m_layers.empty() || m_busy) {
+        UpdateStatus("请先打开一张图像");
+        return;
+    }
+    if (text.trimmed().isEmpty()) {
+        UpdateStatus("文字内容为空，未创建图层");
+        return;
+    }
+    CancelPreview();
+
+    const int32_t w = myValue.bmpInfo.GetWidth();
+    const int32_t h = myValue.bmpInfo.GetHeight();
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+    const ImageSnapshot before = CurrentSnapshot();
+
+    // 活动图层像素可能还在 imageData 里，先同步回图层栈，保证合成基准正确
+    m_layers[static_cast<size_t>(m_activeLayer)].data = imageData;
+
+    // 以当前可见合成作为底图(见函数头注释)
+    const std::vector<uint8_t> &shown = BuildComposite();
+    QImage canvas = ImageOps::ToDisplayImage(shown, w, h);
+    if (canvas.isNull()) {
+        UpdateStatus("文字图层创建失败");
+        return;
+    }
+
+    const QStringList lines = text.split('\n');
+    QFontMetrics metrics(font);
+    int maxWidth = 0;
+    for (const QString &line : lines) {
+        maxWidth = std::max(maxWidth, metrics.horizontalAdvance(line));
+    }
+    const int lineHeight = metrics.lineSpacing();
+
+    QPainter painter(&canvas);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::TextAntialiasing, true);
+    painter.setFont(font);
+    painter.setPen(color);
+    for (int i = 0; i < lines.size(); ++i) {
+        const int lineWidth = metrics.horizontalAdvance(lines[i]);
+        int x = topLeft.x();
+        if (alignment == 1) {
+            x += (maxWidth - lineWidth) / 2;
+        } else if (alignment == 2) {
+            x += maxWidth - lineWidth;
+        }
+        painter.drawText(QPoint(x, topLeft.y() + metrics.ascent() + i * lineHeight),
+                         lines[i]);
+    }
+    painter.end();
+
+    Layer layer;
+    layer.name = QString("文字");
+    layer.data = BgrFromQImage(canvas);
+    if (layer.data.empty()) {
+        UpdateStatus("文字图层创建失败");
+        return;
+    }
+
+    // 插到活动图层上方并设为活动图层
+    m_layers.insert(m_layers.begin() + (m_activeLayer + 1), layer);
+    m_activeLayer += 1;
+    imageData = layer.data;
+
+    UpdateLayerPanel();
+    CommitLayerStructure(QString("添加文字图层"), before);
+    UpdateStatus(QString("已添加文字图层「%1」").arg(text.left(12)));
 }
 
 void MainWindow::SetupGradientPanel()

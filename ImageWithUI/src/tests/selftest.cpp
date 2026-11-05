@@ -1768,6 +1768,74 @@ int Run(const QString &imagePath)
         out().flush();
     }
 
+    // ---------- 13.5 文字图层：生成独立图层 / BGR 颜色正确 / 撤销 ----------
+    {
+        const QString textPath = QDir::tempPath() + "/imagewithui_text.png";
+        {
+            QImage img(64, 48, QImage::Format_RGB32);
+            img.fill(qRgb(255, 255, 255));
+            img.save(textPath, "PNG");
+        }
+
+        QString failReason;
+        {
+            MainWindow win;
+            if (!win.OpenImage(textPath)) {
+                failReason = "无法打开测试图";
+            } else {
+                QFont font(QStringLiteral("Arial"), 24, QFont::Bold);
+                win.AddTextLayer(QPoint(8, 8), QStringLiteral("AB"), font, QColor(255, 0, 0), 0);
+                if (win.LayerCount() != 2 || win.ActiveLayerIndex() != 1) {
+                    failReason = "没有生成独立文字图层";
+                } else {
+                    const std::vector<uint8_t> composite = win.CompositePixels();
+                    int redPixels = 0;
+                    int whitePixels = 0;
+                    for (size_t i = 0; i + 2 < composite.size(); i += 3) {
+                        const int b = composite[i];
+                        const int g = composite[i + 1];
+                        const int r = composite[i + 2];
+                        if (r > 150 && g < 120 && b < 120) {
+                            ++redPixels;
+                        }
+                        if (r > 245 && g > 245 && b > 245) {
+                            ++whitePixels;
+                        }
+                    }
+                    if (redPixels < 5) {
+                        failReason = QString("文字像素过少(%1)，可能没有真正栅格化").arg(redPixels);
+                    } else if (whitePixels == 0) {
+                        failReason = "底图被破坏";
+                    } else {
+                        win.UndoImageProcessing();
+                        if (win.LayerCount() != 1 || win.ActiveLayerIndex() != 0) {
+                            failReason = "撤销后图层数没有还原";
+                        } else {
+                            const std::vector<uint8_t> restored = win.CurrentImageData();
+                            for (size_t i = 0; i + 2 < restored.size(); i += 3) {
+                                if (restored[i] != 255 || restored[i + 1] != 255 ||
+                                    restored[i + 2] != 255) {
+                                    failReason = "撤销后像素没有还原为白底";
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        QFile::remove(textPath);
+
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 文字图层 : 独立图层 / BGR 颜色 / 撤销\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 文字图层 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
     // ---------- 14. 选区限制：调整类算子只改选区内 ----------
     {
         const QString selOpPath = QDir::tempPath() + "/imagewithui_selftest_selop.png";

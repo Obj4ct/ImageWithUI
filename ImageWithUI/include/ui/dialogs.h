@@ -14,6 +14,8 @@
 #include <QSpinBox>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QFontComboBox>
+#include <QPlainTextEdit>
 
 // ---- 统一的「滑块 + 数值框」参数控件 ----
 // 滑块与数值框始终双向同步：拖滑块数字跟着变，改数字滑块跟着走
@@ -137,6 +139,33 @@ private:
     QSpinBox *m_heightSpin = nullptr;
     QCheckBox *m_lockRatio = nullptr;
     QComboBox *m_algorithm = nullptr;
+};
+
+// 文字图层对话框：内容 / 字体 / 字号 / 颜色 / 对齐，内部带实时预览
+class TextDialog : public QDialog
+{
+    Q_OBJECT
+public:
+    explicit TextDialog(const QFont &initialFont, const QColor &initialColor,
+                        QWidget *parent = nullptr);
+    QString text() const;
+    QFont font() const;
+    QColor color() const { return m_color; }
+    // 0 左对齐 / 1 居中 / 2 右对齐
+    int alignment() const;
+
+private:
+    void updatePreview();
+
+    QPlainTextEdit *m_text = nullptr;
+    QFontComboBox *m_font = nullptr;
+    QSpinBox *m_size = nullptr;
+    QCheckBox *m_bold = nullptr;
+    QCheckBox *m_italic = nullptr;
+    QComboBox *m_align = nullptr;
+    QPushButton *m_colorBtn = nullptr;
+    QLabel *m_preview = nullptr;
+    QColor m_color;
 };
 
 #endif // EDITDIALOGS_H

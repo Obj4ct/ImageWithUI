@@ -20,6 +20,11 @@
 #include <QSlider>
 #include <QLabel>
 #include <QEvent>
+#include <QColorDialog>
+#include <QFontComboBox>
+#include <QPlainTextEdit>
+#include <QPushButton>
+#include <QPixmap>
 #include <functional>
 #include <cmath>
 
@@ -638,4 +643,131 @@ QSize ScaleDialog::targetSize() const
 int ScaleDialog::algorithm() const
 {
     return m_algorithm->currentIndex();
+}
+
+// ------------------------------------------------------------------
+// TextDialog
+// ------------------------------------------------------------------
+TextDialog::TextDialog(const QFont &initialFont, const QColor &initialColor, QWidget *parent)
+    : QDialog(parent),
+      m_color(initialColor.isValid() ? initialColor : QColor(0, 0, 0))
+{
+    setWindowTitle(QString("文字图层"));
+    setMinimumWidth(440);
+
+    QVBoxLayout *root = new QVBoxLayout(this);
+
+    // 文本内容
+    m_text = new QPlainTextEdit(this);
+    m_text->setPlaceholderText(QString("输入文字，支持多行"));
+    m_text->setMinimumHeight(72);
+    root->addWidget(new QLabel(QString("内容"), this));
+    root->addWidget(m_text);
+
+    // 字体 + 字号
+    QHBoxLayout *fontRow = new QHBoxLayout();
+    m_font = new QFontComboBox(this);
+    m_font->setCurrentFont(initialFont);
+    m_size = new QSpinBox(this);
+    m_size->setRange(6, 300);
+    m_size->setSuffix(QString(" pt"));
+    m_size->setValue(std::max(6, initialFont.pointSize()));
+    m_size->setMaximumWidth(100);
+    fontRow->addWidget(new QLabel(QString("字体"), this));
+    fontRow->addWidget(m_font, 1);
+    fontRow->addWidget(m_size);
+    root->addLayout(fontRow);
+
+    // 粗体 / 斜体 / 颜色 / 对齐
+    QHBoxLayout *styleRow = new QHBoxLayout();
+    m_bold = new QCheckBox(QString("粗体"), this);
+    m_bold->setChecked(initialFont.bold());
+    m_italic = new QCheckBox(QString("斜体"), this);
+    m_italic->setChecked(initialFont.italic());
+    m_colorBtn = new QPushButton(QString("颜色…"), this);
+    m_align = new QComboBox(this);
+    m_align->addItems({QString("左对齐"), QString("居中"), QString("右对齐")});
+    styleRow->addWidget(m_bold);
+    styleRow->addWidget(m_italic);
+    styleRow->addWidget(m_colorBtn);
+    styleRow->addWidget(new QLabel(QString("对齐"), this));
+    styleRow->addWidget(m_align, 1);
+    root->addLayout(styleRow);
+
+    // 预览
+    m_preview = new QLabel(this);
+    m_preview->setFixedHeight(80);
+    m_preview->setAlignment(Qt::AlignCenter);
+    m_preview->setStyleSheet(QStringLiteral(
+        "background:#ffffff;color:#111111;border:1px solid #3b4455;border-radius:4px;"));
+    root->addWidget(m_preview);
+
+    // 按钮
+    QDialogButtonBox *box = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    box->button(QDialogButtonBox::Ok)->setText(QString("添加"));
+    box->button(QDialogButtonBox::Cancel)->setText(QString("取消"));
+    connect(box, &QDialogButtonBox::accepted, this, &QDialog::accept);
+    connect(box, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    root->addWidget(box);
+
+    connect(m_text, &QPlainTextEdit::textChanged, this, [this]() { updatePreview(); });
+    connect(m_font, &QFontComboBox::currentFontChanged, this, [this]() { updatePreview(); });
+    connect(m_size, QOverload<int>::of(&QSpinBox::valueChanged), this, [this]() { updatePreview(); });
+    connect(m_bold, &QCheckBox::toggled, this, [this]() { updatePreview(); });
+    connect(m_italic, &QCheckBox::toggled, this, [this]() { updatePreview(); });
+    connect(m_align, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [this]() { updatePreview(); });
+    connect(m_colorBtn, &QPushButton::clicked, this, [this]() {
+        const QColor color = QColorDialog::getColor(m_color, this, QString("文字颜色"));
+        if (color.isValid()) {
+            m_color = color;
+            updatePreview();
+        }
+    });
+
+    updatePreview();
+}
+
+QString TextDialog::text() const
+{
+    return m_text->toPlainText();
+}
+
+QFont TextDialog::font() const
+{
+    QFont font = m_font->currentFont();
+    font.setPointSize(m_size->value());
+    font.setBold(m_bold->isChecked());
+    font.setItalic(m_italic->isChecked());
+    return font;
+}
+
+int TextDialog::alignment() const
+{
+    return m_align->currentIndex();
+}
+
+void TextDialog::updatePreview()
+{
+    m_colorBtn->setStyleSheet(QString("background:%1;border:1px solid #3b4455;"
+                                      "border-radius:3px;padding:2px 8px;")
+                                  .arg(m_color.name()));
+    const QString content = m_text->toPlainText();
+    QPixmap pix(m_preview->width(), m_preview->height());
+    pix.fill(QColor(255, 255, 255));
+    if (!content.isEmpty()) {
+        QPainter painter(&pix);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.setRenderHint(QPainter::TextAntialiasing, true);
+        QFont font = m_font->currentFont();
+        font.setPointSize(qBound(6, m_size->value(), 28));   // 预览限制字号，避免溢出
+        font.setBold(m_bold->isChecked());
+        font.setItalic(m_italic->isChecked());
+        painter.setFont(font);
+        painter.setPen(m_color);
+        const QRect box = pix.rect().adjusted(8, 4, -8, -4);
+        painter.drawText(box, Qt::AlignCenter, content);
+        painter.end();
+    }
+    m_preview->setPixmap(pix);
 }

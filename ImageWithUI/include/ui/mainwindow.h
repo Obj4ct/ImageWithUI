@@ -263,6 +263,11 @@ public:
     void SetGradientParams(bool radial, bool reverse, double opacity,
                            const QColor &startColor, const QColor &endColor);
 
+    // ---- 文字图层(栅格化提交，生成独立图层) ----
+    // topLeft 为文字块左上角(图像像素坐标，视觉 y 向下)；alignment: 0 左 / 1 中 / 2 右
+    void AddTextLayer(const QPoint &topLeft, const QString &text, const QFont &font,
+                      const QColor &color, int alignment = 0);
+
 public:
     std::string BMPPath;
     std::list<HistoryEntry> imageDataHistory;      // 全局撤销栈(操作前状态)
@@ -572,6 +577,13 @@ private:
     double m_gradientOpacity = 1.0;
     QColor m_gradientStartColor = QColor(0, 0, 0);
     QColor m_gradientEndColor = QColor(255, 255, 255);
+
+    // ---- 文字工具 ----
+    void PlaceTextLayer(const QPoint &pos);   // 点击画布后弹对话框并创建文字图层
+    QAction *m_textToolAction = nullptr;
+    QFont m_textFont = QFont(QStringLiteral("Microsoft YaHei"), 48);
+    QColor m_textColor = QColor(0, 0, 0);
+    int m_textAlign = 0;
 
     // 保存/导出用像素：多图层时为合成结果
     const std::vector<uint8_t> &DisplayPixels();
