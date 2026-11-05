@@ -147,12 +147,14 @@ class TextDialog : public QDialog
     Q_OBJECT
 public:
     explicit TextDialog(const QFont &initialFont, const QColor &initialColor,
-                        QWidget *parent = nullptr);
+                        QWidget *parent = nullptr, bool editMode = false);
     QString text() const;
     QFont font() const;
     QColor color() const { return m_color; }
     // 0 左对齐 / 1 居中 / 2 右对齐
     int alignment() const;
+    // 编辑已有文字图层时预填内容与对齐方式
+    void setContent(const QString &text, int alignment);
 
 private:
     void updatePreview();

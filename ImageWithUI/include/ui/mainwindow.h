@@ -62,6 +62,16 @@ struct SelectionChannel {
     SelectionMask mask;
 };
 
+// 文字图层参数：保存可重新渲染的文本元数据(只有文字图层带这份数据)
+struct LayerText {
+    QString text;
+    QFont font;
+    QColor color = QColor(0, 0, 0);
+    int alignment = 0;      // 0 左 / 1 中 / 2 右
+    QPoint anchor;          // 文字块左上角(图像像素坐标，视觉 y 向下)
+    bool valid = false;
+};
+
 // 图层：与画布同尺寸的 BGR 像素 + 叠放属性
 // 约定：所有图层尺寸都与文档画布一致；imageData 始终是【当前活动图层】的像素
 struct Layer {
@@ -74,6 +84,7 @@ struct Layer {
     // 空蒙版表示该图层没有蒙版；maskEnabled=false 时临时停用(保留数据)
     SelectionMask mask;
     bool maskEnabled = true;
+    LayerText text;         // 文字图层可再次编辑所需的元数据
 };
 
 // 历史快照：必须连同尺寸一起保存，
@@ -267,6 +278,9 @@ public:
     // topLeft 为文字块左上角(图像像素坐标，视觉 y 向下)；alignment: 0 左 / 1 中 / 2 右
     void AddTextLayer(const QPoint &topLeft, const QString &text, const QFont &font,
                       const QColor &color, int alignment = 0);
+    // 重新渲染指定文字图层(自检与交互编辑共用)；index 为图层栈下标
+    bool UpdateTextLayer(int index, const QString &text, const QFont &font,
+                         const QColor &color, int alignment);
 
     // ---- 形状图层(矩形/椭圆/直线，栅格化为独立图层) ----
     // type: 0 矩形 / 1 椭圆 / 2 直线；strokeWidth 为 0 表示不描边
@@ -577,6 +591,7 @@ private:
     void UpdateGradientControls();          // 刷新面板上的颜色/类型显示
     void SetupShapePanel();                 // 右侧形状参数面板
     void UpdateShapeControls();             // 刷新形状颜色/类型显示
+    void EditTextLayer(int index);          // 双击文字图层：预填参数并重渲染
     QAction *m_gradientToolAction = nullptr;
     QGroupBox *m_gradientGroup = nullptr;
     QLabel *m_gradientStartSwatch = nullptr;

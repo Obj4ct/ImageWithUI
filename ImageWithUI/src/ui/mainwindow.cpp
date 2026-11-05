@@ -144,6 +144,35 @@ std::vector<uint8_t> DownsampleBgr(const std::vector<uint8_t> &src, int32_t w, i
     return out;
 }
 
+// 把文字按视觉坐标画到 QImage 上(颜色由 QPainter 处理，写入 BGR 时统一转换)
+void DrawTextOnCanvas(QImage &canvas, const QString &text, const QFont &font,
+                      const QColor &color, int alignment, const QPoint &topLeft)
+{
+    const QStringList lines = text.split('\n');
+    QFontMetrics metrics(font);
+    int maxWidth = 0;
+    for (const QString &line : lines) {
+        maxWidth = std::max(maxWidth, metrics.horizontalAdvance(line));
+    }
+    const int lineHeight = metrics.lineSpacing();
+
+    QPainter painter(&canvas);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::TextAntialiasing, true);
+    painter.setFont(font);
+    painter.setPen(color);
+    for (int i = 0; i < lines.size(); ++i) {
+        const int lineWidth = metrics.horizontalAdvance(lines[i]);
+        int x = topLeft.x();
+        if (alignment == 1) {
+            x += (maxWidth - lineWidth) / 2;
+        } else if (alignment == 2) {
+            x += maxWidth - lineWidth;
+        }
+        painter.drawText(QPoint(x, topLeft.y() + metrics.ascent() + i * lineHeight), lines[i]);
+    }
+}
+
 // QImage(BGR888) -> 内部 BGR 自底向上紧凑缓冲
 std::vector<uint8_t> BgrFromQImage(const QImage &image)
 {
@@ -3405,6 +3434,17 @@ void MainWindow::SetupLayerPanel()
         }
         SetLayerVisible(LayerCount() - 1 - row, item->checkState() == Qt::Checked);
     });
+    // 双击文字图层：预填原参数并允许重新编辑
+    connect(m_layerList, &QListWidget::itemDoubleClicked, this,
+            [this](QListWidgetItem *item) {
+                if (item == nullptr || m_layerList == nullptr) {
+                    return;
+                }
+                const int row = m_layerList->row(item);
+                if (row >= 0) {
+                    EditTextLayer(LayerCount() - 1 - row);
+                }
+            });
     connect(m_layerOpacitySlider, &QSlider::valueChanged, this, [this](int value) {
         m_layerOpacityLabel->setText(QString("%1%").arg(value));
         SetLayerOpacity(m_activeLayer, value / 100.0);
@@ -4443,31 +4483,7 @@ void MainWindow::AddTextLayer(const QPoint &topLeft, const QString &text, const 
         return;
     }
 
-    const QStringList lines = text.split('\n');
-    QFontMetrics metrics(font);
-    int maxWidth = 0;
-    for (const QString &line : lines) {
-        maxWidth = std::max(maxWidth, metrics.horizontalAdvance(line));
-    }
-    const int lineHeight = metrics.lineSpacing();
-
-    QPainter painter(&canvas);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setRenderHint(QPainter::TextAntialiasing, true);
-    painter.setFont(font);
-    painter.setPen(color);
-    for (int i = 0; i < lines.size(); ++i) {
-        const int lineWidth = metrics.horizontalAdvance(lines[i]);
-        int x = topLeft.x();
-        if (alignment == 1) {
-            x += (maxWidth - lineWidth) / 2;
-        } else if (alignment == 2) {
-            x += maxWidth - lineWidth;
-        }
-        painter.drawText(QPoint(x, topLeft.y() + metrics.ascent() + i * lineHeight),
-                         lines[i]);
-    }
-    painter.end();
+    DrawTextOnCanvas(canvas, text, font, color, alignment, topLeft);
 
     Layer layer;
     layer.name = QString("文字");
@@ -4476,6 +4492,12 @@ void MainWindow::AddTextLayer(const QPoint &topLeft, const QString &text, const 
         UpdateStatus("文字图层创建失败");
         return;
     }
+    layer.text.text = text;
+    layer.text.font = font;
+    layer.text.color = color;
+    layer.text.alignment = alignment;
+    layer.text.anchor = topLeft;
+    layer.text.valid = true;
 
     // 插到活动图层上方并设为活动图层
     m_layers.insert(m_layers.begin() + (m_activeLayer + 1), layer);
@@ -4485,6 +4507,99 @@ void MainWindow::AddTextLayer(const QPoint &topLeft, const QString &text, const 
     UpdateLayerPanel();
     CommitLayerStructure(QString("添加文字图层"), before);
     UpdateStatus(QString("已添加文字图层「%1」").arg(text.left(12)));
+}
+
+// 双击文字图层：用原参数预填对话框，确认后重新渲染
+void MainWindow::EditTextLayer(int index)
+{
+    if (imageData.empty() || m_busy || index < 0 ||
+        index >= static_cast<int>(m_layers.size())) {
+        return;
+    }
+    const Layer &layer = m_layers[static_cast<size_t>(index)];
+    if (!layer.text.valid) {
+        UpdateStatus("该图层不是文字图层，无法编辑文字");
+        return;
+    }
+    TextDialog dialog(layer.text.font, layer.text.color, this, true);
+    dialog.setContent(layer.text.text, layer.text.alignment);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+    UpdateTextLayer(index, dialog.text(), dialog.font(), dialog.color(), dialog.alignment());
+}
+
+bool MainWindow::UpdateTextLayer(int index, const QString &text, const QFont &font,
+                                 const QColor &color, int alignment)
+{
+    if (imageData.empty() || m_layers.empty() || m_busy || index < 0 ||
+        index >= static_cast<int>(m_layers.size())) {
+        return false;
+    }
+    Layer &layer = m_layers[static_cast<size_t>(index)];
+    if (!layer.text.valid) {
+        UpdateStatus("该图层不是文字图层");
+        return false;
+    }
+    if (text.trimmed().isEmpty()) {
+        UpdateStatus("文字内容为空，未修改图层");
+        return false;
+    }
+    const int32_t w = myValue.bmpInfo.GetWidth();
+    const int32_t h = myValue.bmpInfo.GetHeight();
+    if (w <= 0 || h <= 0) {
+        return false;
+    }
+    CancelPreview();
+    const ImageSnapshot before = CurrentSnapshot();
+    // 活动图层像素可能还在 imageData 里，先同步回图层栈
+    m_layers[static_cast<size_t>(m_activeLayer)].data = imageData;
+
+    // 重算该文字图层下方的合成底图(忽略文字图层自身，保证不会把旧文字叠上去)
+    const size_t bytes = static_cast<size_t>(w) * static_cast<size_t>(h) * 3;
+    std::vector<uint8_t> base(bytes, 255);
+    for (int i = 0; i < index; ++i) {
+        const Layer &below = m_layers[static_cast<size_t>(i)];
+        if (!below.visible) {
+            continue;
+        }
+        const std::vector<uint8_t> &src = (i == m_activeLayer) ? imageData : below.data;
+        if (src.size() != bytes) {
+            continue;
+        }
+        const SelectionMask *mask = nullptr;
+        if (below.maskEnabled && !below.mask.isEmpty() &&
+            below.mask.width == w && below.mask.height == h) {
+            mask = &below.mask;
+        }
+        BlendLayerInto(base, src, below.opacity, below.blend, mask);
+    }
+
+    QImage canvas = ImageOps::ToDisplayImage(base, w, h);
+    if (canvas.isNull()) {
+        UpdateStatus("文字图层重渲染失败");
+        return false;
+    }
+    DrawTextOnCanvas(canvas, text, font, color, alignment, layer.text.anchor);
+    const std::vector<uint8_t> rendered = BgrFromQImage(canvas);
+    if (rendered.empty()) {
+        UpdateStatus("文字图层重渲染失败");
+        return false;
+    }
+
+    layer.data = rendered;
+    layer.text.text = text;
+    layer.text.font = font;
+    layer.text.color = color;
+    layer.text.alignment = alignment;
+    if (index == m_activeLayer) {
+        imageData = rendered;
+    }
+
+    UpdateLayerPanel();
+    CommitLayerStructure(QString("编辑文字图层"), before);
+    UpdateStatus(QString("已更新文字图层「%1」").arg(text.left(12)));
+    return true;
 }
 
 // ------------------------------------------------------------------

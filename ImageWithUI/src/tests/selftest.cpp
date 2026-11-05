@@ -1836,6 +1836,89 @@ int Run(const QString &imagePath)
         out().flush();
     }
 
+    // ---------- 13.7 文字图层可再次编辑：改内容/颜色 / 撤销 ----------
+    {
+        const QString editPath = QDir::tempPath() + "/imagewithui_text_edit.png";
+        {
+            QImage img(64, 48, QImage::Format_RGB32);
+            img.fill(qRgb(255, 255, 255));
+            img.save(editPath, "PNG");
+        }
+
+        QString failReason;
+        {
+            MainWindow win;
+            if (!win.OpenImage(editPath)) {
+                failReason = "无法打开测试图";
+            } else {
+                QFont font(QStringLiteral("Arial"), 24, QFont::Bold);
+                win.AddTextLayer(QPoint(8, 8), QStringLiteral("AB"), font, QColor(255, 0, 0), 0);
+                if (win.LayerCount() != 2) {
+                    failReason = "没有生成独立文字图层";
+                } else if (!win.UpdateTextLayer(1, QStringLiteral("A"), font,
+                                                QColor(0, 0, 255), 0)) {
+                    failReason = "重渲染文字图层失败";
+                } else {
+                    const std::vector<uint8_t> edited = win.CompositePixels();
+                    int red = 0;
+                    int blue = 0;
+                    for (size_t i = 0; i + 2 < edited.size(); i += 3) {
+                        const int b = edited[i];
+                        const int g = edited[i + 1];
+                        const int r = edited[i + 2];
+                        if (r > 150 && g < 120 && b < 120) {
+                            ++red;
+                        }
+                        if (b > 150 && r < 120 && g < 120) {
+                            ++blue;
+                        }
+                    }
+                    if (blue < 5) {
+                        failReason = QString("编辑后蓝字像素过少(%1)").arg(blue);
+                    } else if (red > 0) {
+                        failReason = "旧红色文字没有被替换";
+                    } else {
+                        win.UndoImageProcessing();
+                        const std::vector<uint8_t> beforeEdit = win.CompositePixels();
+                        int redBack = 0;
+                        int blueBack = 0;
+                        for (size_t i = 0; i + 2 < beforeEdit.size(); i += 3) {
+                            const int b = beforeEdit[i];
+                            const int g = beforeEdit[i + 1];
+                            const int r = beforeEdit[i + 2];
+                            if (r > 150 && g < 120 && b < 120) {
+                                ++redBack;
+                            }
+                            if (b > 150 && r < 120 && g < 120) {
+                                ++blueBack;
+                            }
+                        }
+                        if (win.LayerCount() != 2) {
+                            failReason = "撤销编辑后图层数不正确";
+                        } else if (redBack < 5 || blueBack > 0) {
+                            failReason = "撤销编辑后没有恢复原文字";
+                        } else {
+                            win.UndoImageProcessing();
+                            if (win.LayerCount() != 1) {
+                                failReason = "再次撤销后图层数没有还原";
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        QFile::remove(editPath);
+
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 文字图层编辑 : 改内容/颜色 / 撤销\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 文字图层编辑 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
     // ---------- 13.6 形状图层：矩形填充 / 椭圆边界 / 直线 / 撤销 ----------
     {
         const QString shapePath = QDir::tempPath() + "/imagewithui_shape.png";

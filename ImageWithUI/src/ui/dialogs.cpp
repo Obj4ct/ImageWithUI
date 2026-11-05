@@ -648,11 +648,12 @@ int ScaleDialog::algorithm() const
 // ------------------------------------------------------------------
 // TextDialog
 // ------------------------------------------------------------------
-TextDialog::TextDialog(const QFont &initialFont, const QColor &initialColor, QWidget *parent)
+TextDialog::TextDialog(const QFont &initialFont, const QColor &initialColor, QWidget *parent,
+                       bool editMode)
     : QDialog(parent),
       m_color(initialColor.isValid() ? initialColor : QColor(0, 0, 0))
 {
-    setWindowTitle(QString("文字图层"));
+    setWindowTitle(editMode ? QString("编辑文字图层") : QString("文字图层"));
     setMinimumWidth(440);
 
     QVBoxLayout *root = new QVBoxLayout(this);
@@ -704,7 +705,7 @@ TextDialog::TextDialog(const QFont &initialFont, const QColor &initialColor, QWi
 
     // 按钮
     QDialogButtonBox *box = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
-    box->button(QDialogButtonBox::Ok)->setText(QString("添加"));
+    box->button(QDialogButtonBox::Ok)->setText(editMode ? QString("确定") : QString("添加"));
     box->button(QDialogButtonBox::Cancel)->setText(QString("取消"));
     connect(box, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(box, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -745,6 +746,15 @@ QFont TextDialog::font() const
 int TextDialog::alignment() const
 {
     return m_align->currentIndex();
+}
+
+void TextDialog::setContent(const QString &text, int alignment)
+{
+    QSignalBlocker blockText(m_text);
+    QSignalBlocker blockAlign(m_align);
+    m_text->setPlainText(text);
+    m_align->setCurrentIndex(qBound(0, alignment, 2));
+    updatePreview();
 }
 
 void TextDialog::updatePreview()
