@@ -1653,20 +1653,26 @@ int Run(const QString &imagePath)
                         } else {
                             win.UndoImageProcessing();
                             win.ClearSelection();
-                            // 橡皮：在红色笔迹上以白色覆盖
+                            // 橡皮：把红色笔迹擦成透明，合成到白底后应显示白色
                             win.PaintBrushStroke(QPoint(20, 20), QPoint(20, 20), false);
                             if (!isRed(20, 20)) {
                                 failReason = "橡皮测试前的画笔失败";
                             } else {
                                 win.PaintBrushStroke(QPoint(20, 20), QPoint(20, 20), true);
-                                const bool white = pixel(20, 20, 0) >= 250 &&
-                                                   pixel(20, 20, 1) >= 250 &&
-                                                   pixel(20, 20, 2) >= 250;
+                                const std::vector<uint8_t> erased = win.CompositePixels();
+                                const size_t ei =
+                                    (static_cast<size_t>(h - 1 - 20) * static_cast<size_t>(w) + 20) * 3;
+                                const bool white = erased.size() > ei + 2 && erased[ei] >= 250 &&
+                                                   erased[ei + 1] >= 250 && erased[ei + 2] >= 250;
                                 if (!white) {
-                                    failReason = "橡皮没有用白色覆盖笔迹";
+                                    failReason = "橡皮没有把笔迹擦成透明";
                                 } else {
                                     win.UndoImageProcessing();
-                                    if (!isRed(20, 20)) {
+                                    const std::vector<uint8_t> restored = win.CompositePixels();
+                                    const bool redBack =
+                                        restored.size() > ei + 2 && restored[ei + 2] > 215 &&
+                                        restored[ei] < 40 && restored[ei + 1] < 40;
+                                    if (!redBack) {
                                         failReason = "撤销橡皮后未回到红色笔迹";
                                     }
                                 }
@@ -2002,6 +2008,153 @@ int Run(const QString &imagePath)
         } else {
             ++g_fail;
             out() << "[FAIL] 形状图层 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
+    // ---------- 13.8 图层 alpha：橡皮擦成透明 / 露出下层 / 撤销与重做 ----------
+    {
+        const QString alphaPath = QDir::tempPath() + "/imagewithui_alpha.png";
+        {
+            QImage img(64, 48, QImage::Format_RGB32);
+            img.fill(qRgb(255, 255, 255));
+            img.save(alphaPath, "PNG");
+        }
+
+        QString failReason;
+        {
+            MainWindow win;
+            if (!win.OpenImage(alphaPath)) {
+                failReason = "无法打开测试图";
+            } else {
+                const int w = 64;
+                const int h = 48;
+                auto pixelAt = [w, h](const std::vector<uint8_t> &data, int x, int y,
+                                      int &r, int &g, int &b) {
+                    const size_t idx = (static_cast<size_t>(h - 1 - y) * static_cast<size_t>(w) +
+                                        static_cast<size_t>(x)) * 3;
+                    b = data[idx];
+                    g = data[idx + 1];
+                    r = data[idx + 2];
+                };
+
+                win.AddLayer();   // 在上方新建纯白图层
+                win.SetBrushParams(9, 100, 1.0, QColor(220, 30, 30));
+                win.PaintBrushStroke(QPoint(10, 24), QPoint(54, 24), false);
+                win.SetBrushParams(7, 100, 1.0, QColor(0, 0, 0));
+                win.PaintBrushStroke(QPoint(30, 24), QPoint(34, 24), true);
+
+                std::vector<uint8_t> composite = win.CompositePixels();
+                int r = 0, g = 0, b = 0;
+                pixelAt(composite, 12, 24, r, g, b);
+                const bool redKept = (r > 150 && g < 120 && b < 120);
+                pixelAt(composite, 32, 24, r, g, b);
+                const bool erasedClear = (r > 245 && g > 245 && b > 245);
+                if (win.LayerCount() != 2) {
+                    failReason = "擦除后图层数异常";
+                } else if (!redKept) {
+                    failReason = "擦除范围外的笔画被破坏";
+                } else if (!erasedClear) {
+                    failReason = "擦除区域没有露出下层(alpha 未生效)";
+                } else {
+                    win.UndoImageProcessing();   // 撤销擦除
+                    composite = win.CompositePixels();
+                    pixelAt(composite, 32, 24, r, g, b);
+                    if (!(r > 150 && g < 120 && b < 120)) {
+                        failReason = "撤销擦除没有恢复笔画";
+                    } else {
+                        win.RedoImageProcessing();   // 重做擦除
+                        composite = win.CompositePixels();
+                        pixelAt(composite, 32, 24, r, g, b);
+                        if (!(r > 245 && g > 245 && b > 245)) {
+                            failReason = "重做擦除没有恢复透明";
+                        } else {
+                            win.UndoImageProcessing();
+                            win.UndoImageProcessing();   // 撤销画笔
+                            composite = win.CompositePixels();
+                            pixelAt(composite, 12, 24, r, g, b);
+                            if (!(r > 245 && g > 245 && b > 245)) {
+                                failReason = "撤销画笔后图层没有还原";
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        QFile::remove(alphaPath);
+
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 图层 alpha : 橡皮透明擦除 / 露出下层 / 撤销重做\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 图层 alpha : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
+    // ---------- 13.9 文字/形状图层透明底：不遮挡下层内容 ----------
+    {
+        const QString transparentPath = QDir::tempPath() + "/imagewithui_transparent_layer.png";
+        {
+            QImage img(64, 48, QImage::Format_RGB32);
+            img.fill(qRgb(40, 120, 200));   // 内存里是 BGR(200,120,40)
+            img.save(transparentPath, "PNG");
+        }
+
+        QString failReason;
+        {
+            MainWindow win;
+            if (!win.OpenImage(transparentPath)) {
+                failReason = "无法打开测试图";
+            } else {
+                const int w = 64;
+                const int h = 48;
+                auto pixelAt = [w, h](const std::vector<uint8_t> &data, int x, int y,
+                                      int &r, int &g, int &b) {
+                    const size_t idx = (static_cast<size_t>(h - 1 - y) * static_cast<size_t>(w) +
+                                        static_cast<size_t>(x)) * 3;
+                    b = data[idx];
+                    g = data[idx + 1];
+                    r = data[idx + 2];
+                };
+                QFont font(QStringLiteral("Arial"), 24, QFont::Bold);
+                win.AddTextLayer(QPoint(8, 8), QStringLiteral("AB"), font, QColor(255, 0, 0), 0);
+                std::vector<uint8_t> composite = win.CompositePixels();
+                int r = 0, g = 0, b = 0;
+                pixelAt(composite, 55, 40, r, g, b);
+                const bool textBackdropTransparent = (b > 150 && r < 120 && g > 90 && g < 150);
+                if (!textBackdropTransparent) {
+                    failReason = "文字图层背景不是透明(遮住了下层)";
+                } else {
+                    win.UndoImageProcessing();
+                    win.SetShapeParams(0, true, QColor(220, 40, 40), QColor(20, 20, 20), 0, 1.0);
+                    win.AddShapeLayer(QPoint(10, 10), QPoint(40, 30));
+                    composite = win.CompositePixels();
+                    pixelAt(composite, 55, 40, r, g, b);
+                    if (!(b > 150 && r < 120 && g > 90 && g < 150)) {
+                        failReason = "形状图层背景不是透明(遮住了下层)";
+                    } else {
+                        pixelAt(composite, 25, 20, r, g, b);
+                        if (!(r > 150 && g < 120 && b < 120)) {
+                            failReason = "形状填充颜色不正确";
+                        }
+                        win.UndoImageProcessing();
+                        if (win.LayerCount() != 1) {
+                            failReason = "撤销后图层数没有还原";
+                        }
+                    }
+                }
+            }
+        }
+        QFile::remove(transparentPath);
+
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 透明底图层 : 文字/形状不遮挡下层 / 撤销\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 透明底图层 : " << failReason << "\n";
         }
         out().flush();
     }

@@ -198,25 +198,64 @@ std::vector<uint8_t> BgrFromQImage(const QImage &image)
     return out;
 }
 
+// 透明画布渲染结果 -> 内部 BGR(自底向上) + alpha(视觉坐标 y 向下)
+// 文字/形状图层用这种方式保留真正的透明底，合成时按 alpha 与下层混合。
+void BgrAlphaFromQImage(const QImage &image, std::vector<uint8_t> &bgr, SelectionMask &alpha)
+{
+    bgr.clear();
+    alpha.clear();
+    if (image.isNull()) {
+        return;
+    }
+    const QImage argb = image.convertToFormat(QImage::Format_ARGB32);
+    const int32_t w = argb.width();
+    const int32_t h = argb.height();
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+    bgr.assign(static_cast<size_t>(w) * static_cast<size_t>(h) * 3, 0);
+    alpha.width = w;
+    alpha.height = h;
+    alpha.data.assign(static_cast<size_t>(w) * static_cast<size_t>(h), 0);
+    const size_t rowBytes = static_cast<size_t>(w) * 3;
+    for (int32_t y = 0; y < h; ++y) {
+        const QRgb *line = reinterpret_cast<const QRgb *>(argb.constScanLine(y));
+        const size_t off = static_cast<size_t>(h - 1 - y) * rowBytes;
+        const size_t arow = static_cast<size_t>(y) * static_cast<size_t>(w);
+        for (int32_t x = 0; x < w; ++x) {
+            const QRgb px = line[x];
+            bgr[off + static_cast<size_t>(x) * 3] = static_cast<uint8_t>(qBlue(px));
+            bgr[off + static_cast<size_t>(x) * 3 + 1] = static_cast<uint8_t>(qGreen(px));
+            bgr[off + static_cast<size_t>(x) * 3 + 2] = static_cast<uint8_t>(qRed(px));
+            alpha.data[arow + static_cast<size_t>(x)] = static_cast<uint8_t>(qAlpha(px));
+        }
+    }
+}
+
 // 预览超过这个像素数就先缩小再算，避免大图拖动参数卡顿
 constexpr size_t kPreviewMaxPixels = 2000000;
 
 // 把一个图层按不透明度/混合模式叠到合成缓冲上(dst 初始为白，尺寸与图层一致)
 // mask 非空且尺寸与画布一致时，按蒙版覆盖度进一步衰减该像素的混合强度：
 // 蒙版 0 → 该像素完全不参与合成，255 → 与不透明度正常混合，中间值线性过渡。
+// alpha 同理，表示图层自身对该像素的不透明度(橡皮擦除会把它降低到 0)。
 void BlendLayerInto(std::vector<uint8_t> &dst, const std::vector<uint8_t> &src,
-                    double opacity, int blend, const SelectionMask *mask = nullptr)
+                    double opacity, int blend, const SelectionMask *mask = nullptr,
+                    const SelectionMask *alpha = nullptr)
 {
     const size_t bytes = std::min(dst.size(), src.size());
     const int op = qBound(0, static_cast<int>(opacity * 255.0 + 0.5), 255);
     if (op == 0) {
         return;
     }
-    const bool useMask = (mask != nullptr && !mask->isEmpty() &&
-                          mask->width > 0 && mask->height > 0 &&
-                          mask->data.size() ==
-                              static_cast<size_t>(mask->width) * static_cast<size_t>(mask->height));
-    if (!useMask) {
+    auto usable = [](const SelectionMask *m) {
+        return m != nullptr && !m->isEmpty() && m->width > 0 && m->height > 0 &&
+               m->data.size() ==
+                   static_cast<size_t>(m->width) * static_cast<size_t>(m->height);
+    };
+    const bool useMask = usable(mask);
+    const bool useAlpha = usable(alpha);
+    if (!useMask && !useAlpha) {
         if (op == 255 && blend == 0) {
             dst.assign(src.begin(), src.begin() + static_cast<ptrdiff_t>(bytes));
             return;
@@ -235,23 +274,37 @@ void BlendLayerInto(std::vector<uint8_t> &dst, const std::vector<uint8_t> &src,
         return;
     }
 
-    // 有蒙版：逐像素把不透明度再乘以覆盖度。
-    // 蒙版按【视觉坐标】存储(y 向下)，内存缓冲是自底向上，所以视觉行 y 对应内存行 h-1-y。
-    const int32_t w = mask->width;
-    const int32_t h = mask->height;
+    // 有蒙版/alpha：逐像素把不透明度再乘以覆盖度。
+    // 两者都按【视觉坐标】存储(y 向下)，内存缓冲是自底向上，所以视觉行 y 对应内存行 h-1-y。
+    const int32_t w = useMask ? mask->width : alpha->width;
+    const int32_t h = useMask ? mask->height : alpha->height;
     const size_t rowBytes = static_cast<size_t>(w) * 3;
     if (bytes < rowBytes * static_cast<size_t>(h)) {
         return;
     }
     for (int32_t y = 0; y < h; ++y) {
-        const uint8_t *mrow = mask->data.data() + static_cast<size_t>(y) * static_cast<size_t>(w);
+        const uint8_t *mrow = useMask
+                                  ? mask->data.data() + static_cast<size_t>(y) * static_cast<size_t>(w)
+                                  : nullptr;
+        const uint8_t *arow = useAlpha
+                                  ? alpha->data.data() + static_cast<size_t>(y) * static_cast<size_t>(w)
+                                  : nullptr;
         const size_t off = static_cast<size_t>(h - 1 - y) * rowBytes;
         for (int32_t x = 0; x < w; ++x) {
-            const int a = mrow[x];
-            if (a == 0) {
-                continue;   // 完全隐藏在蒙版里，保留下层结果
+            int atten = 255;
+            if (mrow != nullptr) {
+                atten = mrow[x];
+                if (atten == 0) {
+                    continue;   // 完全隐藏在蒙版里，保留下层结果
+                }
             }
-            const int eff = op * a / 255;
+            if (arow != nullptr) {
+                atten = atten * arow[x] / 255;
+                if (atten == 0) {
+                    continue;   // 完全透明，直接露出下层
+                }
+            }
+            const int eff = op * atten / 255;
             if (eff <= 0) {
                 continue;
             }
@@ -418,7 +471,8 @@ bool SameLayerStack(const std::vector<Layer> &a, const std::vector<Layer> &b)
             a[i].blend != b[i].blend || std::abs(a[i].opacity - b[i].opacity) > 1e-9 ||
             a[i].maskEnabled != b[i].maskEnabled || a[i].mask.width != b[i].mask.width ||
             a[i].mask.height != b[i].mask.height || a[i].mask.data != b[i].mask.data ||
-            a[i].data != b[i].data) {
+            a[i].alpha.width != b[i].alpha.width || a[i].alpha.height != b[i].alpha.height ||
+            a[i].alpha.data != b[i].alpha.data || a[i].data != b[i].data) {
             return false;
         }
     }
@@ -3545,12 +3599,29 @@ bool MainWindow::AnyLayerMaskEnabled() const
     return false;
 }
 
+bool MainWindow::AnyLayerAlphaActive() const
+{
+    const int32_t w = myValue.bmpInfo.GetWidth();
+    const int32_t h = myValue.bmpInfo.GetHeight();
+    for (const Layer &layer : m_layers) {
+        if (!layer.alpha.isEmpty() && layer.alpha.width == w && layer.alpha.height == h) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool MainWindow::NeedsComposite() const
+{
+    return m_layers.size() > 1 || AnyLayerMaskEnabled() || AnyLayerAlphaActive();
+}
+
 const std::vector<uint8_t> &MainWindow::BuildComposite()
 {
     const int32_t w = myValue.bmpInfo.GetWidth();
     const int32_t h = myValue.bmpInfo.GetHeight();
-    // 单图层且没有生效蒙版时不需要合成，直接显示 imageData
-    const bool needComposite = (m_layers.size() > 1) || AnyLayerMaskEnabled();
+    // 单图层且没有生效蒙版/alpha 时不需要合成，直接显示 imageData
+    const bool needComposite = NeedsComposite();
     if (!needComposite || w <= 0 || h <= 0 || imageData.empty()) {
         m_composite.clear();
         return imageData;
@@ -3573,14 +3644,18 @@ const std::vector<uint8_t> &MainWindow::BuildComposite()
             layer.mask.width == w && layer.mask.height == h) {
             mask = &layer.mask;
         }
-        BlendLayerInto(m_composite, src, layer.opacity, layer.blend, mask);
+        const SelectionMask *alpha = nullptr;
+        if (!layer.alpha.isEmpty() && layer.alpha.width == w && layer.alpha.height == h) {
+            alpha = &layer.alpha;
+        }
+        BlendLayerInto(m_composite, src, layer.opacity, layer.blend, mask, alpha);
     }
     return m_composite;
 }
 
 const std::vector<uint8_t> &MainWindow::DisplayPixels()
 {
-    if (m_layers.size() > 1 || AnyLayerMaskEnabled()) {
+    if (NeedsComposite()) {
         return BuildComposite();
     }
     return imageData;
@@ -3595,12 +3670,16 @@ ImageSnapshot MainWindow::MakeSnapshot(std::vector<uint8_t> pixels, int32_t widt
     snap.quad = quad;
     snap.layers = m_layers;
     snap.activeLayer = m_activeLayer;
-    // 画布尺寸刚改变时(旋转/缩放/裁剪)，旧蒙版尺寸已不匹配，直接丢弃避免错位显示。
+    // 画布尺寸刚改变时(旋转/缩放/裁剪)，旧蒙版/alpha 尺寸已不匹配，直接丢弃避免错位显示。
     // "操作前"的快照仍按旧尺寸保存蒙版，撤销回到旧尺寸时能完整恢复。
     for (Layer &layer : snap.layers) {
         if (!layer.mask.isEmpty() &&
             (layer.mask.width != width || layer.mask.height != height)) {
             layer.mask.clear();
+        }
+        if (!layer.alpha.isEmpty() &&
+            (layer.alpha.width != width || layer.alpha.height != height)) {
+            layer.alpha.clear();
         }
     }
     if (!snap.layers.empty()) {
@@ -3644,7 +3723,10 @@ bool MainWindow::RequireSingleLayer(const QString &opName)
 {
     const bool multiLayer = m_layers.size() > 1;
     const bool hasMask = HasLayerMask(m_activeLayer);
-    if (!multiLayer && !hasMask) {
+    const bool hasAlpha = m_activeLayer >= 0 &&
+                          m_activeLayer < static_cast<int>(m_layers.size()) &&
+                          !m_layers[static_cast<size_t>(m_activeLayer)].alpha.isEmpty();
+    if (!multiLayer && !hasMask && !hasAlpha) {
         return true;
     }
     if (multiLayer) {
@@ -3652,11 +3734,16 @@ bool MainWindow::RequireSingleLayer(const QString &opName)
         function.CreateMessagebox("提示",
                                   opName + " 会改变画布几何，多图层下暂不支持。\n"
                                   "请先执行「图层 → 合并所有图层」后再试。");
-    } else {
+    } else if (hasMask) {
         UpdateStatus(opName + "：带蒙版时需要先删除蒙版");
         function.CreateMessagebox("提示",
                                   opName + " 会翻转/改变画布几何，无法保持图层蒙版对齐。\n"
                                   "请先执行「图层 → 蒙版 → 删除蒙版」后再试。");
+    } else {
+        UpdateStatus(opName + "：带透明像素时需要先合并图层");
+        function.CreateMessagebox("提示",
+                                  opName + " 会翻转/改变画布几何，无法保持图层透明区域对齐。\n"
+                                  "请先执行「图层 → 合并所有图层」后再试。");
     }
     return false;
 }
@@ -4123,6 +4210,29 @@ bool MainWindow::ApplyPendingBrush()
     bool changed = false;
     const size_t rowBytes = static_cast<size_t>(m_brushMaskW) * 3;
 
+    // 橡皮/画笔都作用在活动图层的 alpha 上：
+    // 擦除减少 alpha(露出下层)，绘制则把已有 alpha 提升到笔画覆盖度。
+    Layer *active = (m_activeLayer >= 0 && m_activeLayer < static_cast<int>(m_layers.size()))
+                        ? &m_layers[static_cast<size_t>(m_activeLayer)]
+                        : nullptr;
+    if (active == nullptr) {
+        return false;
+    }
+    if (m_brushErase) {
+        // 首次擦除时建立整层不透明的 alpha 缓冲，之后只做递减
+        if (active->alpha.isEmpty()) {
+            active->alpha.width = m_brushMaskW;
+            active->alpha.height = m_brushMaskH;
+            active->alpha.data.assign(m_brushMask.size(), 255);
+        } else if (active->alpha.data.size() != m_brushMask.size()) {
+            active->alpha.width = m_brushMaskW;
+            active->alpha.height = m_brushMaskH;
+            active->alpha.data.assign(m_brushMask.size(), 255);
+        }
+    }
+    const bool alphaValid = active != nullptr && !active->alpha.isEmpty() &&
+                            active->alpha.data.size() == m_brushMask.size();
+
     for (int y = 0; y < m_brushMaskH; ++y) {
         const size_t maskRow = static_cast<size_t>(y) * m_brushMaskW;
         const size_t off = static_cast<size_t>(m_brushMaskH - 1 - y) * rowBytes;
@@ -4138,12 +4248,27 @@ bool MainWindow::ApplyPendingBrush()
             if (cov <= 0) {
                 continue;
             }
+            if (m_brushErase) {
+                // 擦除只减少 alpha，保留原像素颜色(便于之后恢复/继续编辑)
+                uint8_t &a = active->alpha.data[maskRow + static_cast<size_t>(x)];
+                const int na = static_cast<int>(a) * (255 - cov) / 255;
+                if (na != a) {
+                    a = static_cast<uint8_t>(na);
+                    changed = true;
+                }
+                continue;
+            }
             const size_t i = off + static_cast<size_t>(x) * 3;
             for (int c = 0; c < 3; ++c) {
-                const int target = m_brushErase ? 255
-                                                : (c == 0 ? colorB : (c == 1 ? colorG : colorR));
+                const int target = (c == 0 ? colorB : (c == 1 ? colorG : colorR));
                 imageData[i + c] = static_cast<uint8_t>(
                     (static_cast<int>(imageData[i + c]) * (255 - cov) + target * cov) / 255);
+            }
+            if (alphaValid) {
+                // 在透明区域上绘制时同步补回不透明度
+                uint8_t &a = active->alpha.data[maskRow + static_cast<size_t>(x)];
+                const int na = std::max<int>(a, cov);
+                a = static_cast<uint8_t>(na);
             }
             changed = true;
         }
@@ -4433,8 +4558,8 @@ void MainWindow::ApplyGradientFill(const QPoint &from, const QPoint &to, bool ra
 
 // ------------------------------------------------------------------
 // 文字图层
-// 当前图层模型没有透明通道，所以新文字图层以"当前可见合成"为底图，
-// 再把文字栅格化进去；这样视觉上不会遮挡下层内容，合并/保存/撤销与普通图层一致。
+// 文字画在透明画布上，图层自带 alpha 通道，下层内容会透出来；
+// 合并/保存/撤销与普通图层一致，保存时会按白底压平。
 // ------------------------------------------------------------------
 
 void MainWindow::PlaceTextLayer(const QPoint &pos)
@@ -4472,22 +4597,22 @@ void MainWindow::AddTextLayer(const QPoint &topLeft, const QString &text, const 
     }
     const ImageSnapshot before = CurrentSnapshot();
 
-    // 活动图层像素可能还在 imageData 里，先同步回图层栈，保证合成基准正确
+    // 活动图层像素可能还在 imageData 里，先同步回图层栈，保证历史基准正确
     m_layers[static_cast<size_t>(m_activeLayer)].data = imageData;
 
-    // 以当前可见合成作为底图(见函数头注释)
-    const std::vector<uint8_t> &shown = BuildComposite();
-    QImage canvas = ImageOps::ToDisplayImage(shown, w, h);
-    if (canvas.isNull()) {
-        UpdateStatus("文字图层创建失败");
-        return;
-    }
-
+    // 透明画布：只有文字笔画不透明，其余像素 alpha 为 0
+    QImage canvas(w, h, QImage::Format_ARGB32);
+    canvas.fill(Qt::transparent);
     DrawTextOnCanvas(canvas, text, font, color, alignment, topLeft);
+
+    std::vector<uint8_t> rendered;
+    SelectionMask alphaMask;
+    BgrAlphaFromQImage(canvas, rendered, alphaMask);
 
     Layer layer;
     layer.name = QString("文字");
-    layer.data = BgrFromQImage(canvas);
+    layer.data = rendered;
+    layer.alpha = alphaMask;
     if (layer.data.empty()) {
         UpdateStatus("文字图层创建失败");
         return;
@@ -4555,39 +4680,20 @@ bool MainWindow::UpdateTextLayer(int index, const QString &text, const QFont &fo
     // 活动图层像素可能还在 imageData 里，先同步回图层栈
     m_layers[static_cast<size_t>(m_activeLayer)].data = imageData;
 
-    // 重算该文字图层下方的合成底图(忽略文字图层自身，保证不会把旧文字叠上去)
-    const size_t bytes = static_cast<size_t>(w) * static_cast<size_t>(h) * 3;
-    std::vector<uint8_t> base(bytes, 255);
-    for (int i = 0; i < index; ++i) {
-        const Layer &below = m_layers[static_cast<size_t>(i)];
-        if (!below.visible) {
-            continue;
-        }
-        const std::vector<uint8_t> &src = (i == m_activeLayer) ? imageData : below.data;
-        if (src.size() != bytes) {
-            continue;
-        }
-        const SelectionMask *mask = nullptr;
-        if (below.maskEnabled && !below.mask.isEmpty() &&
-            below.mask.width == w && below.mask.height == h) {
-            mask = &below.mask;
-        }
-        BlendLayerInto(base, src, below.opacity, below.blend, mask);
-    }
-
-    QImage canvas = ImageOps::ToDisplayImage(base, w, h);
-    if (canvas.isNull()) {
-        UpdateStatus("文字图层重渲染失败");
-        return false;
-    }
+    // 透明画布重新渲染：不需要重算下层底图，旧文字因此不会叠加
+    QImage canvas(w, h, QImage::Format_ARGB32);
+    canvas.fill(Qt::transparent);
     DrawTextOnCanvas(canvas, text, font, color, alignment, layer.text.anchor);
-    const std::vector<uint8_t> rendered = BgrFromQImage(canvas);
+    std::vector<uint8_t> rendered;
+    SelectionMask alphaMask;
+    BgrAlphaFromQImage(canvas, rendered, alphaMask);
     if (rendered.empty()) {
         UpdateStatus("文字图层重渲染失败");
         return false;
     }
 
     layer.data = rendered;
+    layer.alpha = alphaMask;
     layer.text.text = text;
     layer.text.font = font;
     layer.text.color = color;
@@ -4604,7 +4710,7 @@ bool MainWindow::UpdateTextLayer(int index, const QString &text, const QFont &fo
 
 // ------------------------------------------------------------------
 // 形状图层
-// 与文字图层一致，以当前可见合成为底图再栅格化形状，避免遮挡下层内容。
+// 与文字图层一致：形状画在透明画布上，靠 alpha 透出下层内容。
 // ------------------------------------------------------------------
 
 void MainWindow::SetShapeParams(int type, bool filled, const QColor &fillColor,
@@ -4642,12 +4748,9 @@ void MainWindow::AddShapeLayer(const QPoint &from, const QPoint &to)
     const ImageSnapshot before = CurrentSnapshot();
     m_layers[static_cast<size_t>(m_activeLayer)].data = imageData;
 
-    const std::vector<uint8_t> &shown = BuildComposite();
-    QImage canvas = ImageOps::ToDisplayImage(shown, w, h);
-    if (canvas.isNull()) {
-        UpdateStatus("形状图层创建失败");
-        return;
-    }
+    // 透明画布：形状以外的区域 alpha 为 0，不会遮挡下层
+    QImage canvas(w, h, QImage::Format_ARGB32);
+    canvas.fill(Qt::transparent);
 
     QPainter painter(&canvas);
     painter.setRenderHint(QPainter::Antialiasing, true);
@@ -4682,7 +4785,11 @@ void MainWindow::AddShapeLayer(const QPoint &from, const QPoint &to)
     Layer layer;
     layer.name = (m_shapeType == 0) ? QString("矩形") : (m_shapeType == 1) ? QString("椭圆")
                                                                           : QString("直线");
-    layer.data = BgrFromQImage(canvas);
+    std::vector<uint8_t> rendered;
+    SelectionMask alphaMask;
+    BgrAlphaFromQImage(canvas, rendered, alphaMask);
+    layer.data = rendered;
+    layer.alpha = alphaMask;
     if (layer.data.empty()) {
         UpdateStatus("形状图层创建失败");
         return;
@@ -4963,7 +5070,7 @@ void MainWindow::SetupGradientPanel()
 
 std::vector<uint8_t> MainWindow::CompositePixels()
 {
-    if (m_layers.size() <= 1 && !AnyLayerMaskEnabled()) {
+    if (!NeedsComposite()) {
         return imageData;
     }
     return BuildComposite();
@@ -5275,8 +5382,8 @@ void MainWindow::OnPreviewTextChanged(int fieldIndex)
     if (imageData.empty() || m_busy) {
         return;
     }
-    // 多图层或生效中的图层蒙版下，实时预览会与"只改活动图层"的提交结果不一致，直接跳过预览
-    if (m_layers.size() > 1 || AnyLayerMaskEnabled()) {
+    // 多图层/生效中的蒙版或 alpha 下，实时预览会与"只改活动图层"的提交结果不一致，直接跳过预览
+    if (NeedsComposite()) {
         return;
     }
     m_pendingFieldIndex = fieldIndex;
@@ -5290,7 +5397,7 @@ void MainWindow::OnPreviewTextChanged(int fieldIndex)
 void MainWindow::PreviewCustomOp(const QString &title,
                                  std::function<void(std::vector<uint8_t> &, OpContext &)> op)
 {
-    if (imageData.empty() || m_busy || m_layers.size() > 1 || AnyLayerMaskEnabled() || !op) {
+    if (imageData.empty() || m_busy || NeedsComposite() || !op) {
         CancelPreview();
         return;
     }
@@ -5330,7 +5437,7 @@ void MainWindow::RunPreview()
         CancelPreview();
         return;
     }
-    if (m_layers.size() > 1 || AnyLayerMaskEnabled()) {   // 多图层/有蒙版不做实时预览
+    if (NeedsComposite()) {   // 多图层/蒙版/alpha 不做实时预览
         CancelPreview();
         return;
     }

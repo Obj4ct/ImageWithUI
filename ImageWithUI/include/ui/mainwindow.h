@@ -84,6 +84,9 @@ struct Layer {
     // 空蒙版表示该图层没有蒙版；maskEnabled=false 时临时停用(保留数据)
     SelectionMask mask;
     bool maskEnabled = true;
+    // 图层 alpha：与画布同尺寸的覆盖度(0 = 完全透明，255 = 完全不透明)
+    // 空 alpha 表示该层整层不透明(默认)；橡皮擦除就是在减少这份 alpha
+    SelectionMask alpha;
     LayerText text;         // 文字图层可再次编辑所需的元数据
 };
 
@@ -555,6 +558,10 @@ private:
     const std::vector<uint8_t> &BuildComposite();
     // 是否有生效中的图层蒙版(有蒙版时不能走单图层快速路径/实时预览)
     bool AnyLayerMaskEnabled() const;
+    // 是否有生效中的图层 alpha(有透明像素时同样不能走单图层快速路径)
+    bool AnyLayerAlphaActive() const;
+    // 是否需要合成(多图层 / 蒙版 / alpha 任一成立)
+    bool NeedsComposite() const;
     // 右侧通道面板：列表 + 存储/载入/删除
     void SetupChannelPanel();
     void UpdateChannelPanel();
