@@ -160,4 +160,4 @@ MIT 许可的覆盖范围仅限素曜拥有著作权的源代码、文档与 `Im
 
 | 支付宝 | 微信支付 |
 | :---: | :---: |
-| <img src="assets/donation/alipay.jpg" alt="支付宝收款码" width="240"> | <img src="assets/donation/wechat.png" alt="微信收款码" width="240"> |
+| <img src="ImageWithUI/resources/donation/alipay.jpg" alt="支付宝收款码" width="240"> | <img src="ImageWithUI/resources/donation/wechat.png" alt="微信收款码" width="240"> |
