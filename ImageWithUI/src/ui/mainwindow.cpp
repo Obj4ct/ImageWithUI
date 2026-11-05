@@ -34,6 +34,7 @@
 #include <QPolygonF>
 #include <QFontMetrics>
 #include <QSlider>
+#include <QCheckBox>
 #include <QtMath>
 #include <algorithm>
 
@@ -484,6 +485,7 @@ public:
         m_points.clear();
         m_poly.clear();
         m_hoverValid = false;
+        m_gradientDragging = false;
         setAttribute(Qt::WA_TransparentForMouseEvents, !active);
         setCursor(active ? Qt::CrossCursor : Qt::ArrowCursor);
         if (active) {
@@ -513,6 +515,17 @@ public:
     }
 
     int brushMode() const { return m_brushMode; }
+
+    // ---- 渐变工具：拖拽定义 from→to，松开时提交 ----
+    void setGradientMode(bool active)
+    {
+        m_gradientMode = active;
+        m_gradientDragging = false;
+        m_drag = None;
+        update();
+    }
+
+    bool gradientMode() const { return m_gradientMode; }
 
     void beginTransform(const QRect &baseRect, const QImage &whiteFill, const QImage &content)
     {
@@ -549,6 +562,8 @@ public:
     std::function<void(const QPoint &)> onBrushStart;
     std::function<void(const QPoint &, const QPoint &)> onBrushSegment;
     std::function<void()> onBrushEnd;
+    // 渐变拖拽结束：参数为图像像素坐标的起点与终点
+    std::function<void(const QPoint &, const QPoint &)> onGradientFinished;
     // 用户拖动整体移动选区后回调(图像像素位移；content=true 表示同时搬动像素)
     std::function<void(int, int, bool)> onSelectionMoved;
     // 套索松开后回调(add = Shift 加选，subtract = Alt 减选)
@@ -694,6 +709,35 @@ protected:
                       std::max(1.5, m_brushSize * sy / 2.0));
     }
 
+    // 渐变拖拽预览：起止点之间的虚线 + 两端标记
+    void drawGradientPreview(QPainter &p) const
+    {
+        if (!m_gradientMode || !m_gradientDragging) {
+            return;
+        }
+        const QPoint a = toWidgetPoint(m_gradientStart);
+        const QPoint b = toWidgetPoint(m_gradientEnd);
+        QPen dark(QColor(0, 0, 0, 210));
+        dark.setStyle(Qt::CustomDashLine);
+        dark.setDashPattern(QVector<qreal>{4, 4});
+        dark.setDashOffset(m_dashOffset);
+        p.setPen(dark);
+        p.drawLine(a, b);
+
+        QPen light(QColor(255, 255, 255, 230));
+        light.setStyle(Qt::CustomDashLine);
+        light.setDashPattern(QVector<qreal>{4, 4});
+        light.setDashOffset(m_dashOffset + 4);
+        p.setPen(light);
+        p.drawLine(a, b);
+
+        p.setPen(QPen(QColor(34, 211, 238), 1));
+        p.setBrush(QColor(34, 211, 238));
+        p.drawEllipse(a, 3, 3);
+        p.setBrush(Qt::NoBrush);
+        p.drawEllipse(b, 5, 5);
+    }
+
     void paintEvent(QPaintEvent *) override
     {
         if (m_imgW <= 0 || m_imgH <= 0) {
@@ -711,6 +755,8 @@ protected:
         if (m_brushMode != 0) {
             drawBrushPreview(p);
         }
+        // 渐变拖拽：显示起止方向线
+        drawGradientPreview(p);
 
         // 多边形套索正在取点：画已确定的边 + 到光标的橡皮筋
         if (m_tool == 2 && !m_poly.isEmpty()) {
@@ -831,6 +877,20 @@ protected:
             const QPointF ip = toImageF(event->pos());
             m_startPointerAngle = qRadiansToDegrees(qAtan2(ip.y() - center.y(), ip.x() - center.x()));
             setCursor(cursorForHandle(handle));
+            update();
+            return;
+        }
+        if (m_gradientMode && m_imgW > 0 && m_imgH > 0) {
+            const QRect dr = displayRect();
+            if (dr.isEmpty() || !dr.adjusted(-2, -2, 2, 2).contains(event->pos())) {
+                return;
+            }
+            QPoint ip = toImage(event->pos());
+            ip.setX(qBound(0, ip.x(), m_imgW - 1));
+            ip.setY(qBound(0, ip.y(), m_imgH - 1));
+            m_gradientStart = ip;
+            m_gradientEnd = ip;
+            m_gradientDragging = true;
             update();
             return;
         }
@@ -974,6 +1034,24 @@ protected:
             }
             return;
         }
+        if (m_gradientMode) {
+            if (m_imgW <= 0 || m_imgH <= 0) {
+                return;
+            }
+            if (!m_gradientDragging) {
+                setCursor(Qt::CrossCursor);
+                return;
+            }
+            if (!(event->buttons() & Qt::LeftButton)) {
+                return;
+            }
+            QPoint ip = toImage(pos);
+            ip.setX(qBound(0, ip.x(), m_imgW - 1));
+            ip.setY(qBound(0, ip.y(), m_imgH - 1));
+            m_gradientEnd = ip;
+            update();
+            return;
+        }
         if (m_brushMode != 0) {
             if (!m_brushDrawing) {
                 setCursor(Qt::CrossCursor);
@@ -1043,6 +1121,22 @@ protected:
 
     void mouseReleaseEvent(QMouseEvent *event) override
     {
+        if (m_gradientMode) {
+            if (m_gradientDragging && event->button() == Qt::LeftButton && m_imgW > 0 && m_imgH > 0) {
+                QPoint ip = toImage(event->pos());
+                ip.setX(qBound(0, ip.x(), std::max(0, m_imgW - 1)));
+                ip.setY(qBound(0, ip.y(), std::max(0, m_imgH - 1)));
+                m_gradientEnd = ip;
+                m_gradientDragging = false;
+                const QPoint from = m_gradientStart;
+                const QPoint to = m_gradientEnd;
+                update();
+                if (onGradientFinished) {
+                    onGradientFinished(from, to);
+                }
+            }
+            return;
+        }
         if (m_brushMode != 0) {
             if (m_brushDrawing) {
                 QPoint ip = toImage(event->pos());
@@ -1387,6 +1481,11 @@ private:
     int m_brushHardness = 70;      // 0~100，边缘由硬到柔
     double m_brushOpacity = 0.8;   // 0.0~1.0
     QColor m_brushColor = QColor(20, 20, 20);
+    // ---- 渐变工具 ----
+    bool m_gradientMode = false;
+    bool m_gradientDragging = false;
+    QPoint m_gradientStart;        // 拖拽起点(图像像素)
+    QPoint m_gradientEnd;          // 拖拽终点(图像像素)
     QPolygon m_points;           // 套索轨迹(图像像素坐标)
     QPolygon m_poly;             // 多边形套索已确定的顶点(图像像素坐标)
     QPoint m_hover;              // 多边形套索的橡皮筋终点
@@ -1474,6 +1573,7 @@ MainWindow::MainWindow(QWidget *parent)
     SetupLayerPanel();      // 右侧图层面板 + "图层"菜单
     SetupChannelPanel();    // 右侧通道面板(存储/载入选区)
     SetupBrushPanel();      // 右侧画笔参数面板
+    SetupGradientPanel();   // 右侧渐变参数面板
 
     // ---- 右侧面板放进滚动区 ----
     // 窗口变矮时面板可以滚动，而不是把控件压扁或把窗口撑出屏幕
@@ -1693,6 +1793,9 @@ void MainWindow::SetupSelectionTool()
     };
     m_overlay->onBrushEnd = [this]() { EndBrushStroke(); };
     m_overlay->setBrushParams(m_brushSize, m_brushHardness, m_brushOpacity, m_brushColor);
+    m_overlay->onGradientFinished = [this](const QPoint &from, const QPoint &to) {
+        ApplyGradientFill(from, to, m_gradientRadial);
+    };
     ui->imageLabel->installEventFilter(this);
 
     // 工具栏：矩形选框 / 自由套索 / 多边形套索 / 磁性套索(勾选后才在图像上拖拽，避免误触)
@@ -1724,6 +1827,10 @@ void MainWindow::SetupSelectionTool()
     m_eraserToolAction->setCheckable(true);
     m_eraserToolAction->setToolTip(QString("用白色覆盖活动图层(当前没有透明通道)；笔迹遵守当前选区覆盖度"));
 
+    m_gradientToolAction = new QAction(QString("渐变"), this);
+    m_gradientToolAction->setCheckable(true);
+    m_gradientToolAction->setToolTip(QString("在活动图层上按拖拽方向填充线性/径向渐变；遵守当前选区覆盖度"));
+
     // 所有画布工具共用一套状态同步：任一被勾选时启用覆盖层，并切换工具类型
     auto applyToolState = [this]() {
         // 切换工具时放弃未提交的拖拽变换，避免手柄状态残留
@@ -1736,16 +1843,20 @@ void MainWindow::SetupSelectionTool()
         const bool magnet = m_magnetToolAction->isChecked();
         const bool brush = m_brushToolAction->isChecked();
         const bool eraser = m_eraserToolAction->isChecked();
+        const bool gradient = m_gradientToolAction->isChecked();
         const int kind = magnet ? 3 : poly ? 2 : lasso ? 1 : 0;
         if (m_overlay != nullptr) {
             m_overlay->setToolKind(kind);
             m_overlay->setBrushMode(brush ? 1 : (eraser ? 2 : 0));
-            m_overlay->setToolActive(rect || lasso || poly || magnet || brush || eraser);
+            m_overlay->setGradientMode(gradient);
+            m_overlay->setToolActive(rect || lasso || poly || magnet || brush || eraser || gradient);
         }
         if (brush) {
             UpdateStatus(QString("画笔：按住左键在活动图层上绘制；笔迹遵守选区"));
         } else if (eraser) {
             UpdateStatus(QString("橡皮：用白色覆盖活动图层；笔迹遵守选区"));
+        } else if (gradient) {
+            UpdateStatus(QString("渐变：在画布上拖拽定义方向/半径；松开后填充，遵守选区"));
         } else if (magnet) {
             UpdateStatus(QString("自动贴边选区：沿边缘拖动，轨迹会自动贴过去；Shift 加选、Alt 减选"));
         } else if (poly) {
@@ -1763,18 +1874,21 @@ void MainWindow::SetupSelectionTool()
     toolGroup->addAction(m_magnetToolAction);
     toolGroup->addAction(m_brushToolAction);
     toolGroup->addAction(m_eraserToolAction);
+    toolGroup->addAction(m_gradientToolAction);
     connect(m_selectionToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
     connect(m_lassoToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
     connect(m_polyToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
     connect(m_magnetToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
     connect(m_brushToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
     connect(m_eraserToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
+    connect(m_gradientToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
     ui->toolBox->addAction(m_selectionToolAction);
     ui->toolBox->addAction(m_lassoToolAction);
     ui->toolBox->addAction(m_polyToolAction);
     ui->toolBox->addAction(m_magnetToolAction);
     ui->toolBox->addAction(m_brushToolAction);
     ui->toolBox->addAction(m_eraserToolAction);
+    ui->toolBox->addAction(m_gradientToolAction);
 
     // "选择"菜单(放在"编辑"之后、"图像模糊"之前)
     m_selectionMenu = new QMenu(QString("选择"), this);
@@ -1936,10 +2050,11 @@ void MainWindow::SetupSelectionTool()
         smoothAction->setEnabled(has);
     });
 
-    // "工具"菜单：画笔/橡皮
+    // "工具"菜单：画笔/橡皮/渐变
     QMenu *toolMenu = new QMenu(QString("工具"), this);
     toolMenu->addAction(m_brushToolAction);
     toolMenu->addAction(m_eraserToolAction);
+    toolMenu->addAction(m_gradientToolAction);
     menuBar()->insertMenu(m_selectionMenu->menuAction(), toolMenu);
 
     menuBar()->insertMenu(ui->menu_blur->menuAction(), m_selectionMenu);
@@ -3944,6 +4059,251 @@ void MainWindow::SetupBrushPanel()
     const int layerIndex = hostLayout->indexOf(ui->group_layers);
     hostLayout->insertWidget(layerIndex < 0 ? 0 : layerIndex, m_brushGroup);
     UpdateBrushParams();
+}
+
+// ------------------------------------------------------------------
+// 渐变工具
+// 线性：按拖拽方向投影；径向：以起点为圆心、拖拽长度为半径。
+// 都按选区覆盖度与不透明度混入活动图层，提交为一步历史。
+// ------------------------------------------------------------------
+
+void MainWindow::SetGradientParams(bool radial, bool reverse, double opacity,
+                                   const QColor &startColor, const QColor &endColor)
+{
+    m_gradientRadial = radial;
+    m_gradientReverse = reverse;
+    m_gradientOpacity = qBound(0.0, opacity, 1.0);
+    if (startColor.isValid()) {
+        m_gradientStartColor = startColor;
+    }
+    if (endColor.isValid()) {
+        m_gradientEndColor = endColor;
+    }
+    UpdateGradientControls();
+}
+
+void MainWindow::UpdateGradientControls()
+{
+    const QString style = QString("background:%1;border:1px solid #3b4455;border-radius:3px;");
+    if (m_gradientStartSwatch != nullptr) {
+        m_gradientStartSwatch->setStyleSheet(style.arg(m_gradientStartColor.name()));
+    }
+    if (m_gradientEndSwatch != nullptr) {
+        m_gradientEndSwatch->setStyleSheet(style.arg(m_gradientEndColor.name()));
+    }
+}
+
+void MainWindow::ApplyGradientFill(const QPoint &from, const QPoint &to, bool radial)
+{
+    if (imageData.empty() || myValue.bmpInfo.GetWidth() <= 0 || myValue.bmpInfo.GetHeight() <= 0) {
+        UpdateStatus("请先打开一张图像");
+        return;
+    }
+    if (m_busy) {
+        UpdateStatus("正在处理，请稍候…");
+        return;
+    }
+    CancelPreview();   // 渐变基于已提交的像素
+
+    const int32_t w = myValue.bmpInfo.GetWidth();
+    const int32_t h = myValue.bmpInfo.GetHeight();
+    const ImageSnapshot before = CurrentSnapshot();
+
+    const bool selValid = !m_mask.isEmpty() && m_mask.width == w && m_mask.height == h &&
+                          m_mask.data.size() == static_cast<size_t>(w) * static_cast<size_t>(h);
+    int x0 = 0;
+    int y0 = 0;
+    int x1 = w - 1;
+    int y1 = h - 1;
+    if (selValid && !m_selection.isEmpty()) {
+        const QRect r = m_selection.intersected(QRect(0, 0, w, h));
+        if (r.isEmpty()) {
+            UpdateStatus("选区不在画布内，渐变未生效");
+            return;
+        }
+        x0 = r.left();
+        y0 = r.top();
+        x1 = r.right();
+        y1 = r.bottom();
+    }
+
+    const double dx = to.x() - from.x();
+    const double dy = to.y() - from.y();
+    const double len2 = dx * dx + dy * dy;
+    const double len = std::sqrt(len2);
+    const int opacity = qBound(0, qRound(m_gradientOpacity * 255.0), 255);
+    if (opacity <= 0) {
+        UpdateStatus("渐变不透明度为 0，未产生改动");
+        return;
+    }
+    const int startB = m_gradientStartColor.blue();
+    const int startG = m_gradientStartColor.green();
+    const int startR = m_gradientStartColor.red();
+    const int endB = m_gradientEndColor.blue();
+    const int endG = m_gradientEndColor.green();
+    const int endR = m_gradientEndColor.red();
+
+    bool changed = false;
+    const size_t rowBytes = static_cast<size_t>(w) * 3;
+    for (int y = y0; y <= y1; ++y) {
+        const size_t maskRow = static_cast<size_t>(y) * static_cast<size_t>(w);
+        const size_t off = static_cast<size_t>(h - 1 - y) * rowBytes;
+        for (int x = x0; x <= x1; ++x) {
+            int cov = opacity;
+            if (selValid) {
+                cov = cov * m_mask.data[maskRow + static_cast<size_t>(x)] / 255;
+            }
+            if (cov <= 0) {
+                continue;
+            }
+            double t = 0.0;
+            if (len2 > 1e-9) {
+                if (radial) {
+                    t = std::hypot(x - from.x(), y - from.y()) / len;
+                } else {
+                    t = ((x - from.x()) * dx + (y - from.y()) * dy) / len2;
+                }
+            }
+            t = qBound(0.0, t, 1.0);
+            if (m_gradientReverse) {
+                t = 1.0 - t;
+            }
+            const int target[3] = {
+                qRound(startB + (endB - startB) * t),
+                qRound(startG + (endG - startG) * t),
+                qRound(startR + (endR - startR) * t),
+            };
+            const size_t i = off + static_cast<size_t>(x) * 3;
+            for (int c = 0; c < 3; ++c) {
+                const uint8_t value = static_cast<uint8_t>(
+                    (static_cast<int>(imageData[i + c]) * (255 - cov) + target[c] * cov) / 255);
+                if (imageData[i + c] != value) {
+                    imageData[i + c] = value;
+                    changed = true;
+                }
+            }
+        }
+    }
+
+    if (!changed) {
+        UpdateStatus("渐变没有产生改动");
+        return;
+    }
+    CommitLayerStructure(radial ? QString("径向渐变") : QString("线性渐变"), before);
+}
+
+void MainWindow::SetupGradientPanel()
+{
+    QWidget *host = ui->group_layers->parentWidget();
+    QVBoxLayout *hostLayout = (host != nullptr) ? qobject_cast<QVBoxLayout *>(host->layout())
+                                                : nullptr;
+    if (host == nullptr || hostLayout == nullptr) {
+        return;
+    }
+
+    m_gradientGroup = new QGroupBox(QString("渐变"), host);
+    m_gradientGroup->setObjectName("group_gradient");
+    QVBoxLayout *box = new QVBoxLayout(m_gradientGroup);
+    box->setContentsMargins(8, 10, 8, 8);
+    box->setSpacing(6);
+
+    // 类型
+    QWidget *typeRow = new QWidget(m_gradientGroup);
+    QHBoxLayout *typeLay = new QHBoxLayout(typeRow);
+    typeLay->setContentsMargins(0, 0, 0, 0);
+    typeLay->setSpacing(8);
+    QLabel *typeTitle = new QLabel(QString("类型"), typeRow);
+    typeTitle->setMinimumWidth(42);
+    QComboBox *typeCombo = new QComboBox(typeRow);
+    typeCombo->addItem(QString("线性"));
+    typeCombo->addItem(QString("径向"));
+    typeCombo->setCurrentIndex(m_gradientRadial ? 1 : 0);
+    typeLay->addWidget(typeTitle);
+    typeLay->addWidget(typeCombo, 1);
+    box->addWidget(typeRow);
+    connect(typeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
+        m_gradientRadial = (index == 1);
+    });
+
+    // 两端颜色
+    auto addColorRow = [this, box](const QString &title, const QColor &initial,
+                                   const QString &dialogTitle, QLabel **swatchOut,
+                                   QColor *target) {
+        QWidget *row = new QWidget(m_gradientGroup);
+        QHBoxLayout *lay = new QHBoxLayout(row);
+        lay->setContentsMargins(0, 0, 0, 0);
+        lay->setSpacing(8);
+        QLabel *label = new QLabel(title, row);
+        label->setMinimumWidth(42);
+        QPushButton *button = new QPushButton(QString("选择…"), row);
+        button->setObjectName("layerBtn");
+        button->setCursor(Qt::PointingHandCursor);
+        QLabel *swatch = new QLabel(row);
+        swatch->setFixedSize(26, 18);
+        swatch->setStyleSheet(
+            QString("background:%1;border:1px solid #3b4455;border-radius:3px;").arg(initial.name()));
+        lay->addWidget(label);
+        lay->addWidget(button);
+        lay->addWidget(swatch, 1);
+        box->addWidget(row);
+        if (swatchOut != nullptr) {
+            *swatchOut = swatch;
+        }
+        connect(button, &QPushButton::clicked, this, [this, target, dialogTitle]() {
+            const QColor color = QColorDialog::getColor(*target, this, dialogTitle);
+            if (!color.isValid()) {
+                return;
+            }
+            *target = color;
+            UpdateGradientControls();
+        });
+        return swatch;
+    };
+    addColorRow(QString("起始色"), m_gradientStartColor, QString("渐变起始色"),
+                &m_gradientStartSwatch, &m_gradientStartColor);
+    addColorRow(QString("结束色"), m_gradientEndColor, QString("渐变结束色"),
+                &m_gradientEndSwatch, &m_gradientEndColor);
+
+    // 反向
+    QCheckBox *reverseBox = new QCheckBox(QString("反向"), m_gradientGroup);
+    reverseBox->setChecked(m_gradientReverse);
+    box->addWidget(reverseBox);
+    connect(reverseBox, &QCheckBox::toggled, this, [this](bool on) { m_gradientReverse = on; });
+
+    // 不透明度
+    QWidget *opacityRow = new QWidget(m_gradientGroup);
+    QHBoxLayout *opacityLay = new QHBoxLayout(opacityRow);
+    opacityLay->setContentsMargins(0, 0, 0, 0);
+    opacityLay->setSpacing(8);
+    QLabel *opacityTitle = new QLabel(QString("不透明"), opacityRow);
+    opacityTitle->setMinimumWidth(42);
+    QSlider *opacitySlider = new QSlider(Qt::Horizontal, opacityRow);
+    opacitySlider->setRange(0, 100);
+    opacitySlider->setValue(qRound(m_gradientOpacity * 100.0));
+    QLabel *opacityValue = new QLabel(QString("%1%").arg(qRound(m_gradientOpacity * 100.0)),
+                                      opacityRow);
+    opacityValue->setObjectName("layerInfoLabel");
+    opacityValue->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    opacityValue->setMinimumWidth(44);
+    opacityLay->addWidget(opacityTitle);
+    opacityLay->addWidget(opacitySlider, 1);
+    opacityLay->addWidget(opacityValue);
+    box->addWidget(opacityRow);
+    connect(opacitySlider, &QSlider::valueChanged, this, [this, opacityValue](int v) {
+        m_gradientOpacity = v / 100.0;
+        opacityValue->setText(QString("%1%").arg(v));
+    });
+
+    // 放在画笔面板上方(画笔面板可能尚未创建)
+    int insertIndex = hostLayout->indexOf(ui->group_layers);
+    if (m_brushGroup != nullptr) {
+        const int brushIndex = hostLayout->indexOf(m_brushGroup);
+        if (brushIndex >= 0) {
+            insertIndex = brushIndex;
+        }
+    }
+    hostLayout->insertWidget(insertIndex < 0 ? 0 : insertIndex, m_gradientGroup);
+    UpdateGradientControls();
 }
 
 std::vector<uint8_t> MainWindow::CompositePixels()

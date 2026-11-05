@@ -1688,6 +1688,86 @@ int Run(const QString &imagePath)
         out().flush();
     }
 
+    // ---------- 13.4 渐变工具：线性 / 撤销 / 选区限制 / 径向 ----------
+    {
+        const QString gradientPath = QDir::tempPath() + "/imagewithui_gradient.png";
+        {
+            QImage img(64, 48, QImage::Format_RGB32);
+            img.fill(qRgb(100, 150, 200));
+            img.save(gradientPath, "PNG");
+        }
+
+        QString failReason;
+        {
+            MainWindow win;
+            if (!win.OpenImage(gradientPath)) {
+                failReason = "无法打开测试图";
+            } else {
+                const int32_t w = 64;
+                const int32_t h = 48;
+                auto pixel = [&win, w, h](int x, int y, int channel) -> int {
+                    const size_t i = (static_cast<size_t>(h - 1 - y) * static_cast<size_t>(w) +
+                                      static_cast<size_t>(x)) * 3 +
+                                     static_cast<size_t>(channel);
+                    const std::vector<uint8_t> &data = win.CurrentImageData();
+                    return (i < data.size()) ? static_cast<int>(data[i]) : -1;
+                };
+                auto isOriginal = [&pixel](int x, int y) {
+                    return pixel(x, y, 0) == 200 && pixel(x, y, 1) == 150 &&
+                           pixel(x, y, 2) == 100;
+                };
+
+                win.SetGradientParams(false, false, 1.0, QColor(255, 0, 0), QColor(0, 0, 255));
+                win.ApplyGradientFill(QPoint(0, 0), QPoint(63, 0), false);
+                const bool leftRed = pixel(0, 0, 0) < 20 && pixel(0, 0, 2) > 235;
+                const bool rightBlue = pixel(63, 0, 0) > 235 && pixel(63, 0, 2) < 20;
+                const bool middleMixed = pixel(32, 0, 0) > 90 && pixel(32, 0, 0) < 170 &&
+                                         pixel(32, 0, 2) > 90 && pixel(32, 0, 2) < 170;
+                if (!leftRed || !rightBlue || !middleMixed) {
+                    failReason = "线性渐变方向或插值不正确";
+                } else if (std::abs(pixel(10, 20, 0) - pixel(10, 0, 0)) > 2) {
+                    failReason = "线性渐变沿垂直方向发生了不该有的变化";
+                } else {
+                    win.UndoImageProcessing();
+                    if (!isOriginal(0, 0) || !isOriginal(63, 0)) {
+                        failReason = "撤销渐变后像素未还原";
+                    } else {
+                        // 选区限制：只允许 x ∈ [32, 51] 的区域被填充
+                        win.SetSelection(QRect(32, 10, 20, 20));
+                        win.ApplyGradientFill(QPoint(0, 20), QPoint(63, 20), false);
+                        if (!isOriginal(10, 20)) {
+                            failReason = "渐变没有遵守选区限制";
+                        } else if (isOriginal(40, 20)) {
+                            failReason = "选区内没有被渐变填充";
+                        } else {
+                            win.UndoImageProcessing();
+                            win.ClearSelection();
+                            // 径向：圆心附近为起始色，半径外为结束色
+                            win.SetGradientParams(true, false, 1.0, QColor(255, 0, 0),
+                                                  QColor(0, 0, 255));
+                            win.ApplyGradientFill(QPoint(32, 24), QPoint(63, 24), true);
+                            if (!(pixel(32, 24, 0) < 30 && pixel(32, 24, 2) > 225)) {
+                                failReason = "径向渐变圆心颜色不正确";
+                            } else if (!(pixel(2, 2, 0) > 225 && pixel(2, 2, 2) < 30)) {
+                                failReason = "径向渐变半径外颜色不正确";
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        QFile::remove(gradientPath);
+
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 渐变工具 : 线性 / 撤销 / 选区限制 / 径向\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 渐变工具 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
     // ---------- 14. 选区限制：调整类算子只改选区内 ----------
     {
         const QString selOpPath = QDir::tempPath() + "/imagewithui_selftest_selop.png";

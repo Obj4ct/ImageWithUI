@@ -255,6 +255,14 @@ public:
     int BrushSize() const { return m_brushSize; }
     void SetBrushParams(int size, int hardness, double opacity, const QColor &color);
 
+    // ---- 渐变工具(在活动图层上填充；遵守选区覆盖度) ----
+    // 按当前参数在 from→to 的范围内填充渐变，作为一步历史提交。
+    // radial=false 为线性(沿 from→to 方向)，radial=true 为径向(from 为圆心、到 to 为半径)。
+    void ApplyGradientFill(const QPoint &from, const QPoint &to, bool radial = false);
+    // 供自检与面板复用：设置类型、反向、不透明度与两端颜色
+    void SetGradientParams(bool radial, bool reverse, double opacity,
+                           const QColor &startColor, const QColor &endColor);
+
 public:
     std::string BMPPath;
     std::list<HistoryEntry> imageDataHistory;      // 全局撤销栈(操作前状态)
@@ -551,6 +559,20 @@ private:
     int32_t m_brushMaskW = 0;
     int32_t m_brushMaskH = 0;
     ImageSnapshot m_brushBefore;           // 笔画开始时的快照(撤销用)
+
+    // ---- 渐变工具 ----
+    void SetupGradientPanel();              // 右侧渐变参数面板
+    void UpdateGradientControls();          // 刷新面板上的颜色/类型显示
+    QAction *m_gradientToolAction = nullptr;
+    QGroupBox *m_gradientGroup = nullptr;
+    QLabel *m_gradientStartSwatch = nullptr;
+    QLabel *m_gradientEndSwatch = nullptr;
+    bool m_gradientRadial = false;          // false 线性 / true 径向
+    bool m_gradientReverse = false;
+    double m_gradientOpacity = 1.0;
+    QColor m_gradientStartColor = QColor(0, 0, 0);
+    QColor m_gradientEndColor = QColor(255, 255, 255);
+
     // 保存/导出用像素：多图层时为合成结果
     const std::vector<uint8_t> &DisplayPixels();
     // 用"当前图层栈 + 新像素"构造快照(活动图层像素单独存 data)
