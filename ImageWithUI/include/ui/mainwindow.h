@@ -268,6 +268,13 @@ public:
     void AddTextLayer(const QPoint &topLeft, const QString &text, const QFont &font,
                       const QColor &color, int alignment = 0);
 
+    // ---- 形状图层(矩形/椭圆/直线，栅格化为独立图层) ----
+    // type: 0 矩形 / 1 椭圆 / 2 直线；strokeWidth 为 0 表示不描边
+    void SetShapeParams(int type, bool filled, const QColor &fillColor,
+                        const QColor &strokeColor, int strokeWidth, double opacity);
+    // from/to 为图像像素坐标(视觉，y 向下)
+    void AddShapeLayer(const QPoint &from, const QPoint &to);
+
 public:
     std::string BMPPath;
     std::list<HistoryEntry> imageDataHistory;      // 全局撤销栈(操作前状态)
@@ -568,6 +575,8 @@ private:
     // ---- 渐变工具 ----
     void SetupGradientPanel();              // 右侧渐变参数面板
     void UpdateGradientControls();          // 刷新面板上的颜色/类型显示
+    void SetupShapePanel();                 // 右侧形状参数面板
+    void UpdateShapeControls();             // 刷新形状颜色/类型显示
     QAction *m_gradientToolAction = nullptr;
     QGroupBox *m_gradientGroup = nullptr;
     QLabel *m_gradientStartSwatch = nullptr;
@@ -584,6 +593,18 @@ private:
     QFont m_textFont = QFont(QStringLiteral("Microsoft YaHei"), 48);
     QColor m_textColor = QColor(0, 0, 0);
     int m_textAlign = 0;
+
+    // ---- 形状工具 ----
+    QAction *m_shapeToolAction = nullptr;
+    QGroupBox *m_shapeGroup = nullptr;
+    QLabel *m_shapeFillSwatch = nullptr;
+    QLabel *m_shapeStrokeSwatch = nullptr;
+    int m_shapeType = 0;
+    bool m_shapeFilled = true;
+    QColor m_shapeFillColor = QColor(34, 211, 238);
+    QColor m_shapeStrokeColor = QColor(20, 20, 20);
+    int m_shapeStrokeWidth = 2;
+    double m_shapeOpacity = 1.0;
 
     // 保存/导出用像素：多图层时为合成结果
     const std::vector<uint8_t> &DisplayPixels();

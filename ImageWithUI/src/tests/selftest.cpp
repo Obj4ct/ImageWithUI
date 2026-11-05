@@ -1836,6 +1836,93 @@ int Run(const QString &imagePath)
         out().flush();
     }
 
+    // ---------- 13.6 形状图层：矩形填充 / 椭圆边界 / 直线 / 撤销 ----------
+    {
+        const QString shapePath = QDir::tempPath() + "/imagewithui_shape.png";
+        {
+            QImage img(64, 48, QImage::Format_RGB32);
+            img.fill(qRgb(255, 255, 255));
+            img.save(shapePath, "PNG");
+        }
+
+        QString failReason;
+        {
+            MainWindow win;
+            if (!win.OpenImage(shapePath)) {
+                failReason = "无法打开测试图";
+            } else {
+                const int w = 64;
+                const int h = 48;
+                auto pixelAt = [w, h](const std::vector<uint8_t> &data, int x, int y,
+                                      int &r, int &g, int &b) {
+                    const size_t idx = (static_cast<size_t>(h - 1 - y) * static_cast<size_t>(w) +
+                                        static_cast<size_t>(x)) * 3;
+                    b = data[idx];
+                    g = data[idx + 1];
+                    r = data[idx + 2];
+                };
+                const QColor red(220, 40, 40);
+
+                win.SetShapeParams(0, true, red, QColor(20, 20, 20), 0, 1.0);
+                win.AddShapeLayer(QPoint(10, 10), QPoint(40, 30));
+                std::vector<uint8_t> composite = win.CompositePixels();
+                int r = 0, g = 0, b = 0;
+                pixelAt(composite, 25, 20, r, g, b);
+                const bool rectInside = (win.LayerCount() == 2 && r > 150 && g < 120 && b < 120);
+                pixelAt(composite, 55, 40, r, g, b);
+                const bool rectOutside = (r > 245 && g > 245 && b > 245);
+
+                win.UndoImageProcessing();
+                if (!rectInside) {
+                    failReason = "矩形填充内部颜色不正确";
+                } else if (!rectOutside) {
+                    failReason = "矩形外部像素被破坏";
+                } else if (win.LayerCount() != 1) {
+                    failReason = "撤销后图层数没有还原";
+                } else {
+                    // 椭圆：包围盒四角应保持底色
+                    win.SetShapeParams(1, true, red, QColor(20, 20, 20), 0, 1.0);
+                    win.AddShapeLayer(QPoint(10, 10), QPoint(40, 30));
+                    composite = win.CompositePixels();
+                    pixelAt(composite, 25, 20, r, g, b);
+                    const bool ellipseCenter = (r > 150 && g < 120 && b < 120);
+                    pixelAt(composite, 11, 11, r, g, b);
+                    const bool ellipseCorner = (r > 245 && g > 245 && b > 245);
+                    win.UndoImageProcessing();
+
+                    if (!ellipseCenter) {
+                        failReason = "椭圆中心没有被填充";
+                    } else if (!ellipseCorner) {
+                        failReason = "椭圆包围盒四角未保持底色";
+                    } else {
+                        // 直线：沿水平线应出现描边颜色
+                        win.SetShapeParams(2, false, red, red, 3, 1.0);
+                        win.AddShapeLayer(QPoint(5, 10), QPoint(55, 10));
+                        composite = win.CompositePixels();
+                        pixelAt(composite, 30, 10, r, g, b);
+                        if (!(r > 150 && g < 120 && b < 120)) {
+                            failReason = "直线描边像素不正确";
+                        }
+                        win.UndoImageProcessing();
+                        if (win.LayerCount() != 1) {
+                            failReason = "直线撤销后图层数没有还原";
+                        }
+                    }
+                }
+            }
+        }
+        QFile::remove(shapePath);
+
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 形状图层 : 矩形填充 / 椭圆边界 / 直线 / 撤销\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 形状图层 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
     // ---------- 14. 选区限制：调整类算子只改选区内 ----------
     {
         const QString selOpPath = QDir::tempPath() + "/imagewithui_selftest_selop.png";

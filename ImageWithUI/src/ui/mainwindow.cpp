@@ -536,6 +536,23 @@ public:
 
     bool textMode() const { return m_textMode; }
 
+    // ---- 形状工具：拖拽定义矩形/椭圆/直线，松开时提交 ----
+    void setShapeMode(bool active)
+    {
+        m_shapeMode = active;
+        m_shapeDragging = false;
+        m_drag = None;
+        update();
+    }
+
+    bool shapeMode() const { return m_shapeMode; }
+
+    void setShapeType(int type)
+    {
+        m_shapeType = qBound(0, type, 2);
+        update();
+    }
+
     void beginTransform(const QRect &baseRect, const QImage &whiteFill, const QImage &content)
     {
         if (baseRect.isEmpty() || whiteFill.isNull() || content.isNull()) {
@@ -575,6 +592,8 @@ public:
     std::function<void(const QPoint &, const QPoint &)> onGradientFinished;
     // 文字工具点击：参数为文字块左上角的图像像素坐标
     std::function<void(const QPoint &)> onTextClick;
+    // 形状拖拽结束：参数为图像像素坐标的起点与终点
+    std::function<void(const QPoint &, const QPoint &)> onShapeFinished;
     // 用户拖动整体移动选区后回调(图像像素位移；content=true 表示同时搬动像素)
     std::function<void(int, int, bool)> onSelectionMoved;
     // 套索松开后回调(add = Shift 加选，subtract = Alt 减选)
@@ -591,6 +610,26 @@ protected:
     QPoint snapPoint(const QPoint &p) const
     {
         return MainWindow::SnapSelectionEdge(edgeAt, p, 8);
+    }
+
+    // Shift 约束：矩形/椭圆为正方形/正圆，直线吸附到 45° 整数倍
+    QPoint constrainShapeEnd(const QPoint &from, const QPoint &to, bool shift) const
+    {
+        if (!shift) {
+            return to;
+        }
+        const int dx = to.x() - from.x();
+        const int dy = to.y() - from.y();
+        if (m_shapeType == 2) {
+            const double len = std::sqrt(static_cast<double>(dx * dx + dy * dy));
+            const double step = M_PI / 4.0;
+            const double angle = std::round(std::atan2(dy, dx) / step) * step;
+            return QPoint(from.x() + qRound(std::cos(angle) * len),
+                          from.y() + qRound(std::sin(angle) * len));
+        }
+        const int side = std::max(std::abs(dx), std::abs(dy));
+        return QPoint(from.x() + (dx < 0 ? -side : side),
+                      from.y() + (dy < 0 ? -side : side));
     }
 
     // 多边形套索闭合：交给主窗口栅格化成掩码
@@ -749,6 +788,46 @@ protected:
         p.drawEllipse(b, 5, 5);
     }
 
+    // 形状拖拽预览：矩形/椭圆/直线虚线
+    void drawShapePreview(QPainter &p) const
+    {
+        if (!m_shapeMode || !m_shapeDragging) {
+            return;
+        }
+        const QPoint a = toWidgetPoint(m_shapeStart);
+        const QPoint b = toWidgetPoint(m_shapeEnd);
+        auto setDash = [this](QPen &pen, const QColor &color, int offset) {
+            pen = QPen(color, 1);
+            pen.setStyle(Qt::CustomDashLine);
+            pen.setDashPattern(QVector<qreal>{4, 4});
+            pen.setDashOffset(offset);
+        };
+        for (int pass = 0; pass < 2; ++pass) {
+            QPen pen;
+            setDash(pen, pass == 0 ? QColor(0, 0, 0, 210) : QColor(255, 255, 255, 230),
+                    m_dashOffset + (pass == 0 ? 0 : 4));
+            p.setPen(pen);
+            p.setBrush(Qt::NoBrush);
+            if (m_shapeType == 2) {
+                p.drawLine(a, b);
+            } else {
+                const QRect rect = QRect(a, b).normalized();
+                if (m_shapeType == 1) {
+                    p.drawEllipse(rect);
+                } else {
+                    p.drawRect(rect);
+                }
+            }
+        }
+        p.setPen(QPen(QColor(34, 211, 238), 1));
+        p.setBrush(QColor(34, 211, 238));
+        p.drawEllipse(a, 3, 3);
+        p.setBrush(Qt::NoBrush);
+        if (m_shapeType != 2) {
+            p.drawEllipse(b, 4, 4);
+        }
+    }
+
     void paintEvent(QPaintEvent *) override
     {
         if (m_imgW <= 0 || m_imgH <= 0) {
@@ -768,6 +847,8 @@ protected:
         }
         // 渐变拖拽：显示起止方向线
         drawGradientPreview(p);
+        // 形状拖拽：显示虚线轮廓
+        drawShapePreview(p);
 
         // 多边形套索正在取点：画已确定的边 + 到光标的橡皮筋
         if (m_tool == 2 && !m_poly.isEmpty()) {
@@ -888,6 +969,20 @@ protected:
             const QPointF ip = toImageF(event->pos());
             m_startPointerAngle = qRadiansToDegrees(qAtan2(ip.y() - center.y(), ip.x() - center.x()));
             setCursor(cursorForHandle(handle));
+            update();
+            return;
+        }
+        if (m_shapeMode && m_imgW > 0 && m_imgH > 0) {
+            const QRect dr = displayRect();
+            if (dr.isEmpty() || !dr.adjusted(-2, -2, 2, 2).contains(event->pos())) {
+                return;
+            }
+            QPoint ip = toImage(event->pos());
+            ip.setX(qBound(0, ip.x(), m_imgW - 1));
+            ip.setY(qBound(0, ip.y(), m_imgH - 1));
+            m_shapeStart = ip;
+            m_shapeEnd = ip;
+            m_shapeDragging = true;
             update();
             return;
         }
@@ -1064,6 +1159,24 @@ protected:
             }
             return;
         }
+        if (m_shapeMode) {
+            if (m_imgW <= 0 || m_imgH <= 0) {
+                return;
+            }
+            if (!m_shapeDragging) {
+                setCursor(Qt::CrossCursor);
+                return;
+            }
+            if (!(event->buttons() & Qt::LeftButton)) {
+                return;
+            }
+            QPoint ip = toImage(pos);
+            ip.setX(qBound(0, ip.x(), m_imgW - 1));
+            ip.setY(qBound(0, ip.y(), m_imgH - 1));
+            m_shapeEnd = constrainShapeEnd(m_shapeStart, ip, event->modifiers() & Qt::ShiftModifier);
+            update();
+            return;
+        }
         if (m_gradientMode) {
             if (m_imgW <= 0 || m_imgH <= 0) {
                 return;
@@ -1151,6 +1264,23 @@ protected:
 
     void mouseReleaseEvent(QMouseEvent *event) override
     {
+        if (m_shapeMode) {
+            if (m_shapeDragging && event->button() == Qt::LeftButton && m_imgW > 0 && m_imgH > 0) {
+                QPoint ip = toImage(event->pos());
+                ip.setX(qBound(0, ip.x(), std::max(0, m_imgW - 1)));
+                ip.setY(qBound(0, ip.y(), std::max(0, m_imgH - 1)));
+                m_shapeEnd = constrainShapeEnd(m_shapeStart, ip,
+                                               event->modifiers() & Qt::ShiftModifier);
+                m_shapeDragging = false;
+                const QPoint from = m_shapeStart;
+                const QPoint to = m_shapeEnd;
+                update();
+                if (onShapeFinished) {
+                    onShapeFinished(from, to);
+                }
+            }
+            return;
+        }
         if (m_gradientMode) {
             if (m_gradientDragging && event->button() == Qt::LeftButton && m_imgW > 0 && m_imgH > 0) {
                 QPoint ip = toImage(event->pos());
@@ -1518,6 +1648,12 @@ private:
     QPoint m_gradientEnd;          // 拖拽终点(图像像素)
     // ---- 文字工具 ----
     bool m_textMode = false;
+    // ---- 形状工具 ----
+    bool m_shapeMode = false;
+    bool m_shapeDragging = false;
+    QPoint m_shapeStart;
+    QPoint m_shapeEnd;
+    int m_shapeType = 0;    // 0 矩形 / 1 椭圆 / 2 直线
     QPolygon m_points;           // 套索轨迹(图像像素坐标)
     QPolygon m_poly;             // 多边形套索已确定的顶点(图像像素坐标)
     QPoint m_hover;              // 多边形套索的橡皮筋终点
@@ -1606,6 +1742,7 @@ MainWindow::MainWindow(QWidget *parent)
     SetupChannelPanel();    // 右侧通道面板(存储/载入选区)
     SetupBrushPanel();      // 右侧画笔参数面板
     SetupGradientPanel();   // 右侧渐变参数面板
+    SetupShapePanel();      // 右侧形状参数面板
 
     // ---- 右侧面板放进滚动区 ----
     // 窗口变矮时面板可以滚动，而不是把控件压扁或把窗口撑出屏幕
@@ -1829,6 +1966,9 @@ void MainWindow::SetupSelectionTool()
         ApplyGradientFill(from, to, m_gradientRadial);
     };
     m_overlay->onTextClick = [this](const QPoint &pos) { PlaceTextLayer(pos); };
+    m_overlay->onShapeFinished = [this](const QPoint &from, const QPoint &to) {
+        AddShapeLayer(from, to);
+    };
     ui->imageLabel->installEventFilter(this);
 
     // 工具栏：矩形选框 / 自由套索 / 多边形套索 / 磁性套索(勾选后才在图像上拖拽，避免误触)
@@ -1868,6 +2008,10 @@ void MainWindow::SetupSelectionTool()
     m_textToolAction->setCheckable(true);
     m_textToolAction->setToolTip(QString("在画布上点击定位，输入文字后生成独立文字图层"));
 
+    m_shapeToolAction = new QAction(QString("形状"), this);
+    m_shapeToolAction->setCheckable(true);
+    m_shapeToolAction->setToolTip(QString("拖拽绘制矩形/椭圆/直线，松开生成独立形状图层；Shift 约束正方形/正圆/45°"));
+
     // 所有画布工具共用一套状态同步：任一被勾选时启用覆盖层，并切换工具类型
     auto applyToolState = [this]() {
         // 切换工具时放弃未提交的拖拽变换，避免手柄状态残留
@@ -1882,13 +2026,17 @@ void MainWindow::SetupSelectionTool()
         const bool eraser = m_eraserToolAction->isChecked();
         const bool gradient = m_gradientToolAction->isChecked();
         const bool text = m_textToolAction->isChecked();
+        const bool shape = m_shapeToolAction->isChecked();
         const int kind = magnet ? 3 : poly ? 2 : lasso ? 1 : 0;
         if (m_overlay != nullptr) {
             m_overlay->setToolKind(kind);
             m_overlay->setBrushMode(brush ? 1 : (eraser ? 2 : 0));
             m_overlay->setGradientMode(gradient);
             m_overlay->setTextMode(text);
-            m_overlay->setToolActive(rect || lasso || poly || magnet || brush || eraser || gradient || text);
+            m_overlay->setShapeMode(shape);
+            m_overlay->setShapeType(m_shapeType);
+            m_overlay->setToolActive(rect || lasso || poly || magnet || brush || eraser ||
+                                     gradient || text || shape);
         }
         if (brush) {
             UpdateStatus(QString("画笔：按住左键在活动图层上绘制；笔迹遵守选区"));
@@ -1898,6 +2046,8 @@ void MainWindow::SetupSelectionTool()
             UpdateStatus(QString("渐变：在画布上拖拽定义方向/半径；松开后填充，遵守选区"));
         } else if (text) {
             UpdateStatus(QString("文字：在画布上点击定位，输入文字后生成独立文字图层"));
+        } else if (shape) {
+            UpdateStatus(QString("形状：拖拽绘制矩形/椭圆/直线，松开生成独立图层；Shift 约束正方形/正圆/45°"));
         } else if (magnet) {
             UpdateStatus(QString("自动贴边选区：沿边缘拖动，轨迹会自动贴过去；Shift 加选、Alt 减选"));
         } else if (poly) {
@@ -1917,6 +2067,7 @@ void MainWindow::SetupSelectionTool()
     toolGroup->addAction(m_eraserToolAction);
     toolGroup->addAction(m_gradientToolAction);
     toolGroup->addAction(m_textToolAction);
+    toolGroup->addAction(m_shapeToolAction);
     connect(m_selectionToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
     connect(m_lassoToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
     connect(m_polyToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
@@ -1925,6 +2076,7 @@ void MainWindow::SetupSelectionTool()
     connect(m_eraserToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
     connect(m_gradientToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
     connect(m_textToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
+    connect(m_shapeToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
     ui->toolBox->addAction(m_selectionToolAction);
     ui->toolBox->addAction(m_lassoToolAction);
     ui->toolBox->addAction(m_polyToolAction);
@@ -1933,6 +2085,7 @@ void MainWindow::SetupSelectionTool()
     ui->toolBox->addAction(m_eraserToolAction);
     ui->toolBox->addAction(m_gradientToolAction);
     ui->toolBox->addAction(m_textToolAction);
+    ui->toolBox->addAction(m_shapeToolAction);
 
     // "选择"菜单(放在"编辑"之后、"图像模糊"之前)
     m_selectionMenu = new QMenu(QString("选择"), this);
@@ -2100,6 +2253,7 @@ void MainWindow::SetupSelectionTool()
     toolMenu->addAction(m_eraserToolAction);
     toolMenu->addAction(m_gradientToolAction);
     toolMenu->addAction(m_textToolAction);
+    toolMenu->addAction(m_shapeToolAction);
     menuBar()->insertMenu(m_selectionMenu->menuAction(), toolMenu);
 
     menuBar()->insertMenu(ui->menu_blur->menuAction(), m_selectionMenu);
@@ -4331,6 +4485,251 @@ void MainWindow::AddTextLayer(const QPoint &topLeft, const QString &text, const 
     UpdateLayerPanel();
     CommitLayerStructure(QString("添加文字图层"), before);
     UpdateStatus(QString("已添加文字图层「%1」").arg(text.left(12)));
+}
+
+// ------------------------------------------------------------------
+// 形状图层
+// 与文字图层一致，以当前可见合成为底图再栅格化形状，避免遮挡下层内容。
+// ------------------------------------------------------------------
+
+void MainWindow::SetShapeParams(int type, bool filled, const QColor &fillColor,
+                                const QColor &strokeColor, int strokeWidth, double opacity)
+{
+    m_shapeType = qBound(0, type, 2);
+    m_shapeFilled = filled;
+    m_shapeFillColor = fillColor.isValid() ? fillColor : m_shapeFillColor;
+    m_shapeStrokeColor = strokeColor.isValid() ? strokeColor : m_shapeStrokeColor;
+    m_shapeStrokeWidth = qBound(0, strokeWidth, 50);
+    m_shapeOpacity = qBound(0.0, opacity, 1.0);
+    if (m_overlay != nullptr) {
+        m_overlay->setShapeType(m_shapeType);
+    }
+    UpdateShapeControls();
+}
+
+void MainWindow::AddShapeLayer(const QPoint &from, const QPoint &to)
+{
+    if (imageData.empty() || m_layers.empty() || m_busy) {
+        UpdateStatus("请先打开一张图像");
+        return;
+    }
+    if (from == to) {
+        UpdateStatus("形状尺寸为 0，未创建图层");
+        return;
+    }
+    CancelPreview();
+
+    const int32_t w = myValue.bmpInfo.GetWidth();
+    const int32_t h = myValue.bmpInfo.GetHeight();
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+    const ImageSnapshot before = CurrentSnapshot();
+    m_layers[static_cast<size_t>(m_activeLayer)].data = imageData;
+
+    const std::vector<uint8_t> &shown = BuildComposite();
+    QImage canvas = ImageOps::ToDisplayImage(shown, w, h);
+    if (canvas.isNull()) {
+        UpdateStatus("形状图层创建失败");
+        return;
+    }
+
+    QPainter painter(&canvas);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setOpacity(m_shapeOpacity);
+    const QRect rect = QRect(from, to).normalized();
+    if (m_shapeType == 2) {
+        const int width = std::max(1, m_shapeStrokeWidth);
+        painter.setPen(QPen(m_shapeStrokeColor, width));
+        painter.drawLine(from, to);
+    } else {
+        if (m_shapeFilled) {
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(m_shapeFillColor);
+            if (m_shapeType == 1) {
+                painter.drawEllipse(rect);
+            } else {
+                painter.drawRect(rect);
+            }
+        }
+        if (m_shapeStrokeWidth > 0) {
+            painter.setPen(QPen(m_shapeStrokeColor, m_shapeStrokeWidth));
+            painter.setBrush(Qt::NoBrush);
+            if (m_shapeType == 1) {
+                painter.drawEllipse(rect);
+            } else {
+                painter.drawRect(rect);
+            }
+        }
+    }
+    painter.end();
+
+    Layer layer;
+    layer.name = (m_shapeType == 0) ? QString("矩形") : (m_shapeType == 1) ? QString("椭圆")
+                                                                          : QString("直线");
+    layer.data = BgrFromQImage(canvas);
+    if (layer.data.empty()) {
+        UpdateStatus("形状图层创建失败");
+        return;
+    }
+
+    m_layers.insert(m_layers.begin() + (m_activeLayer + 1), layer);
+    m_activeLayer += 1;
+    imageData = layer.data;
+
+    UpdateLayerPanel();
+    CommitLayerStructure(QString("添加形状图层"), before);
+    UpdateStatus(QString("已添加形状图层「%1」").arg(layer.name));
+}
+
+void MainWindow::SetupShapePanel()
+{
+    QWidget *host = ui->group_layers->parentWidget();
+    QVBoxLayout *hostLayout = (host != nullptr) ? qobject_cast<QVBoxLayout *>(host->layout())
+                                                : nullptr;
+    if (host == nullptr || hostLayout == nullptr) {
+        return;
+    }
+
+    m_shapeGroup = new QGroupBox(QString("形状"), host);
+    m_shapeGroup->setObjectName("group_shape");
+    QVBoxLayout *box = new QVBoxLayout(m_shapeGroup);
+    box->setContentsMargins(8, 10, 8, 8);
+    box->setSpacing(6);
+
+    // 类型
+    QWidget *typeRow = new QWidget(m_shapeGroup);
+    QHBoxLayout *typeLay = new QHBoxLayout(typeRow);
+    typeLay->setContentsMargins(0, 0, 0, 0);
+    typeLay->setSpacing(8);
+    QLabel *typeTitle = new QLabel(QString("类型"), typeRow);
+    typeTitle->setMinimumWidth(42);
+    QComboBox *typeCombo = new QComboBox(typeRow);
+    typeCombo->addItems({QString("矩形"), QString("椭圆"), QString("直线")});
+    typeCombo->setCurrentIndex(m_shapeType);
+    typeLay->addWidget(typeTitle);
+    typeLay->addWidget(typeCombo, 1);
+    box->addWidget(typeRow);
+    connect(typeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
+        m_shapeType = index;
+        if (m_overlay != nullptr) {
+            m_overlay->setShapeType(index);
+        }
+    });
+
+    // 填充
+    QCheckBox *fillBox = new QCheckBox(QString("填充"), m_shapeGroup);
+    fillBox->setChecked(m_shapeFilled);
+    box->addWidget(fillBox);
+    connect(fillBox, &QCheckBox::toggled, this, [this](bool on) {
+        m_shapeFilled = on;
+        UpdateShapeControls();
+    });
+
+    auto addColorRow = [this, box](const QString &title, const QColor &initial,
+                                   const QString &dialogTitle, QLabel **swatchOut,
+                                   QColor *target) {
+        QWidget *row = new QWidget(m_shapeGroup);
+        QHBoxLayout *lay = new QHBoxLayout(row);
+        lay->setContentsMargins(0, 0, 0, 0);
+        lay->setSpacing(8);
+        QLabel *label = new QLabel(title, row);
+        label->setMinimumWidth(42);
+        QPushButton *button = new QPushButton(QString("选择…"), row);
+        button->setObjectName("layerBtn");
+        button->setCursor(Qt::PointingHandCursor);
+        QLabel *swatch = new QLabel(row);
+        swatch->setFixedSize(26, 18);
+        swatch->setStyleSheet(
+            QString("background:%1;border:1px solid #3b4455;border-radius:3px;").arg(initial.name()));
+        lay->addWidget(label);
+        lay->addWidget(button);
+        lay->addWidget(swatch, 1);
+        box->addWidget(row);
+        if (swatchOut != nullptr) {
+            *swatchOut = swatch;
+        }
+        connect(button, &QPushButton::clicked, this, [this, target, dialogTitle]() {
+            const QColor color = QColorDialog::getColor(*target, this, dialogTitle);
+            if (!color.isValid()) {
+                return;
+            }
+            *target = color;
+            UpdateShapeControls();
+        });
+        return swatch;
+    };
+    addColorRow(QString("填充色"), m_shapeFillColor, QString("形状填充色"),
+                &m_shapeFillSwatch, &m_shapeFillColor);
+    addColorRow(QString("描边色"), m_shapeStrokeColor, QString("形状描边色"),
+                &m_shapeStrokeSwatch, &m_shapeStrokeColor);
+
+    // 描边宽度
+    QWidget *strokeRow = new QWidget(m_shapeGroup);
+    QHBoxLayout *strokeLay = new QHBoxLayout(strokeRow);
+    strokeLay->setContentsMargins(0, 0, 0, 0);
+    strokeLay->setSpacing(8);
+    QLabel *strokeTitle = new QLabel(QString("描边"), strokeRow);
+    strokeTitle->setMinimumWidth(42);
+    QSlider *strokeSlider = new QSlider(Qt::Horizontal, strokeRow);
+    strokeSlider->setRange(0, 50);
+    strokeSlider->setValue(m_shapeStrokeWidth);
+    QLabel *strokeValue = new QLabel(QString("%1 px").arg(m_shapeStrokeWidth), strokeRow);
+    strokeValue->setObjectName("layerInfoLabel");
+    strokeValue->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    strokeValue->setMinimumWidth(48);
+    strokeLay->addWidget(strokeTitle);
+    strokeLay->addWidget(strokeSlider, 1);
+    strokeLay->addWidget(strokeValue);
+    box->addWidget(strokeRow);
+    connect(strokeSlider, &QSlider::valueChanged, this, [this, strokeValue](int v) {
+        m_shapeStrokeWidth = v;
+        strokeValue->setText(QString("%1 px").arg(v));
+    });
+
+    // 不透明度
+    QWidget *opacityRow = new QWidget(m_shapeGroup);
+    QHBoxLayout *opacityLay = new QHBoxLayout(opacityRow);
+    opacityLay->setContentsMargins(0, 0, 0, 0);
+    opacityLay->setSpacing(8);
+    QLabel *opacityTitle = new QLabel(QString("不透明"), opacityRow);
+    opacityTitle->setMinimumWidth(42);
+    QSlider *opacitySlider = new QSlider(Qt::Horizontal, opacityRow);
+    opacitySlider->setRange(0, 100);
+    opacitySlider->setValue(qRound(m_shapeOpacity * 100.0));
+    QLabel *opacityValue = new QLabel(QString("%1%").arg(qRound(m_shapeOpacity * 100.0)),
+                                      opacityRow);
+    opacityValue->setObjectName("layerInfoLabel");
+    opacityValue->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    opacityValue->setMinimumWidth(44);
+    opacityLay->addWidget(opacityTitle);
+    opacityLay->addWidget(opacitySlider, 1);
+    opacityLay->addWidget(opacityValue);
+    box->addWidget(opacityRow);
+    connect(opacitySlider, &QSlider::valueChanged, this, [this, opacityValue](int v) {
+        m_shapeOpacity = v / 100.0;
+        opacityValue->setText(QString("%1%").arg(v));
+    });
+
+    // 放在渐变面板上方
+    int insertIndex = hostLayout->indexOf(m_gradientGroup);
+    hostLayout->insertWidget(insertIndex < 0 ? 0 : insertIndex, m_shapeGroup);
+    UpdateShapeControls();
+}
+
+void MainWindow::UpdateShapeControls()
+{
+    if (m_shapeFillSwatch != nullptr) {
+        m_shapeFillSwatch->setStyleSheet(
+            QString("background:%1;border:1px solid #3b4455;border-radius:3px;")
+                .arg(m_shapeFillColor.name()));
+        m_shapeFillSwatch->setEnabled(m_shapeFilled);
+    }
+    if (m_shapeStrokeSwatch != nullptr) {
+        m_shapeStrokeSwatch->setStyleSheet(
+            QString("background:%1;border:1px solid #3b4455;border-radius:3px;")
+                .arg(m_shapeStrokeColor.name()));
+    }
 }
 
 void MainWindow::SetupGradientPanel()
