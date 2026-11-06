@@ -1925,6 +1925,80 @@ int Run(const QString &imagePath)
         out().flush();
     }
 
+    // ---------- 13.15 文字图层移动：拖动重渲染 / 撤销 ----------
+    {
+        const QString movePath = QDir::tempPath() + "/imagewithui_text_move.png";
+        {
+            QImage img(160, 100, QImage::Format_RGB32);
+            img.fill(qRgb(255, 255, 255));
+            img.save(movePath, "PNG");
+        }
+
+        QString failReason;
+        {
+            MainWindow win;
+            if (!win.OpenImage(movePath)) {
+                failReason = "无法打开测试图";
+            } else {
+                const int w = 160;
+                const int h = 100;
+                auto redBounds = [w, h](const std::vector<uint8_t> &data, int &minX, int &minY,
+                                        int &count) {
+                    minX = w;
+                    minY = h;
+                    count = 0;
+                    for (int y = 0; y < h; ++y) {
+                        for (int x = 0; x < w; ++x) {
+                            const size_t idx = (static_cast<size_t>(h - 1 - y) *
+                                                static_cast<size_t>(w) + static_cast<size_t>(x)) * 3;
+                            if (idx + 2 >= data.size()) {
+                                continue;
+                            }
+                            if (data[idx + 2] > 150 && data[idx + 1] < 120 && data[idx] < 120) {
+                                ++count;
+                                minX = std::min(minX, x);
+                                minY = std::min(minY, y);
+                            }
+                        }
+                    }
+                };
+
+                QFont font(QStringLiteral("Arial"), 24, QFont::Bold);
+                win.AddTextLayer(QPoint(10, 10), QStringLiteral("AB"), font, QColor(255, 0, 0), 0);
+                int minX = 0, minY = 0, count = 0;
+                redBounds(win.CompositePixels(), minX, minY, count);
+                if (count < 5 || minX > 30 || minY > 30) {
+                    failReason = "文字初始位置不正确";
+                } else if (!win.MoveTextLayer(1, QPoint(90, 50))) {
+                    failReason = "移动文字图层失败";
+                } else {
+                    redBounds(win.CompositePixels(), minX, minY, count);
+                    if (count < 5) {
+                        failReason = "移动后文字消失";
+                    } else if (minX < 60 || minY < 40) {
+                        failReason = QString("文字未移动到新位置(左上角 %1,%2)").arg(minX).arg(minY);
+                    } else {
+                        win.UndoImageProcessing();
+                        redBounds(win.CompositePixels(), minX, minY, count);
+                        if (count < 5 || minX > 30 || minY > 30) {
+                            failReason = "撤销移动后没有回到原位置";
+                        }
+                    }
+                }
+            }
+        }
+        QFile::remove(movePath);
+
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 文字图层移动 : 拖动重渲染 / 撤销\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 文字图层移动 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
     // ---------- 13.6 形状图层：矩形填充 / 椭圆边界 / 直线 / 撤销 ----------
     {
         const QString shapePath = QDir::tempPath() + "/imagewithui_shape.png";

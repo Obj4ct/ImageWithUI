@@ -295,6 +295,8 @@ public:
     // 重新渲染指定文字图层(自检与交互编辑共用)；index 为图层栈下标
     bool UpdateTextLayer(int index, const QString &text, const QFont &font,
                          const QColor &color, int alignment);
+    // 把指定文字图层移动到新的左上角(图像像素坐标，含历史记录)
+    bool MoveTextLayer(int index, const QPoint &newTopLeft);
 
     // ---- 形状图层(矩形/椭圆/直线，栅格化为独立图层) ----
     // type: 0 矩形 / 1 椭圆 / 2 直线；strokeWidth 为 0 表示不描边
@@ -631,10 +633,19 @@ private:
 
     // ---- 文字工具 ----
     void PlaceTextLayer(const QPoint &pos);   // 点击画布后弹对话框并创建文字图层
+    int TextLayerIndexAt(const QPoint &pos) const;             // 命中顶层文字图层，未命中 -1
+    bool RenderTextLayer(int index, const QString &text, const QFont &font,
+                         const QColor &color, int alignment, const QPoint &anchor);
+    void BeginTextDrag(int index);                             // 按下已有文字：记录拖动前状态
+    void PreviewTextMove(int index, const QPoint &delta);      // 拖动中实时重绘
+    void EndTextDrag(int index, bool moved);                   // 松开：提交历史或打开编辑
     QAction *m_textToolAction = nullptr;
     QFont m_textFont = QFont(QStringLiteral("Microsoft YaHei"), 48);
     QColor m_textColor = QColor(0, 0, 0);
     int m_textAlign = 0;
+    ImageSnapshot m_textMoveBefore;    // 文字拖动前的快照
+    int m_textMoveLayer = -1;
+    QPoint m_textMoveAnchor;           // 拖动开始时文字的原始锚点
 
     // ---- 形状工具 ----
     QAction *m_shapeToolAction = nullptr;

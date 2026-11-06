@@ -173,6 +173,21 @@ void DrawTextOnCanvas(QImage &canvas, const QString &text, const QFont &font,
     }
 }
 
+// 文字块在图像上的外接矩形（与 DrawTextOnCanvas 的排版保持一致，用于命中测试）
+QRect TextBlockRect(const LayerText &text)
+{
+    const QStringList lines = text.text.split('\n');
+    QFontMetrics metrics(text.font);
+    int maxWidth = 0;
+    for (const QString &line : lines) {
+        maxWidth = std::max(maxWidth, metrics.horizontalAdvance(line));
+    }
+    const int lineHeight = metrics.lineSpacing();
+    return QRect(text.anchor,
+                 QSize(std::max(1, maxWidth),
+                       std::max(1, lineHeight * std::max(1, lines.size()))));
+}
+
 // QImage(BGR888) -> 内部 BGR 自底向上紧凑缓冲
 std::vector<uint8_t> BgrFromQImage(const QImage &image)
 {
@@ -695,6 +710,11 @@ public:
     std::function<void(const QPoint &, const QPoint &)> onGradientFinished;
     // 文字工具点击：参数为文字块左上角的图像像素坐标
     std::function<void(const QPoint &)> onTextClick;
+    // 文字拖动：命中测试(返回图层下标，未命中 -1)、开始、拖动位移、结束(moved=是否真的移动)
+    std::function<int(const QPoint &)> textLayerAt;
+    std::function<void(int)> onTextDragStart;
+    std::function<void(int, const QPoint &)> onTextDrag;
+    std::function<void(int, bool)> onTextDragEnd;
     // 形状拖拽结束：参数为图像像素坐标的起点与终点
     std::function<void(const QPoint &, const QPoint &)> onShapeFinished;
     // 用户拖动整体移动选区后回调(图像像素位移；content=true 表示同时搬动像素)
@@ -1097,6 +1117,21 @@ protected:
             QPoint ip = toImage(event->pos());
             ip.setX(qBound(0, ip.x(), m_imgW - 1));
             ip.setY(qBound(0, ip.y(), m_imgH - 1));
+            // 点在已有文字上：开始拖动移动；松开时若未移动则打开编辑对话框
+            if (textLayerAt) {
+                const int hit = textLayerAt(ip);
+                if (hit >= 0) {
+                    m_textDragging = true;
+                    m_textDragIndex = hit;
+                    m_textDragStart = ip;
+                    m_textDragDelta = QPoint(0, 0);
+                    setCursor(Qt::SizeAllCursor);
+                    if (onTextDragStart) {
+                        onTextDragStart(hit);
+                    }
+                    return;
+                }
+            }
             if (onTextClick) {
                 onTextClick(ip);
             }
@@ -1203,6 +1238,19 @@ protected:
     void mouseMoveEvent(QMouseEvent *event) override
     {
         const QPoint pos = event->pos();
+        if (m_textDragging) {
+            QPoint ip = toImage(pos);
+            ip.setX(qBound(0, ip.x(), std::max(0, m_imgW - 1)));
+            ip.setY(qBound(0, ip.y(), std::max(0, m_imgH - 1)));
+            const QPoint delta = ip - m_textDragStart;
+            if (delta != m_textDragDelta) {
+                m_textDragDelta = delta;
+                if (onTextDrag) {
+                    onTextDrag(m_textDragIndex, delta);
+                }
+            }
+            return;
+        }
         if (m_transform) {
             if (m_drag == None) {
                 const int handle = hitHandle(pos);
@@ -1367,6 +1415,18 @@ protected:
 
     void mouseReleaseEvent(QMouseEvent *event) override
     {
+        if (m_textDragging) {
+            m_textDragging = false;
+            const int index = m_textDragIndex;
+            m_textDragIndex = -1;
+            const bool moved = m_textDragDelta.manhattanLength() >= 2;
+            setCursor(m_textMode ? Qt::CrossCursor : Qt::ArrowCursor);
+            update();
+            if (onTextDragEnd) {
+                onTextDragEnd(index, moved);
+            }
+            return;
+        }
         if (m_shapeMode) {
             if (m_shapeDragging && event->button() == Qt::LeftButton && m_imgW > 0 && m_imgH > 0) {
                 QPoint ip = toImage(event->pos());
@@ -1751,6 +1811,10 @@ private:
     QPoint m_gradientEnd;          // 拖拽终点(图像像素)
     // ---- 文字工具 ----
     bool m_textMode = false;
+    bool m_textDragging = false;      // 正在拖动已有文字
+    int m_textDragIndex = -1;
+    QPoint m_textDragStart;           // 按下时的图像坐标
+    QPoint m_textDragDelta;           // 相对按下点的累计位移
     // ---- 形状工具 ----
     bool m_shapeMode = false;
     bool m_shapeDragging = false;
@@ -2088,6 +2152,10 @@ void MainWindow::SetupSelectionTool()
         ApplyGradientFill(from, to, m_gradientRadial);
     };
     m_overlay->onTextClick = [this](const QPoint &pos) { PlaceTextLayer(pos); };
+    m_overlay->textLayerAt = [this](const QPoint &pos) { return TextLayerIndexAt(pos); };
+    m_overlay->onTextDragStart = [this](int index) { BeginTextDrag(index); };
+    m_overlay->onTextDrag = [this](int index, const QPoint &delta) { PreviewTextMove(index, delta); };
+    m_overlay->onTextDragEnd = [this](int index, bool moved) { EndTextDrag(index, moved); };
     m_overlay->onShapeFinished = [this](const QPoint &from, const QPoint &to) {
         AddShapeLayer(from, to);
     };
@@ -2128,7 +2196,7 @@ void MainWindow::SetupSelectionTool()
 
     m_textToolAction = new QAction(QString("文字"), this);
     m_textToolAction->setCheckable(true);
-    m_textToolAction->setToolTip(QString("在画布上点击定位，输入文字后生成独立文字图层"));
+    m_textToolAction->setToolTip(QString("点击空白处添加文字；拖动已有文字移动，单击已有文字可再次编辑"));
 
     m_shapeToolAction = new QAction(QString("形状"), this);
     m_shapeToolAction->setCheckable(true);
@@ -2163,11 +2231,11 @@ void MainWindow::SetupSelectionTool()
         if (brush) {
             UpdateStatus(QString("画笔：按住左键在活动图层上绘制；笔迹遵守选区"));
         } else if (eraser) {
-            UpdateStatus(QString("橡皮：用白色覆盖活动图层；笔迹遵守选区"));
+            UpdateStatus(QString("橡皮：把活动图层擦成透明；笔迹遵守选区"));
         } else if (gradient) {
             UpdateStatus(QString("渐变：在画布上拖拽定义方向/半径；松开后填充，遵守选区"));
         } else if (text) {
-            UpdateStatus(QString("文字：在画布上点击定位，输入文字后生成独立文字图层"));
+            UpdateStatus(QString("文字：点击空白处添加；拖动已有文字移动，单击已有文字可再次编辑"));
         } else if (shape) {
             UpdateStatus(QString("形状：拖拽绘制矩形/椭圆/直线，松开生成独立图层；Shift 约束正方形/正圆/45°"));
         } else if (magnet) {
@@ -4805,31 +4873,152 @@ bool MainWindow::UpdateTextLayer(int index, const QString &text, const QFont &fo
     // 活动图层像素可能还在 imageData 里，先同步回图层栈
     m_layers[static_cast<size_t>(m_activeLayer)].data = imageData;
 
-    // 透明画布重新渲染：不需要重算下层底图，旧文字因此不会叠加
-    QImage canvas(w, h, QImage::Format_ARGB32);
-    canvas.fill(Qt::transparent);
-    DrawTextOnCanvas(canvas, text, font, color, alignment, layer.text.anchor);
-    std::vector<uint8_t> rendered;
-    SelectionMask alphaMask;
-    BgrAlphaFromQImage(canvas, rendered, alphaMask);
-    if (rendered.empty()) {
+    if (!RenderTextLayer(index, text, font, color, alignment, layer.text.anchor)) {
         UpdateStatus("文字图层重渲染失败");
         return false;
     }
 
+    UpdateLayerPanel();
+    CommitLayerStructure(QString("编辑文字图层"), before);
+    UpdateStatus(QString("已更新文字图层「%1」").arg(text.left(12)));
+    return true;
+}
+
+// 按给定参数把文字画到该图层的透明画布上；只更新图层像素与 alpha，不写历史
+bool MainWindow::RenderTextLayer(int index, const QString &text, const QFont &font,
+                                 const QColor &color, int alignment, const QPoint &anchor)
+{
+    if (index < 0 || index >= static_cast<int>(m_layers.size())) {
+        return false;
+    }
+    const int32_t w = myValue.bmpInfo.GetWidth();
+    const int32_t h = myValue.bmpInfo.GetHeight();
+    if (w <= 0 || h <= 0) {
+        return false;
+    }
+    QImage canvas(w, h, QImage::Format_ARGB32);
+    canvas.fill(Qt::transparent);
+    DrawTextOnCanvas(canvas, text, font, color, alignment, anchor);
+
+    std::vector<uint8_t> rendered;
+    SelectionMask alphaMask;
+    BgrAlphaFromQImage(canvas, rendered, alphaMask);
+    if (rendered.empty()) {
+        return false;
+    }
+
+    Layer &layer = m_layers[static_cast<size_t>(index)];
     layer.data = rendered;
     layer.alpha = alphaMask;
     layer.text.text = text;
     layer.text.font = font;
     layer.text.color = color;
     layer.text.alignment = alignment;
+    layer.text.anchor = anchor;
+    layer.text.valid = true;
     if (index == m_activeLayer) {
         imageData = rendered;
     }
+    return true;
+}
 
+// 命中测试：返回光标下最上层可见文字图层的下标(未命中返回 -1)
+int MainWindow::TextLayerIndexAt(const QPoint &pos) const
+{
+    for (int i = static_cast<int>(m_layers.size()) - 1; i >= 0; --i) {
+        const Layer &layer = m_layers[static_cast<size_t>(i)];
+        if (!layer.visible || !layer.text.valid) {
+            continue;
+        }
+        if (TextBlockRect(layer.text).adjusted(-2, -2, 2, 2).contains(pos)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+// 按下已有文字：先存拖动前快照，后续拖动只在画布上实时预览
+void MainWindow::BeginTextDrag(int index)
+{
+    if (imageData.empty() || m_busy || index < 0 ||
+        index >= static_cast<int>(m_layers.size())) {
+        return;
+    }
+    const Layer &layer = m_layers[static_cast<size_t>(index)];
+    if (!layer.text.valid) {
+        m_textMoveLayer = -1;
+        return;
+    }
+    CancelPreview();
+    // 活动图层像素可能还在 imageData 里，先同步回图层栈，保证快照完整
+    m_layers[static_cast<size_t>(m_activeLayer)].data = imageData;
+    m_textMoveBefore = CurrentSnapshot();
+    m_textMoveLayer = index;
+    m_textMoveAnchor = layer.text.anchor;
+    UpdateStatus(QString("拖动文字调整位置，松开后提交"));
+}
+
+// 拖动中：按原始锚点 + 位移重新渲染，不写历史
+void MainWindow::PreviewTextMove(int index, const QPoint &delta)
+{
+    if (m_textMoveLayer != index || index < 0 ||
+        index >= static_cast<int>(m_layers.size())) {
+        return;
+    }
+    const Layer &layer = m_layers[static_cast<size_t>(index)];
+    if (!layer.text.valid) {
+        return;
+    }
+    const LayerText info = layer.text;   // 先拷贝，避免渲染时与自身字段自赋值
+    if (RenderTextLayer(index, info.text, info.font, info.color,
+                        info.alignment, m_textMoveAnchor + delta)) {
+        RefreshDisplay();
+    }
+}
+
+// 松开：真的移动过就提交一步历史；只是单击则打开编辑对话框
+void MainWindow::EndTextDrag(int index, bool moved)
+{
+    if (m_textMoveLayer != index) {
+        return;
+    }
+    m_textMoveLayer = -1;
+    if (index < 0 || index >= static_cast<int>(m_layers.size())) {
+        return;
+    }
+    if (!moved) {
+        EditTextLayer(index);
+        return;
+    }
     UpdateLayerPanel();
-    CommitLayerStructure(QString("编辑文字图层"), before);
-    UpdateStatus(QString("已更新文字图层「%1」").arg(text.left(12)));
+    CommitLayerStructure(QString("移动文字图层"), m_textMoveBefore);
+    UpdateStatus(QString("已移动文字图层"));
+}
+
+// 自检与外部调用：直接移动到指定锚点(含一步历史)
+bool MainWindow::MoveTextLayer(int index, const QPoint &newTopLeft)
+{
+    if (imageData.empty() || m_layers.empty() || m_busy || index < 0 ||
+        index >= static_cast<int>(m_layers.size())) {
+        return false;
+    }
+    const Layer &layer = m_layers[static_cast<size_t>(index)];
+    if (!layer.text.valid) {
+        UpdateStatus("该图层不是文字图层");
+        return false;
+    }
+    const LayerText info = layer.text;   // 先拷贝，避免渲染时与自身字段自赋值
+    CancelPreview();
+    const ImageSnapshot before = CurrentSnapshot();
+    m_layers[static_cast<size_t>(m_activeLayer)].data = imageData;
+    if (!RenderTextLayer(index, info.text, info.font, info.color,
+                         info.alignment, newTopLeft)) {
+        UpdateStatus("文字图层重渲染失败");
+        return false;
+    }
+    UpdateLayerPanel();
+    CommitLayerStructure(QString("移动文字图层"), before);
+    UpdateStatus(QString("已移动文字图层「%1」").arg(info.text.left(12)));
     return true;
 }
 
