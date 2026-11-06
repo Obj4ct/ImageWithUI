@@ -2434,6 +2434,50 @@ int Run(const QString &imagePath)
         out().flush();
     }
 
+    // ---------- 13.14 JPEG 读写 ----------
+    {
+        const QString jpgPath = QDir::tempPath() + "/imagewithui_export.jpg";
+        QString failReason;
+        {
+            MainWindow win;
+            win.OpenImage(path);
+            QString err;
+            if (!win.SaveImageTo(jpgPath, err)) {
+                failReason = "导出 JPEG 失败：" + err;
+            } else if (!QFileInfo::exists(jpgPath) || QFileInfo(jpgPath).size() <= 0) {
+                failReason = "导出的 JPEG 文件为空";
+            } else {
+                const QImage reloaded(jpgPath);
+                if (reloaded.isNull()) {
+                    failReason = "JPEG 无法重新解码(缺少 qjpeg 插件)";
+                } else if (reloaded.width() != w || reloaded.height() != h) {
+                    failReason = QString("JPEG 尺寸不符：期望 %1x%2 实际 %3x%4")
+                                     .arg(w).arg(h).arg(reloaded.width()).arg(reloaded.height());
+                } else {
+                    BitmapImage loaded;
+                    QString readErr;
+                    if (!BmpIO::ReadImageFile(jpgPath.toStdString(), loaded, readErr)) {
+                        failReason = "应用内读取 JPEG 失败：" + readErr;
+                    } else if (loaded.imageData.size() != bytes) {
+                        failReason = "读取 JPEG 后像素字节数不符";
+                    } else if (loaded.alphaData.size() != 0) {
+                        failReason = "JPEG 不应带 alpha 通道";
+                    }
+                }
+            }
+        }
+        QFile::remove(jpgPath);
+
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] JPEG 读写 : 导出、重新解码与读入尺寸一致\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] JPEG 读写 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
     // ---------- 14. 选区限制：调整类算子只改选区内 ----------
     {
         const QString selOpPath = QDir::tempPath() + "/imagewithui_selftest_selop.png";

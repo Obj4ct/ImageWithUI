@@ -132,6 +132,13 @@ add_custom_command(TARGET ImageWithUI POST_BUILD
         "${Qt5_DIR}/../../../plugins/platforms/qwindows.dll"
         "${Qt5_DIR}/../../../plugins/platforms/qwindowsd.dll"
         $<TARGET_FILE_DIR:ImageWithUI>/platforms
+    # JPEG 是 Qt 插件格式(BMP/PNG 内建)，必须把 qjpeg 插件放到 imageformats 目录，
+    # 否则对话框里虽然能选 .jpg，读写都会失败
+    COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:ImageWithUI>/imageformats
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${Qt5_DIR}/../../../plugins/imageformats/qjpeg.dll"
+        "${Qt5_DIR}/../../../plugins/imageformats/qjpegd.dll"
+        $<TARGET_FILE_DIR:ImageWithUI>/imageformats
 )
 
 set_target_properties(ImageWithUI PROPERTIES
