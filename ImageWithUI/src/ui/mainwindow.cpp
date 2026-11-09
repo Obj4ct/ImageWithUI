@@ -24,6 +24,12 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QScrollArea>
+#include <QScrollBar>
+#include <QWheelEvent>
+#include <QCursor>
+#include <QAbstractSpinBox>
+#include <QTextEdit>
+#include <QPlainTextEdit>
 #include <QScreen>
 #include <QAction>
 #include <QPainter>
@@ -1894,9 +1900,26 @@ MainWindow::MainWindow(QWidget *parent)
     QAction *fitAction = viewMenu->addAction(QString("图像适应窗口"));
     fitAction->setCheckable(true);
     fitAction->setChecked(m_fitToWindow);
+    fitAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_0));
+    m_fitAction = fitAction;
     connect(fitAction, &QAction::toggled, this, [this](bool on) {
-        m_fitToWindow = on;
-        ShowImage(imageData, myValue, myValue.bmpInfo.GetWidth(), myValue.bmpInfo.GetHeight());
+        if (on) {
+            FitCanvasToWindow();
+        } else {
+            // 取消勾选：回到实际像素(100%)，缩放只影响显示
+            m_fitToWindow = false;
+            m_zoom = 1.0;
+            if (!m_canvasBasePixmap.isNull()) {
+                ApplyDisplayPixmap(m_canvasBasePixmap);
+            } else {
+                UpdateStatusInfo();
+            }
+        }
+    });
+    QAction *actualSizeAction = viewMenu->addAction(QString("实际像素（100%）"));
+    actualSizeAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_1));
+    connect(actualSizeAction, &QAction::triggered, this, [this]() {
+        SetCanvasZoomPercent(100);
     });
 
     // 状态栏：左侧提示 + 右侧信息
@@ -1972,7 +1995,7 @@ void MainWindow::mouseDoubleClickEvent(QMouseEvent *event)
     LoadImage(path);
 }
 
-// 输入框里按 Esc：放弃当前参数预览
+// 输入框里按 Esc：放弃当前参数预览；画布：Ctrl+滚轮缩放、空格拖拽平移
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)
 {
     // 标签尺寸变化时，选区覆盖层跟着铺满标签
@@ -1983,6 +2006,88 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
             m_overlay->raise();
         }
     }
+
+    // 视口尺寸变化：适应窗口模式下重新按视口缩放
+    if (m_canvasScroll != nullptr && watched == m_canvasScroll->viewport() &&
+        event->type() == QEvent::Resize && m_fitToWindow && !m_canvasUpdating &&
+        !m_canvasBasePixmap.isNull() &&
+        m_canvasScroll->viewport()->size() != m_fitViewportSize) {
+        ApplyDisplayPixmap(m_canvasBasePixmap);
+    }
+
+    // Ctrl+滚轮：以光标为锚点缩放(只改显示)
+    if (IsCanvasWidget(watched) && event->type() == QEvent::Wheel) {
+        QWheelEvent *wheel = static_cast<QWheelEvent *>(event);
+        if (wheel->modifiers() & Qt::ControlModifier) {
+            const int steps = wheel->angleDelta().y();
+            if (steps != 0 && !m_canvasBaseSize.isEmpty()) {
+                QWidget *source = qobject_cast<QWidget *>(watched);
+                const QPoint labelPos =
+                    source != nullptr ? source->mapTo(ui->imageLabel, wheel->pos()) : wheel->pos();
+                SetCanvasZoomInternal(CanvasZoom() * std::pow(1.25, steps / 120.0), labelPos);
+            }
+            return true;   // 不再交给滚动区滚动
+        }
+    }
+
+    // 空格按下：进入平移待命（只在主窗口激活、鼠标在画布上、没有弹窗/输入时）
+    if (event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease) {
+        QKeyEvent *key = static_cast<QKeyEvent *>(event);
+        if (key->key() == Qt::Key_Space && !key->isAutoRepeat()) {
+            if (event->type() == QEvent::KeyPress) {
+                if (!isActiveWindow() || QApplication::activeModalWidget() != nullptr ||
+                    QApplication::activePopupWidget() != nullptr || m_busy ||
+                    !CanvasUnderMouse() || IsTextInputFocus()) {
+                    return false;
+                }
+                SetCanvasSpaceHeld(true);
+                return true;   // 吃掉空格，避免按钮被激活或列表滚动
+            }
+            if (m_spaceHeld) {
+                SetCanvasSpaceHeld(false);
+                return true;
+            }
+        }
+    }
+
+    // 空格+左键拖拽：用滚动条位置平移画布
+    if (IsCanvasWidget(watched)) {
+        if (event->type() == QEvent::MouseButtonPress && m_spaceHeld && m_canvasScroll != nullptr) {
+            QMouseEvent *mouse = static_cast<QMouseEvent *>(event);
+            if (mouse->button() == Qt::LeftButton) {
+                m_panning = true;
+                m_panStartGlobal = mouse->globalPos();
+                m_panOriginScroll = CanvasScrollPos();
+                if (m_canvasCursorOverride) {
+                    QApplication::restoreOverrideCursor();
+                }
+                QApplication::setOverrideCursor(Qt::ClosedHandCursor);
+                m_canvasCursorOverride = true;
+                return true;
+            }
+        } else if (event->type() == QEvent::MouseMove && m_panning) {
+            QMouseEvent *mouse = static_cast<QMouseEvent *>(event);
+            const QPoint delta = mouse->globalPos() - m_panStartGlobal;
+            SetCanvasScrollPos(m_panOriginScroll - delta);
+            return true;
+        } else if (event->type() == QEvent::MouseButtonRelease && m_panning) {
+            QMouseEvent *mouse = static_cast<QMouseEvent *>(event);
+            if (mouse->button() == Qt::LeftButton) {
+                m_panning = false;
+                if (m_canvasCursorOverride) {
+                    QApplication::restoreOverrideCursor();
+                }
+                if (m_spaceHeld) {
+                    QApplication::setOverrideCursor(Qt::OpenHandCursor);
+                    m_canvasCursorOverride = true;
+                } else {
+                    m_canvasCursorOverride = false;
+                }
+                return true;
+            }
+        }
+    }
+
     if (event->type() == QEvent::KeyPress) {
         const QKeyEvent *key = static_cast<QKeyEvent *>(event);
         const QLineEdit *edit = qobject_cast<QLineEdit *>(watched);
@@ -1995,6 +2100,29 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
     return QMainWindow::eventFilter(watched, event);
 }
 
+void MainWindow::keyPressEvent(QKeyEvent *event)
+{
+    if (event->key() == Qt::Key_Space && !event->isAutoRepeat() &&
+        isActiveWindow() && QApplication::activeModalWidget() == nullptr &&
+        QApplication::activePopupWidget() == nullptr && !m_busy &&
+        CanvasUnderMouse() && !IsTextInputFocus()) {
+        SetCanvasSpaceHeld(true);
+        event->accept();
+        return;
+    }
+    QMainWindow::keyPressEvent(event);
+}
+
+void MainWindow::keyReleaseEvent(QKeyEvent *event)
+{
+    if (event->key() == Qt::Key_Space && !event->isAutoRepeat() && m_spaceHeld) {
+        SetCanvasSpaceHeld(false);
+        event->accept();
+        return;
+    }
+    QMainWindow::keyReleaseEvent(event);
+}
+
 void MainWindow::ResetImage(BitmapImage &myValue)
 {
     imageData = myValue.imageData;
@@ -2002,8 +2130,7 @@ void MainWindow::ResetImage(BitmapImage &myValue)
     const QImage originalImage = ImageOps::ToDisplayImage(myValue.imageData,
                                                           myValue.bmpInfo.GetWidth(),
                                                           myValue.bmpInfo.GetHeight());
-    ui->imageLabel->setText(QString());
-    ui->imageLabel->setPixmap(QPixmap::fromImage(originalImage));
+    ApplyDisplayPixmap(QPixmap::fromImage(originalImage));
 }
 
 void MainWindow::ShowImage(const std::vector<uint8_t> &inImageData, BitmapImage value, int32_t width, int32_t height)
@@ -2029,18 +2156,223 @@ void MainWindow::SetDisplayPixmap(const std::vector<uint8_t> &data, int32_t widt
     ApplyDisplayPixmap(QPixmap::fromImage(image));
 }
 
-// 统一的"贴到 imageLabel"入口：适应窗口时按窗口尺寸缩放
+// 统一的"贴到 imageLabel"入口：按适应窗口或绝对比例缩放(只改显示)
 void MainWindow::ApplyDisplayPixmap(QPixmap pixmap)
 {
+    if (pixmap.isNull()) {
+        return;
+    }
+    m_canvasBasePixmap = pixmap;
+    m_canvasBaseSize = pixmap.size();
+    m_canvasUpdating = true;
+
+    const QSize viewport = m_canvasScroll != nullptr ? m_canvasScroll->viewport()->size()
+                                                     : ui->imageLabel->size();
+    const double scale = m_fitToWindow ? CanvasFitScale() : m_zoom;
+    const QSize target(qMax(1, qRound(pixmap.width() * scale)),
+                       qMax(1, qRound(pixmap.height() * scale)));
+
     if (m_fitToWindow) {
-        const QSize target = ui->imageLabel->size();
-        if (target.isValid() && !target.isEmpty()) {
-            pixmap = pixmap.scaled(target, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        // 适应窗口：标签铺满视口，位图等比缩放到视口内，滚动条隐藏
+        m_fitViewportSize = viewport;
+        ui->imageLabel->setMinimumSize(0, 0);
+        ui->imageLabel->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
+        if (!viewport.isEmpty()) {
+            ui->imageLabel->resize(viewport);
         }
+    } else {
+        // 绝对比例：标签固定为缩放后尺寸，超出视口的部分由滚动条承担
+        ui->imageLabel->setFixedSize(target);
     }
     ui->imageLabel->setText(QString());
     ui->imageLabel->setAlignment(Qt::AlignCenter);
-    ui->imageLabel->setPixmap(pixmap);
+    ui->imageLabel->setPixmap(pixmap.scaled(target, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+
+    if (m_overlay != nullptr) {
+        m_overlay->setGeometry(ui->imageLabel->rect());
+        m_overlay->update();
+        m_overlay->raise();
+    }
+    UpdateStatusInfo();
+    m_canvasUpdating = false;
+}
+
+// 适应窗口时的实际缩放：基准图等比缩放到视口大小
+double MainWindow::CanvasFitScale() const
+{
+    if (m_canvasBaseSize.isEmpty()) {
+        return 1.0;
+    }
+    QSize viewport = m_canvasScroll != nullptr ? m_canvasScroll->viewport()->size() : QSize();
+    if (viewport.isEmpty()) {
+        viewport = ui->imageLabel->size();
+    }
+    if (viewport.isEmpty() || viewport.width() <= 0 || viewport.height() <= 0) {
+        return 1.0;
+    }
+    return std::min(static_cast<double>(viewport.width()) / m_canvasBaseSize.width(),
+                    static_cast<double>(viewport.height()) / m_canvasBaseSize.height());
+}
+
+// 放大上限：兼顾"看得清像素"与位图内存(放大后长边约 4096 px)
+double MainWindow::CanvasMaxZoom() const
+{
+    const int maxDim = std::max(m_canvasBaseSize.width(), m_canvasBaseSize.height());
+    double maxZoom = 16.0;
+    if (maxDim > 0) {
+        maxZoom = std::min(16.0, std::max(1.0, 4096.0 / maxDim));
+    }
+    return std::max(1.0, maxZoom);
+}
+
+double MainWindow::CanvasZoom() const
+{
+    return m_fitToWindow ? CanvasFitScale() : m_zoom;
+}
+
+int MainWindow::CanvasZoomPercent() const
+{
+    return qRound(CanvasZoom() * 100.0);
+}
+
+// 以标签内 labelPos 处的图像像素为锚点缩放，缩放后该像素仍停在原屏幕位置
+void MainWindow::SetCanvasZoomInternal(double zoom, const QPoint &labelPos)
+{
+    if (m_canvasBaseSize.isEmpty() || m_canvasScroll == nullptr) {
+        return;
+    }
+    zoom = qBound(0.02, zoom, CanvasMaxZoom());
+
+    // 锚点像素：与覆盖层 displayRect() 同一口径(标签内居中)
+    QPointF imagePoint;
+    const QPixmap *shownPixmap = ui->imageLabel->pixmap();
+    const QSize shown = shownPixmap != nullptr ? shownPixmap->size() : QSize();
+    const QRect area = ui->imageLabel->contentsRect();
+    if (!shown.isEmpty()) {
+        const QPointF topLeft(area.left() + (area.width() - shown.width()) / 2.0,
+                              area.top() + (area.height() - shown.height()) / 2.0);
+        imagePoint = QPointF(
+            (labelPos.x() - topLeft.x()) * m_canvasBaseSize.width() / shown.width(),
+            (labelPos.y() - topLeft.y()) * m_canvasBaseSize.height() / shown.height());
+    }
+    const QPoint viewportPos = ui->imageLabel->mapTo(m_canvasScroll->viewport(), labelPos);
+
+    m_zoom = zoom;
+    m_fitToWindow = false;
+    UpdateFitActionState();
+    ApplyDisplayPixmap(m_canvasBasePixmap);
+
+    // 缩放后让锚点像素仍停在光标下
+    const QSize target(qMax(1, qRound(m_canvasBaseSize.width() * zoom)),
+                       qMax(1, qRound(m_canvasBaseSize.height() * zoom)));
+    const QSize viewport = m_canvasScroll->viewport()->size();
+    if (target.width() > viewport.width()) {
+        m_canvasScroll->horizontalScrollBar()->setValue(
+            qRound(imagePoint.x() * target.width() / m_canvasBaseSize.width() - viewportPos.x()));
+    }
+    if (target.height() > viewport.height()) {
+        m_canvasScroll->verticalScrollBar()->setValue(
+            qRound(imagePoint.y() * target.height() / m_canvasBaseSize.height() - viewportPos.y()));
+    }
+}
+
+void MainWindow::SetCanvasZoomPercent(int percent)
+{
+    if (m_canvasBaseSize.isEmpty() || m_canvasScroll == nullptr) {
+        return;
+    }
+    percent = qBound(2, percent, qRound(CanvasMaxZoom() * 100.0));
+    // 以视口中心为锚点，保持画面中心不跳
+    const QPoint center = m_canvasScroll->viewport()->rect().center();
+    const QPoint labelPos = ui->imageLabel->mapFrom(m_canvasScroll->viewport(), center);
+    SetCanvasZoomInternal(percent / 100.0, labelPos);
+}
+
+void MainWindow::FitCanvasToWindow()
+{
+    m_fitToWindow = true;
+    m_zoom = 1.0;
+    UpdateFitActionState();
+    if (!m_canvasBasePixmap.isNull()) {
+        ApplyDisplayPixmap(m_canvasBasePixmap);
+    } else {
+        UpdateStatusInfo();
+    }
+}
+
+void MainWindow::UpdateFitActionState()
+{
+    if (m_fitAction == nullptr) {
+        return;
+    }
+    QSignalBlocker blocker(m_fitAction);
+    m_fitAction->setChecked(m_fitToWindow);
+}
+
+void MainWindow::SetCanvasSpaceHeld(bool held)
+{
+    if (m_spaceHeld == held) {
+        return;
+    }
+    m_spaceHeld = held;
+    if (held) {
+        if (!m_canvasCursorOverride) {
+            QApplication::setOverrideCursor(Qt::OpenHandCursor);
+            m_canvasCursorOverride = true;
+        }
+    } else {
+        m_panning = false;
+        if (m_canvasCursorOverride) {
+            QApplication::restoreOverrideCursor();
+            m_canvasCursorOverride = false;
+        }
+    }
+}
+
+bool MainWindow::CanvasUnderMouse() const
+{
+    if (m_canvasScroll == nullptr) {
+        return false;
+    }
+    QWidget *viewport = m_canvasScroll->viewport();
+    return viewport->rect().contains(viewport->mapFromGlobal(QCursor::pos()));
+}
+
+bool MainWindow::IsTextInputFocus() const
+{
+    QWidget *focus = QApplication::focusWidget();
+    return qobject_cast<QLineEdit *>(focus) != nullptr ||
+           qobject_cast<QAbstractSpinBox *>(focus) != nullptr ||
+           qobject_cast<QTextEdit *>(focus) != nullptr ||
+           qobject_cast<QPlainTextEdit *>(focus) != nullptr ||
+           qobject_cast<QComboBox *>(focus) != nullptr ||
+           qobject_cast<QTabBar *>(focus) != nullptr;
+}
+
+QPoint MainWindow::CanvasScrollPos() const
+{
+    if (m_canvasScroll == nullptr) {
+        return QPoint();
+    }
+    return QPoint(m_canvasScroll->horizontalScrollBar()->value(),
+                  m_canvasScroll->verticalScrollBar()->value());
+}
+
+void MainWindow::SetCanvasScrollPos(const QPoint &pos)
+{
+    if (m_canvasScroll == nullptr) {
+        return;
+    }
+    m_canvasScroll->horizontalScrollBar()->setValue(pos.x());
+    m_canvasScroll->verticalScrollBar()->setValue(pos.y());
+}
+
+bool MainWindow::IsCanvasWidget(const QObject *obj) const
+{
+    if (obj == nullptr || m_canvasScroll == nullptr) {
+        return false;
+    }
+    return obj == ui->imageLabel || obj == m_overlay || obj == m_canvasScroll->viewport();
 }
 
 // 画面回到"已提交"的图像状态
@@ -2081,6 +2413,8 @@ void MainWindow::SetupSelectionTool()
     m_overlay = new SelectionOverlay(ui->imageLabel);
     m_overlay->setGeometry(ui->imageLabel->rect());
     m_overlay->setVisible(false);
+    // 工具激活时覆盖层会接收鼠标事件，缩放/平移同样要生效
+    m_overlay->installEventFilter(this);
     m_overlay->onSelectionChanged = [this](const QRect &rect, bool add) {
         SetSelection(rect, add);
         if (rect.isEmpty()) {
@@ -6292,6 +6626,19 @@ bool MainWindow::LoadImage(const QString &path)
 // 多文档标签页
 // ------------------------------------------------------------------
 
+// 用 QScrollArea 承载 imageLabel：缩放后图像超出视口时由滚动条提供平移
+void MainWindow::SetupCanvasView()
+{
+    m_canvasScroll = new QScrollArea(this);
+    m_canvasScroll->setObjectName("canvasScroll");
+    m_canvasScroll->setFrameShape(QFrame::NoFrame);
+    m_canvasScroll->setWidgetResizable(true);
+    m_canvasScroll->setAlignment(Qt::AlignCenter);
+    m_canvasScroll->setWidget(ui->imageLabel);
+    // 空格平移需要覆盖整个主窗口(含子控件与覆盖层)
+    qApp->installEventFilter(this);
+}
+
 void MainWindow::SetupDocumentTabs()
 {
     m_tabBar = new QTabBar(this);
@@ -6309,7 +6656,7 @@ void MainWindow::SetupDocumentTabs()
         CloseDocument(index);
     });
 
-    // 显示区改为 "标签栏 + 图像" 的纵向布局(不改 .ui，运行时重排即可)
+    // 显示区改为 "标签栏 + 可滚动画布" 的纵向布局(不改 .ui，运行时重排即可)
     QWidget *viewBox = new QWidget(this);
     viewBox->setObjectName("viewBox");
     QVBoxLayout *viewLayout = new QVBoxLayout(viewBox);
@@ -6317,7 +6664,8 @@ void MainWindow::SetupDocumentTabs()
     viewLayout->setSpacing(6);
     ui->horizontalLayout_4->removeWidget(ui->imageLabel);
     viewLayout->addWidget(m_tabBar);
-    viewLayout->addWidget(ui->imageLabel, 1);
+    SetupCanvasView();
+    viewLayout->addWidget(m_canvasScroll, 1);
     ui->horizontalLayout_4->insertWidget(0, viewBox, 1);
 
     // 文件菜单增加"关闭当前图像"
@@ -6395,6 +6743,18 @@ void MainWindow::ResetDocumentState()
     m_layers.clear();
     m_activeLayer = 0;
     m_composite.clear();
+    // 缩放/平移状态随文档切换重置(仅影响显示)
+    m_fitToWindow = true;
+    m_zoom = 1.0;
+    m_canvasBasePixmap = QPixmap();
+    m_canvasBaseSize = QSize();
+    m_fitViewportSize = QSize();
+    m_spaceHeld = false;
+    m_panning = false;
+    // 解除上一次缩放留下的固定尺寸，避免关闭文档后占位文字被撑大
+    ui->imageLabel->setMinimumSize(0, 0);
+    ui->imageLabel->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
+    UpdateFitActionState();
     UpdateSelectionOverlay();
     UpdateLayerPanel();
     UpdateChannelPanel();
@@ -6438,6 +6798,12 @@ void MainWindow::ActivateDocument(int index)
         cur.channels = std::move(m_channels);
         cur.layers = std::move(m_layers);
         cur.activeLayer = m_activeLayer;
+        cur.fitToWindow = m_fitToWindow;
+        cur.zoom = m_zoom;
+        cur.scrollX = m_canvasScroll != nullptr
+                          ? m_canvasScroll->horizontalScrollBar()->value() : 0;
+        cur.scrollY = m_canvasScroll != nullptr
+                          ? m_canvasScroll->verticalScrollBar()->value() : 0;
         ResetDocumentState();   // 成员里不再保留旧文档的副本
     }
 
@@ -6462,6 +6828,10 @@ void MainWindow::ActivateDocument(int index)
     m_channels = std::move(doc.channels);
     m_layers = std::move(doc.layers);
     m_activeLayer = doc.activeLayer;
+    // 恢复该文档的显示缩放状态(不影响像素与历史)
+    m_fitToWindow = doc.fitToWindow;
+    m_zoom = doc.zoom;
+    UpdateFitActionState();
     if (m_layers.empty() && !imageData.empty()) {
         m_layers.push_back(Layer{QString("图层 1"), imageData});
         m_activeLayer = 0;
@@ -6483,6 +6853,10 @@ void MainWindow::ActivateDocument(int index)
     }
     SyncSelectionToImage();
     UpdateStatusInfo();
+    if (m_canvasScroll != nullptr) {
+        // 显示尺寸确定后再恢复滚动位置(适应窗口时会被钳制到 0)
+        SetCanvasScrollPos(QPoint(doc.scrollX, doc.scrollY));
+    }
     UpdateHistoryPanel();
     UpdateLayerPanel();
     UpdateChannelPanel();
@@ -6776,8 +7150,15 @@ void MainWindow::UpdateStatusInfo()
     const int32_t h = myValue.bmpInfo.GetHeight();
     QString info;
     if (canSave && w > 0 && h > 0) {
-        info = QString("%1 × %2 px   |   线程 %3   |   历史 %4 步")
-                   .arg(w).arg(h).arg(num_threads).arg(static_cast<int>(imageDataHistory.size()));
+        const QString zoomText = m_fitToWindow
+                                     ? QString("适应窗口 %1%").arg(CanvasZoomPercent())
+                                     : QString("%1%").arg(CanvasZoomPercent());
+        info = QString("%1 × %2 px   |   缩放 %3   |   线程 %4   |   历史 %5 步")
+                   .arg(w)
+                   .arg(h)
+                   .arg(zoomText)
+                   .arg(num_threads)
+                   .arg(static_cast<int>(imageDataHistory.size()));
     } else {
         info = QString("线程 %1").arg(num_threads);
     }

@@ -9,6 +9,7 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 #include"qt_headers.h"
+#include <QKeyEvent>
 #include <QListWidgetItem>
 #include <QListWidget>
 #include <QGroupBox>
@@ -153,9 +154,15 @@ struct Document {
     std::vector<SelectionChannel> channels;   // 已保存的选区通道(随文档切换)
     std::vector<Layer> layers;                // 图层栈(自底向上)
     int activeLayer = 0;
+    // 显示缩放状态(仅影响显示，不写入像素与历史)
+    bool fitToWindow = true;
+    double zoom = 1.0;                        // 非适应窗口时的绝对比例(1.0 = 100%)
+    int scrollX = 0;
+    int scrollY = 0;
 };
 
 class SelectionOverlay;
+class QScrollArea;
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -199,6 +206,12 @@ public:
     // 当前打开的文档数 / 活动文档下标(供自检使用)
     int DocumentCount() const { return static_cast<int>(m_docs.size()); }
     int ActiveDocumentIndex() const { return m_activeDoc; }
+
+    // ---- 画布缩放/平移(只影响显示，不改像素、不写历史) ----
+    int CanvasZoomPercent() const;              // 100 = 1 图像像素对应 1 屏幕像素
+    bool IsCanvasFitToWindow() const { return m_fitToWindow; }
+    void SetCanvasZoomPercent(int percent);     // 退出适应窗口，设为绝对比例
+    void FitCanvasToWindow();                   // 等同 Ctrl+0
 
     // ---- 选区(图像像素坐标，视觉坐标，y 向下；内部用掩码保存，支持羽化/反选/加选) ----
     // add=true 表示把新矩形并入已有选区(Shift 加选)
@@ -426,6 +439,9 @@ protected:
     void mouseDoubleClickEvent(QMouseEvent *event) override;
     // 输入框按 Esc 取消预览
     bool eventFilter(QObject *watched, QEvent *event) override;
+    // 空格按下/松开：平移待命(窗口焦点不在子控件时兜底)
+    void keyPressEvent(QKeyEvent *event) override;
+    void keyReleaseEvent(QKeyEvent *event) override;
 
 private:
     Ui::MainWindow *ui;
@@ -438,6 +454,32 @@ private:
     bool m_busy = false;          // 是否有算子正在后台执行
     bool m_fitToWindow = true;    // 图像是否自适应窗口显示
     int  m_historyLimit = 40;     // 撤销历史最多保留的步数(控制内存)
+
+    // ---- 画布缩放/平移(只影响显示，不改像素、不写历史) ----
+    void SetupCanvasView();                     // 用 QScrollArea 承载 imageLabel
+    double CanvasFitScale() const;              // 适应窗口时的实际缩放
+    double CanvasMaxZoom() const;               // 放大上限(兼顾位图内存)
+    double CanvasZoom() const;                  // 当前生效缩放(fit 模式按视口换算)
+    void SetCanvasZoomInternal(double zoom, const QPoint &labelPos);   // 以标签内某点为锚点缩放
+    void UpdateFitActionState();                // 同步「适应窗口」勾选态(阻断信号)
+    void SetCanvasSpaceHeld(bool held);         // 空格待命/结束，管理光标
+    bool CanvasUnderMouse() const;              // 鼠标是否在画布视口内
+    bool IsTextInputFocus() const;              // 焦点是否在文本输入控件
+    QPoint CanvasScrollPos() const;
+    void SetCanvasScrollPos(const QPoint &pos);
+    bool IsCanvasWidget(const QObject *obj) const;   // imageLabel / overlay / viewport
+    QScrollArea *m_canvasScroll = nullptr;
+    QPixmap m_canvasBasePixmap;      // 未缩放的显示图(重新缩放用)
+    QSize m_canvasBaseSize;          // m_canvasBasePixmap 尺寸(=像素尺寸)
+    double m_zoom = 1.0;             // 绝对比例(1.0 = 100%)
+    QSize m_fitViewportSize;         // 上次适应窗口时的视口尺寸(避免重复重排)
+    QAction *m_fitAction = nullptr;
+    bool m_spaceHeld = false;
+    bool m_panning = false;
+    QPoint m_panStartGlobal;
+    QPoint m_panOriginScroll;
+    bool m_canvasCursorOverride = false;  // 是否已设置全局手形光标
+    bool m_canvasUpdating = false;        // 防止视口 Resize 重入
     int32_t m_originalWidth = 0;  // 原始图像尺寸(重置时用)
     int32_t m_originalHeight = 0;
     ContentQuad m_contentQuad;    // 当前内容区域(旋转时用于确定新画布)

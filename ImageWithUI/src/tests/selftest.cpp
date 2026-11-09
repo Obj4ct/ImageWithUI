@@ -20,6 +20,8 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QLabel>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QSlider>
 #include <QDoubleSpinBox>
 #include <QComboBox>
@@ -3676,6 +3678,128 @@ int Run(const QString &imagePath)
         } else {
             ++g_fail;
             out() << "[FAIL] 图片微调 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
+    // ---------- 28. 画布缩放比例与显示尺寸 ----------
+    {
+        QString failReason;
+        {
+            MainWindow win;
+            QLabel *label = win.findChild<QLabel *>("imageLabel");
+            QScrollArea *scroll = win.findChild<QScrollArea *>("canvasScroll");
+            QLabel *status = win.findChild<QLabel *>("statusInfoLabel");
+            if (!win.OpenImage(path)) {
+                failReason = "无法打开样例图";
+            } else if (label == nullptr || scroll == nullptr) {
+                failReason = "找不到画布标签或滚动区";
+            } else if (!win.IsCanvasFitToWindow()) {
+                failReason = "打开图片后应默认适应窗口";
+            } else if (status != nullptr && !status->text().contains(QStringLiteral("适应窗口"))) {
+                failReason = QString("状态栏没有显示适应窗口(实际 %1)").arg(status->text());
+            } else if (label->pixmap() == nullptr || label->pixmap()->isNull()) {
+                failReason = "适应窗口下没有显示位图";
+            } else {
+                const std::vector<uint8_t> beforePixels = win.CurrentImageData();
+                const int beforeHistory = static_cast<int>(win.imageDataHistory.size());
+
+                win.SetCanvasZoomPercent(100);
+                if (win.CanvasZoomPercent() != 100 || win.IsCanvasFitToWindow()) {
+                    failReason = QString("设为 100% 后状态不对(实际 %1%)")
+                                     .arg(win.CanvasZoomPercent());
+                } else if (label->pixmap() == nullptr || label->pixmap()->isNull()) {
+                    failReason = "100% 下没有显示位图";
+                } else if (status != nullptr && !status->text().contains(QStringLiteral("100%"))) {
+                    failReason = QString("状态栏没有显示 100%(实际 %1)").arg(status->text());
+                } else {
+                    const QSize base = label->pixmap()->size();
+                    win.SetCanvasZoomPercent(200);
+                    const QSize now = label->pixmap()->size();
+                    if (win.CanvasZoomPercent() != 200 || win.IsCanvasFitToWindow()) {
+                        failReason = QString("设为 200% 后状态不对(实际 %1%)")
+                                         .arg(win.CanvasZoomPercent());
+                    } else if (qAbs(now.width() - base.width() * 2) > 2 ||
+                               qAbs(now.height() - base.height() * 2) > 2) {
+                        failReason = QString("200% 显示尺寸不对(%1×%2，基准 %3×%4)")
+                                         .arg(now.width()).arg(now.height())
+                                         .arg(base.width()).arg(base.height());
+                    } else if (win.CurrentImageData() != beforePixels) {
+                        failReason = "缩放改动了像素数据";
+                    } else if (static_cast<int>(win.imageDataHistory.size()) != beforeHistory) {
+                        failReason = "缩放写入了历史";
+                    } else {
+                        win.FitCanvasToWindow();
+                        if (!win.IsCanvasFitToWindow()) {
+                            failReason = "FitCanvasToWindow 没有回到适应窗口";
+                        } else if (status != nullptr &&
+                                   !status->text().contains(QStringLiteral("适应窗口"))) {
+                            failReason = QString("状态栏没有回到适应窗口(实际 %1)").arg(status->text());
+                        }
+                    }
+                }
+            }
+        }
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 画布缩放 : 100%/200% 显示尺寸正确，像素与历史不变，可回到适应窗口\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 画布缩放 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
+    // ---------- 29. 多文档缩放状态独立 ----------
+    {
+        const QString zoomAPath = QDir::tempPath() + "/imagewithui_zoom_a.png";
+        const QString zoomBPath = QDir::tempPath() + "/imagewithui_zoom_b.png";
+        {
+            QImage a(60, 40, QImage::Format_RGB32);
+            a.fill(qRgb(200, 60, 60));
+            a.save(zoomAPath, "PNG");
+            QImage b(50, 30, QImage::Format_RGB32);
+            b.fill(qRgb(60, 60, 200));
+            b.save(zoomBPath, "PNG");
+        }
+
+        QString failReason;
+        {
+            MainWindow win;
+            QTabBar *bar = win.findChild<QTabBar *>("documentTabBar");
+            if (!win.OpenImage(zoomAPath) || !win.OpenImage(zoomBPath)) {
+                failReason = "无法打开测试图";
+            } else if (bar == nullptr || bar->count() != 2) {
+                failReason = "标签栏没有正确创建";
+            } else if (!win.IsCanvasFitToWindow()) {
+                failReason = "打开 B 后应默认适应窗口";
+            } else {
+                bar->setCurrentIndex(0);   // 切到 A
+                win.SetCanvasZoomPercent(200);
+                if (win.CanvasZoomPercent() != 200 || win.IsCanvasFitToWindow()) {
+                    failReason = "A 设为 200% 失败";
+                } else {
+                    bar->setCurrentIndex(1);   // B
+                    if (!win.IsCanvasFitToWindow()) {
+                        failReason = "B 不应继承 A 的缩放状态";
+                    } else {
+                        bar->setCurrentIndex(0);   // 回到 A
+                        if (win.CanvasZoomPercent() != 200 || win.IsCanvasFitToWindow()) {
+                            failReason = QString("A 的缩放状态没有记住(实际 %1%)")
+                                             .arg(win.CanvasZoomPercent());
+                        }
+                    }
+                }
+            }
+        }
+        QFile::remove(zoomAPath);
+        QFile::remove(zoomBPath);
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 多文档缩放 : 切换文档后各自恢复缩放状态\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 多文档缩放 : " << failReason << "\n";
         }
         out().flush();
     }
