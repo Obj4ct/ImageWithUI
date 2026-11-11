@@ -2141,7 +2141,7 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
             if (steps != 0 && !m_canvasBaseSize.isEmpty()) {
                 QWidget *source = qobject_cast<QWidget *>(watched);
                 const QPoint labelPos =
-                    source != nullptr ? source->mapTo(ui->imageLabel, wheel->pos()) : wheel->pos();
+                    source != nullptr ? CanvasLabelPos(source, wheel->pos()) : wheel->pos();
                 SetCanvasZoomInternal(CanvasZoom() * std::pow(1.25, steps / 120.0), labelPos);
             }
             return true;   // 不再交给滚动区滚动
@@ -2207,8 +2207,8 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
             // 像素探针：坐标按显示矩形换算到图像像素，颜色取当前画面
             QWidget *source = qobject_cast<QWidget *>(watched);
             if (source != nullptr) {
-                UpdatePixelProbe(source->mapTo(ui->imageLabel,
-                                               static_cast<QMouseEvent *>(event)->pos()));
+                UpdatePixelProbe(CanvasLabelPos(source,
+                                                static_cast<QMouseEvent *>(event)->pos()));
             }
         } else if (event->type() == QEvent::Leave) {
             if (!CanvasUnderMouse()) {
@@ -2507,6 +2507,25 @@ bool MainWindow::IsCanvasWidget(const QObject *obj) const
     return obj == ui->imageLabel || obj == m_overlay || obj == m_canvasScroll->viewport();
 }
 
+// 把某个画布控件内的坐标换算到 imageLabel 坐标。
+// 注意：不能直接 source->mapTo(imageLabel, pos)——当 source 是滚动区视口时，
+// 标签只是视口的子控件，不符合 QWidget::mapTo 的"parent 必须是祖先"要求(Debug 下会断言)。
+QPoint MainWindow::CanvasLabelPos(QWidget *source, const QPoint &pos) const
+{
+    if (source == nullptr || source == ui->imageLabel) {
+        return pos;
+    }
+    // 覆盖层等子控件与标签几何一致，直接按标签坐标使用
+    if (ui->imageLabel->isAncestorOf(source)) {
+        return pos;
+    }
+    // 视口等祖先控件：由标签反向换算(mapFrom 要求 parent 是标签的祖先)
+    if (source->isAncestorOf(ui->imageLabel)) {
+        return ui->imageLabel->mapFrom(source, pos);
+    }
+    return pos;
+}
+
 // 标签内实际显示位图的矩形(与覆盖层 displayRect() 同一口径)
 QRect MainWindow::CanvasDisplayRect() const
 {
@@ -2558,20 +2577,6 @@ void MainWindow::UpdatePixelProbe(const QPoint &labelPos)
     if (m_probeLabel != nullptr) {
         m_probeLabel->setText(m_pixelProbeText);
     }
-}
-
-void MainWindow::ProbeImagePixel(int x, int y)
-{
-    const QRect dr = CanvasDisplayRect();
-    const int32_t w = myValue.bmpInfo.GetWidth();
-    const int32_t h = myValue.bmpInfo.GetHeight();
-    if (dr.isEmpty() || w <= 0 || h <= 0) {
-        return;
-    }
-    const QPoint labelPos(
-        dr.left() + static_cast<int>(static_cast<qint64>(x) * dr.width() / w),
-        dr.top() + static_cast<int>(static_cast<qint64>(y) * dr.height() / h));
-    UpdatePixelProbe(labelPos);
 }
 
 void MainWindow::UpdatePixelProbeFromCursor()

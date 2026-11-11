@@ -244,7 +244,6 @@ public:
     // ---- 像素探针与直方图(只读，不改像素、不写历史) ----
     QString PixelProbeText() const { return m_pixelProbeText; }
     qint64 HistogramSampleCount() const;
-    void ProbeImagePixel(int x, int y);   // 按图像像素坐标刷新探针(自检复用)
 
     // ---- 选区(图像像素坐标，视觉坐标，y 向下；内部用掩码保存，支持羽化/反选/加选) ----
     // add=true 表示把新矩形并入已有选区(Shift 加选)
@@ -501,6 +500,8 @@ private:
     QPoint CanvasScrollPos() const;
     void SetCanvasScrollPos(const QPoint &pos);
     bool IsCanvasWidget(const QObject *obj) const;   // imageLabel / overlay / viewport
+    // 把某个画布控件内的坐标换算到 imageLabel 坐标(不满足父子关系时按原值处理)
+    QPoint CanvasLabelPos(QWidget *source, const QPoint &pos) const;
     QRect CanvasDisplayRect() const;                 // 标签内实际显示位图的矩形
     // ---- 像素探针与直方图 ----
     void SetupHistogramPanel();                      // 右侧「直方图」分组

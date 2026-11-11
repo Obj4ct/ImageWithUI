@@ -3828,8 +3828,17 @@ int Run(const QString &imagePath)
                     failReason = QString("直方图统计像素数不对(期望 %1 实际 %2)")
                                      .arg(expectSamples).arg(win.HistogramSampleCount());
                 } else {
-                    // 探针：按图像中心像素刷新，坐标与颜色都应正确
-                    win.ProbeImagePixel(w / 2, h / 2);
+                    // 真实路径：把鼠标移动事件发到画布，探针应显示中心像素坐标
+                    const QSize shown = label->pixmap()->size();
+                    const QRect area = label->contentsRect();
+                    const QPoint topLeft =
+                        area.topLeft() + QPoint((area.width() - shown.width()) / 2,
+                                                (area.height() - shown.height()) / 2);
+                    const QPoint labelPos = topLeft + QPoint(shown.width() / 2, shown.height() / 2);
+                    QMouseEvent move(QEvent::MouseMove, QPointF(labelPos),
+                                     QPointF(label->mapToGlobal(labelPos)), Qt::NoButton,
+                                     Qt::NoButton, Qt::NoModifier);
+                    QApplication::sendEvent(label, &move);
                     const QString expected = QString("%1, %2").arg(w / 2).arg(h / 2);
                     if (!probe->text().contains(expected) || !probe->text().contains("RGB")) {
                         failReason = QString("探针显示不对(期望含 %1 / RGB，实际 %2)")
