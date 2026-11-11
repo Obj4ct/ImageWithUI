@@ -3804,6 +3804,52 @@ int Run(const QString &imagePath)
         out().flush();
     }
 
+    // ---------- 30. 像素探针与直方图 ----------
+    {
+        QString failReason;
+        {
+            MainWindow win;
+            QLabel *label = win.findChild<QLabel *>("imageLabel");
+            QLabel *probe = win.findChild<QLabel *>("pixelProbeLabel");
+            QWidget *histogramGroup = win.findChild<QWidget *>("group_histogram");
+            if (!win.OpenImage(path)) {
+                failReason = "无法打开样例图";
+            } else if (label == nullptr || probe == nullptr) {
+                failReason = "找不到画布标签或探针控件";
+            } else if (histogramGroup == nullptr) {
+                failReason = "右侧没有直方图面板";
+            } else if (label->pixmap() == nullptr || label->pixmap()->isNull()) {
+                failReason = "适应窗口下没有显示位图";
+            } else {
+                const int32_t w = win.myValue.bmpInfo.GetWidth();
+                const int32_t h = win.myValue.bmpInfo.GetHeight();
+                const qint64 expectSamples = static_cast<qint64>(w) * h;
+                if (win.HistogramSampleCount() != expectSamples) {
+                    failReason = QString("直方图统计像素数不对(期望 %1 实际 %2)")
+                                     .arg(expectSamples).arg(win.HistogramSampleCount());
+                } else {
+                    // 探针：按图像中心像素刷新，坐标与颜色都应正确
+                    win.ProbeImagePixel(w / 2, h / 2);
+                    const QString expected = QString("%1, %2").arg(w / 2).arg(h / 2);
+                    if (!probe->text().contains(expected) || !probe->text().contains("RGB")) {
+                        failReason = QString("探针显示不对(期望含 %1 / RGB，实际 %2)")
+                                         .arg(expected, probe->text());
+                    } else if (!win.PixelProbeText().contains(expected)) {
+                        failReason = QString("探针内部状态不对(实际 %1)").arg(win.PixelProbeText());
+                    }
+                }
+            }
+        }
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 像素探针与直方图 : 中心坐标/RGB 显示正确，直方图统计像素数与画布一致\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 像素探针与直方图 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
     out() << "------------------------------------------------\n";
     out() << "通过 " << g_pass << " 项，失败 " << g_fail << " 项\n";
     out().flush();

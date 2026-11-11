@@ -9,6 +9,7 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 #include"qt_headers.h"
+#include <array>
 #include <QKeyEvent>
 #include <QListWidgetItem>
 #include <QListWidget>
@@ -164,6 +165,33 @@ struct Document {
 class SelectionOverlay;
 class QScrollArea;
 
+// 直方图显示控件：按 R/G/B 三通道各 256 级统计当前画面。
+// 像素很多时按固定上限抽样，保证刷新不影响交互流畅度。
+class HistogramView : public QWidget
+{
+    Q_OBJECT
+
+public:
+    explicit HistogramView(QWidget *parent = nullptr);
+    // data 为 BGR 紧凑缓冲(自底向上，行序不影响统计)；空数据表示清空
+    void SetPixels(const std::vector<uint8_t> &data);
+    void Clear();
+    bool IsEmpty() const { return m_empty; }
+    // 参与统计的像素数(抽样后)，供自检与状态展示
+    qint64 SampleCount() const { return m_sampleCount; }
+
+protected:
+    void paintEvent(QPaintEvent *event) override;
+
+private:
+    std::array<int, 256> m_red{};
+    std::array<int, 256> m_green{};
+    std::array<int, 256> m_blue{};
+    int m_max = 0;            // 三通道最大计数(归一化用)
+    qint64 m_sampleCount = 0;
+    bool m_empty = true;
+};
+
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
@@ -212,6 +240,11 @@ public:
     bool IsCanvasFitToWindow() const { return m_fitToWindow; }
     void SetCanvasZoomPercent(int percent);     // 退出适应窗口，设为绝对比例
     void FitCanvasToWindow();                   // 等同 Ctrl+0
+
+    // ---- 像素探针与直方图(只读，不改像素、不写历史) ----
+    QString PixelProbeText() const { return m_pixelProbeText; }
+    qint64 HistogramSampleCount() const;
+    void ProbeImagePixel(int x, int y);   // 按图像像素坐标刷新探针(自检复用)
 
     // ---- 选区(图像像素坐标，视觉坐标，y 向下；内部用掩码保存，支持羽化/反选/加选) ----
     // add=true 表示把新矩形并入已有选区(Shift 加选)
@@ -468,6 +501,18 @@ private:
     QPoint CanvasScrollPos() const;
     void SetCanvasScrollPos(const QPoint &pos);
     bool IsCanvasWidget(const QObject *obj) const;   // imageLabel / overlay / viewport
+    QRect CanvasDisplayRect() const;                 // 标签内实际显示位图的矩形
+    // ---- 像素探针与直方图 ----
+    void SetupHistogramPanel();                      // 右侧「直方图」分组
+    void RefreshHistogram();                         // 按当前画面重建直方图
+    void UpdatePixelProbe(const QPoint &labelPos);   // 标签内坐标 → 坐标/颜色提示
+    void UpdatePixelProbeFromCursor();               // 缩放/滚动后按当前光标刷新
+    void ClearPixelProbe();
+    QLabel *m_probeLabel = nullptr;                  // 状态栏左侧的探针显示
+    HistogramView *m_histogramView = nullptr;
+    QGroupBox *m_histogramGroup = nullptr;
+    QImage m_canvasBaseImage;                        // 与 m_canvasBasePixmap 对应的取色图
+    QString m_pixelProbeText;
     QScrollArea *m_canvasScroll = nullptr;
     QPixmap m_canvasBasePixmap;      // 未缩放的显示图(重新缩放用)
     QSize m_canvasBaseSize;          // m_canvasBasePixmap 尺寸(=像素尺寸)

@@ -42,6 +42,7 @@
 #include <QSlider>
 #include <QCheckBox>
 #include <QtMath>
+#include <cmath>
 #include <algorithm>
 
 namespace {
@@ -528,6 +529,116 @@ bool SameSnapshot(const ImageSnapshot &a, const ImageSnapshot &b)
 }
 
 }   // namespace
+
+// ------------------------------------------------------------------
+// 直方图控件
+// 统计当前画面的 R/G/B 三个通道(各 256 级)，用加色方式叠加三条曲线。
+// 像素超过 100 万时按固定步长抽样，保证拖动参数预览时刷新依然轻量。
+// ------------------------------------------------------------------
+
+HistogramView::HistogramView(QWidget *parent)
+    : QWidget(parent)
+{
+    setObjectName("histogramView");
+    setMinimumHeight(112);
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    setToolTip(QString("当前画面的 R/G/B 直方图（像素多时自动抽样）"));
+}
+
+void HistogramView::SetPixels(const std::vector<uint8_t> &data)
+{
+    m_red.fill(0);
+    m_green.fill(0);
+    m_blue.fill(0);
+    m_max = 0;
+    m_sampleCount = 0;
+    m_empty = true;
+
+    const size_t pixels = data.size() / 3;
+    if (pixels == 0) {
+        update();
+        return;
+    }
+    size_t step = 1;
+    while (pixels / step > 1000000) {
+        ++step;
+    }
+    for (size_t i = 0; i < pixels; i += step) {
+        const uint8_t *p = data.data() + i * 3;   // 内部布局：B, G, R
+        ++m_blue[p[0]];
+        ++m_green[p[1]];
+        ++m_red[p[2]];
+        ++m_sampleCount;
+    }
+    for (int i = 0; i < 256; ++i) {
+        m_max = std::max(m_max, std::max(m_red[i], std::max(m_green[i], m_blue[i])));
+    }
+    m_empty = (m_max <= 0);
+    update();
+}
+
+void HistogramView::Clear()
+{
+    m_red.fill(0);
+    m_green.fill(0);
+    m_blue.fill(0);
+    m_max = 0;
+    m_sampleCount = 0;
+    m_empty = true;
+    update();
+}
+
+void HistogramView::paintEvent(QPaintEvent *)
+{
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+
+    const QRectF area = QRectF(rect()).adjusted(1.0, 1.0, -1.0, -1.0);
+    painter.fillRect(rect(), QColor(0, 0, 0, 60));
+    painter.setPen(QColor(128, 128, 128, 60));
+    painter.drawRect(area);
+
+    if (m_empty || m_max <= 0) {
+        painter.setPen(palette().color(QPalette::Mid));
+        painter.drawText(rect(), Qt::AlignCenter, QString("无数据"));
+        return;
+    }
+
+    // 网格：纵向 4 等分(色阶)、横向 4 等分(数量)
+    QColor grid(128, 128, 128, 45);
+    for (int i = 1; i < 4; ++i) {
+        const qreal x = area.left() + area.width() * i / 4.0;
+        painter.setPen(grid);
+        painter.drawLine(QPointF(x, area.top()), QPointF(x, area.bottom()));
+        const qreal y = area.top() + area.height() * i / 4.0;
+        painter.drawLine(QPointF(area.left(), y), QPointF(area.right(), y));
+    }
+
+    // 对数纵轴：避免单色大背景把其它色阶压成一条线
+    const double denom = std::log(1.0 + static_cast<double>(m_max));
+    auto buildPolygon = [&](const std::array<int, 256> &bins) {
+        QPolygonF poly;
+        poly.reserve(256);
+        for (int i = 0; i < 256; ++i) {
+            const double ratio = std::log(1.0 + static_cast<double>(bins[i])) / denom;
+            poly << QPointF(area.left() + area.width() * i / 255.0,
+                            area.bottom() - area.height() * ratio);
+        }
+        return poly;
+    };
+
+    painter.setCompositionMode(QPainter::CompositionMode_Plus);
+    const QColor red(255, 70, 70, 170);
+    const QColor green(70, 230, 120, 170);
+    const QColor blue(80, 150, 255, 170);
+    painter.setPen(QPen(red, 1.2));
+    painter.drawPolyline(buildPolygon(m_red));
+    painter.setPen(QPen(green, 1.2));
+    painter.drawPolyline(buildPolygon(m_green));
+    painter.setPen(QPen(blue, 1.2));
+    painter.drawPolyline(buildPolygon(m_blue));
+    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+}
 
 // ------------------------------------------------------------------
 // 矩形选区覆盖层
@@ -1926,10 +2037,17 @@ MainWindow::MainWindow(QWidget *parent)
     ui->imageLabel->setAlignment(Qt::AlignCenter);
     ui->imageLabel->setText(QString("双击此处，或按 Ctrl+N 打开图片"));
     statusBar()->showMessage("就绪 · 请先打开一张图片");
+    // 像素探针常驻状态栏(在右侧信息左边)，没有图像时显示占位符
+    m_probeLabel = new QLabel(QString("—"), this);
+    m_probeLabel->setObjectName("pixelProbeLabel");
+    m_probeLabel->setMinimumWidth(190);
+    m_probeLabel->setToolTip(QString("鼠标所在位置的图像坐标与颜色"));
+    statusBar()->addPermanentWidget(m_probeLabel);
     UpdateStatusInfo();
     SetupSelectionTool();   // 矩形选区覆盖层 + "选择"菜单
     SetupLayerPanel();      // 右侧图层面板 + "图层"菜单
     SetupChannelPanel();    // 右侧通道面板(存储/载入选区)
+    SetupHistogramPanel();  // 右侧直方图面板(只读统计)
     SetupBrushPanel();      // 右侧画笔参数面板
     SetupGradientPanel();   // 右侧渐变参数面板
     SetupShapePanel();      // 右侧形状参数面板
@@ -2085,6 +2203,17 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
                 }
                 return true;
             }
+        } else if (event->type() == QEvent::MouseMove) {
+            // 像素探针：坐标按显示矩形换算到图像像素，颜色取当前画面
+            QWidget *source = qobject_cast<QWidget *>(watched);
+            if (source != nullptr) {
+                UpdatePixelProbe(source->mapTo(ui->imageLabel,
+                                               static_cast<QMouseEvent *>(event)->pos()));
+            }
+        } else if (event->type() == QEvent::Leave) {
+            if (!CanvasUnderMouse()) {
+                ClearPixelProbe();
+            }
         }
     }
 
@@ -2164,6 +2293,7 @@ void MainWindow::ApplyDisplayPixmap(QPixmap pixmap)
     }
     m_canvasBasePixmap = pixmap;
     m_canvasBaseSize = pixmap.size();
+    m_canvasBaseImage = pixmap.toImage();   // 探针取色用(避免每次鼠标移动都转换)
     m_canvasUpdating = true;
 
     const QSize viewport = m_canvasScroll != nullptr ? m_canvasScroll->viewport()->size()
@@ -2194,6 +2324,7 @@ void MainWindow::ApplyDisplayPixmap(QPixmap pixmap)
         m_overlay->raise();
     }
     UpdateStatusInfo();
+    UpdatePixelProbeFromCursor();   // 缩放/滚动后光标下的像素可能变了
     m_canvasUpdating = false;
 }
 
@@ -2365,6 +2496,7 @@ void MainWindow::SetCanvasScrollPos(const QPoint &pos)
     }
     m_canvasScroll->horizontalScrollBar()->setValue(pos.x());
     m_canvasScroll->verticalScrollBar()->setValue(pos.y());
+    UpdatePixelProbeFromCursor();   // 平移后光标下的像素变了
 }
 
 bool MainWindow::IsCanvasWidget(const QObject *obj) const
@@ -2373,6 +2505,133 @@ bool MainWindow::IsCanvasWidget(const QObject *obj) const
         return false;
     }
     return obj == ui->imageLabel || obj == m_overlay || obj == m_canvasScroll->viewport();
+}
+
+// 标签内实际显示位图的矩形(与覆盖层 displayRect() 同一口径)
+QRect MainWindow::CanvasDisplayRect() const
+{
+    const QPixmap *shown = ui->imageLabel->pixmap();
+    if (shown == nullptr || shown->isNull()) {
+        return QRect();
+    }
+    const QRect area = ui->imageLabel->contentsRect();
+    const QSize sz = shown->size();
+    const QPoint topLeft = area.topLeft() + QPoint((area.width() - sz.width()) / 2,
+                                                   (area.height() - sz.height()) / 2);
+    return QRect(topLeft, sz);
+}
+
+// ------------------------------------------------------------------
+// 像素探针：鼠标所在图像像素的坐标与颜色(只读)
+// ------------------------------------------------------------------
+
+void MainWindow::UpdatePixelProbe(const QPoint &labelPos)
+{
+    const QRect dr = CanvasDisplayRect();
+    const int32_t w = myValue.bmpInfo.GetWidth();
+    const int32_t h = myValue.bmpInfo.GetHeight();
+    if (dr.isEmpty() || w <= 0 || h <= 0 || imageData.empty()) {
+        ClearPixelProbe();
+        return;
+    }
+    if (!dr.contains(labelPos)) {
+        ClearPixelProbe();
+        return;
+    }
+    const int x = qBound(0, static_cast<int>(static_cast<qint64>(labelPos.x() - dr.left()) * w /
+                                             std::max(1, dr.width())), w - 1);
+    const int y = qBound(0, static_cast<int>(static_cast<qint64>(labelPos.y() - dr.top()) * h /
+                                             std::max(1, dr.height())), h - 1);
+
+    QColor color(255, 255, 255);
+    if (!m_canvasBaseImage.isNull()) {
+        const int ix = qBound(0, static_cast<int>(static_cast<qint64>(x) *
+                                                  m_canvasBaseImage.width() / w),
+                              m_canvasBaseImage.width() - 1);
+        const int iy = qBound(0, static_cast<int>(static_cast<qint64>(y) *
+                                                  m_canvasBaseImage.height() / h),
+                              m_canvasBaseImage.height() - 1);
+        color = m_canvasBaseImage.pixelColor(ix, iy);
+    }
+    m_pixelProbeText = QString("%1, %2   RGB %3, %4, %5")
+                           .arg(x).arg(y).arg(color.red()).arg(color.green()).arg(color.blue());
+    if (m_probeLabel != nullptr) {
+        m_probeLabel->setText(m_pixelProbeText);
+    }
+}
+
+void MainWindow::ProbeImagePixel(int x, int y)
+{
+    const QRect dr = CanvasDisplayRect();
+    const int32_t w = myValue.bmpInfo.GetWidth();
+    const int32_t h = myValue.bmpInfo.GetHeight();
+    if (dr.isEmpty() || w <= 0 || h <= 0) {
+        return;
+    }
+    const QPoint labelPos(
+        dr.left() + static_cast<int>(static_cast<qint64>(x) * dr.width() / w),
+        dr.top() + static_cast<int>(static_cast<qint64>(y) * dr.height() / h));
+    UpdatePixelProbe(labelPos);
+}
+
+void MainWindow::UpdatePixelProbeFromCursor()
+{
+    if (!CanvasUnderMouse()) {
+        ClearPixelProbe();
+        return;
+    }
+    const QPoint labelPos =
+        ui->imageLabel->mapFromGlobal(QCursor::pos());
+    UpdatePixelProbe(labelPos);
+}
+
+void MainWindow::ClearPixelProbe()
+{
+    m_pixelProbeText.clear();
+    if (m_probeLabel != nullptr) {
+        m_probeLabel->setText(QString("—"));
+    }
+}
+
+// ------------------------------------------------------------------
+// 直方图面板：统计当前文档合成后的画面(与保存/显示口径一致)
+// ------------------------------------------------------------------
+
+void MainWindow::SetupHistogramPanel()
+{
+    QWidget *host = ui->group_layers->parentWidget();
+    QVBoxLayout *hostLayout = (host != nullptr) ? qobject_cast<QVBoxLayout *>(host->layout())
+                                                : nullptr;
+    if (host == nullptr || hostLayout == nullptr) {
+        return;
+    }
+
+    m_histogramGroup = new QGroupBox(QString("直方图"), host);
+    m_histogramGroup->setObjectName("group_histogram");
+    QVBoxLayout *box = new QVBoxLayout(m_histogramGroup);
+    box->setContentsMargins(8, 10, 8, 8);
+    box->setSpacing(6);
+
+    m_histogramView = new HistogramView(m_histogramGroup);
+    box->addWidget(m_histogramView);
+    hostLayout->addWidget(m_histogramGroup);
+}
+
+void MainWindow::RefreshHistogram()
+{
+    if (m_histogramView == nullptr) {
+        return;
+    }
+    if (imageData.empty()) {
+        m_histogramView->Clear();
+        return;
+    }
+    m_histogramView->SetPixels(DisplayPixels());
+}
+
+qint64 MainWindow::HistogramSampleCount() const
+{
+    return (m_histogramView != nullptr) ? m_histogramView->SampleCount() : 0;
 }
 
 // 画面回到"已提交"的图像状态
@@ -2386,13 +2645,21 @@ void MainWindow::RefreshDisplay()
 void MainWindow::SetCurrentDisplay()
 {
     if (imageData.empty()) {
+        if (m_histogramView != nullptr) {
+            m_histogramView->Clear();
+        }
         return;
     }
     const int32_t w = myValue.bmpInfo.GetWidth();
     const int32_t h = myValue.bmpInfo.GetHeight();
     if (w <= 0 || h <= 0) {
+        if (m_histogramView != nullptr) {
+            m_histogramView->Clear();
+        }
         return;
     }
+    // 直方图跟随已提交画面刷新(只读统计)
+    RefreshHistogram();
     if (AnyLayerAlphaActive()) {
         const QImage shown = FlattenOnCheckerboard(BuildCompositeRgba());
         if (!shown.isNull()) {
@@ -6343,6 +6610,8 @@ ReturnValue MainWindow::CheckOK(QLineEdit * lineEdit)
 
 MainWindow::~MainWindow()
 {
+    // 全局事件过滤器必须手动摘掉，否则窗口销毁后 qApp 里会留下野指针
+    qApp->removeEventFilter(this);
     delete ui;
 }
 
@@ -6635,7 +6904,10 @@ void MainWindow::SetupCanvasView()
     m_canvasScroll->setWidgetResizable(true);
     m_canvasScroll->setAlignment(Qt::AlignCenter);
     m_canvasScroll->setWidget(ui->imageLabel);
-    // 空格平移需要覆盖整个主窗口(含子控件与覆盖层)
+    // 像素探针需要不按键也能收到鼠标移动
+    ui->imageLabel->setMouseTracking(true);
+    m_canvasScroll->viewport()->setMouseTracking(true);
+    // 空格平移/滚轮缩放需要覆盖整个主窗口(含子控件与覆盖层)
     qApp->installEventFilter(this);
 }
 
@@ -6748,9 +7020,15 @@ void MainWindow::ResetDocumentState()
     m_zoom = 1.0;
     m_canvasBasePixmap = QPixmap();
     m_canvasBaseSize = QSize();
+    m_canvasBaseImage = QImage();
     m_fitViewportSize = QSize();
     m_spaceHeld = false;
     m_panning = false;
+    // 探针与直方图随文档清空
+    ClearPixelProbe();
+    if (m_histogramView != nullptr) {
+        m_histogramView->Clear();
+    }
     // 解除上一次缩放留下的固定尺寸，避免关闭文档后占位文字被撑大
     ui->imageLabel->setMinimumSize(0, 0);
     ui->imageLabel->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
