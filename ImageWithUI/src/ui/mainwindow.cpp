@@ -12,6 +12,7 @@
 #include "ui_mainwindow.h"
 #include "theme.h"
 #include "dialogs.h"
+#include "format_convert.h"
 #include "slider_field.h"
 #include <QAction>
 #include <QActionGroup>
@@ -2009,6 +2010,15 @@ MainWindow::MainWindow(QWidget *parent)
     ui->toolBar->addAction(ui->actionredo);
     ui->toolBar->addSeparator();
     ui->toolBar->addAction(ui->actionscale);
+
+    // 文件菜单：批量图片格式转换(独立窗口，不进入撤销历史)
+    ui->menu->addSeparator();
+    QAction *convertAction = ui->menu->addAction(QString("图片格式转换…"));
+    convertAction->setObjectName("actionFormatConvert");
+    connect(convertAction, &QAction::triggered, this, [this]() {
+        FormatConvertDialog dlg(this);
+        dlg.exec();
+    });
 
     // 视图菜单：主题切换 / 适应窗口
     QMenu *viewMenu = menuBar()->addMenu(QString("视图"));

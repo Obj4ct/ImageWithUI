@@ -13,7 +13,11 @@
 #include "dialogs.h"
 #include "eye_zoom.h"
 #include "retouch.h"
+#include "format_convert.h"
 #include <QFileInfo>
+#include <QImageWriter>
+#include <QDir>
+#include <QFile>
 #include <QTextStream>
 #include <QEventLoop>
 #include <QTimer>
@@ -3928,6 +3932,175 @@ int Run(const QString &imagePath)
         } else {
             ++g_fail;
             out() << "[FAIL] 吸管取色 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
+    // ---------- 32. 图片格式转换 ----------
+    {
+        QString failReason;
+        const QString tmpDir = QDir::tempPath();
+        const QString srcBmp = tmpDir + "/iw_convert_src.bmp";
+        const QString outPng = tmpDir + "/iw_convert_out.png";
+        const QString outJpg = tmpDir + "/iw_convert_out.jpg";
+        const QString alphaPng = tmpDir + "/iw_convert_alpha.png";
+        const QString alphaOutPng = tmpDir + "/iw_convert_alpha_out.png";
+        const QString alphaBmp = tmpDir + "/iw_convert_alpha.bmp";
+        QFile::remove(srcBmp);
+        QFile::remove(outPng);
+        QFile::remove(outJpg);
+        QFile::remove(alphaPng);
+        QFile::remove(alphaOutPng);
+        QFile::remove(alphaBmp);
+
+        const int tw = 8;
+        const int th = 6;
+        QImage src(tw, th, QImage::Format_RGB32);
+        for (int y = 0; y < th; ++y) {
+            for (int x = 0; x < tw; ++x) {
+                src.setPixelColor(x, y, QColor((x * 29) % 256, (y * 41) % 256, 128));
+            }
+        }
+        QImageWriter bmpWriter(srcBmp, "bmp");
+        if (!bmpWriter.write(src)) {
+            failReason = QString("无法生成测试 BMP：%1").arg(bmpWriter.errorString());
+        } else {
+            FormatConvertOptions opt;
+            opt.suffix = "png";
+            QString err;
+            if (!FormatConvert::ConvertFile(srcBmp, outPng, opt, err)) {
+                failReason = QString("BMP→PNG 失败：%1").arg(err);
+            } else {
+                BitmapImage loaded;
+                QString err2;
+                if (!BmpIO::ReadImageFile(outPng.toStdString(), loaded, err2)) {
+                    failReason = QString("转换结果无法读回：%1").arg(err2);
+                } else if (loaded.bmpInfo.GetWidth() != tw ||
+                           loaded.bmpInfo.GetHeight() != th) {
+                    failReason = QString("PNG 尺寸不符：%1 × %2")
+                                     .arg(loaded.bmpInfo.GetWidth())
+                                     .arg(loaded.bmpInfo.GetHeight());
+                } else {
+                    // PNG 无损：抽查像素 (2,3) 应完全一致
+                    const QColor expect = src.pixelColor(2, 3);
+                    const size_t i = (static_cast<size_t>(th - 1 - 3) * tw + 2) * 3;
+                    if (loaded.imageData[i] != static_cast<uint8_t>(expect.blue()) ||
+                        loaded.imageData[i + 1] != static_cast<uint8_t>(expect.green()) ||
+                        loaded.imageData[i + 2] != static_cast<uint8_t>(expect.red())) {
+                        failReason = QString("BMP→PNG 像素不一致");
+                    }
+                }
+            }
+
+            // BMP → JPEG：尺寸一致、无 alphaData(JPEG 不支持透明)
+            if (failReason.isEmpty()) {
+                opt.suffix = "jpg";
+                if (!FormatConvert::ConvertFile(srcBmp, outJpg, opt, err)) {
+                    failReason = QString("BMP→JPEG 失败：%1").arg(err);
+                } else {
+                    BitmapImage loaded;
+                    QString err2;
+                    if (!BmpIO::ReadImageFile(outJpg.toStdString(), loaded, err2)) {
+                        failReason = QString("JPEG 结果无法读回：%1").arg(err2);
+                    } else if (loaded.bmpInfo.GetWidth() != tw ||
+                               loaded.bmpInfo.GetHeight() != th) {
+                        failReason = QString("JPEG 尺寸不符");
+                    } else if (!loaded.alphaData.empty()) {
+                        failReason = QString("JPEG 不应保留透明通道");
+                    }
+                }
+            }
+
+            // 透明：PNG→PNG 保留 alpha；PNG→BMP 白底压平
+            if (failReason.isEmpty()) {
+                QImage argb(tw, th, QImage::Format_ARGB32);
+                argb.fill(QColor(255, 0, 0, 255));
+                for (int y = 0; y < th; ++y) {
+                    for (int x = tw / 2; x < tw; ++x) {
+                        argb.setPixelColor(x, y, QColor(0, 0, 255, 0));
+                    }
+                }
+                QImageWriter alphaWriter(alphaPng, "png");
+                if (!alphaWriter.write(argb)) {
+                    failReason = QString("无法生成带透明的测试 PNG");
+                } else {
+                    FormatConvertOptions alphaOpt;
+                    alphaOpt.suffix = "png";
+                    alphaOpt.keepAlpha = true;
+                    if (!FormatConvert::ConvertFile(alphaPng, alphaOutPng, alphaOpt, err)) {
+                        failReason = QString("PNG→PNG 失败：%1").arg(err);
+                    } else {
+                        BitmapImage loaded;
+                        QString err2;
+                        if (!BmpIO::ReadImageFile(alphaOutPng.toStdString(), loaded, err2)) {
+                            failReason = QString("透明 PNG 无法读回：%1").arg(err2);
+                        } else if (loaded.alphaData.size() !=
+                                   static_cast<size_t>(tw) * static_cast<size_t>(th)) {
+                            failReason = QString("PNG→PNG 丢失透明通道");
+                        } else {
+                            const size_t opaque =
+                                static_cast<size_t>(th - 1 - 2) * tw + 1;
+                            const size_t clear =
+                                static_cast<size_t>(th - 1 - 2) * tw + (tw - 1);
+                            if (loaded.alphaData[opaque] != 255 ||
+                                loaded.alphaData[clear] != 0) {
+                                failReason = QString("PNG→PNG 透明值不正确");
+                            }
+                        }
+                    }
+
+                    if (failReason.isEmpty()) {
+                        FormatConvertOptions flatOpt;
+                        flatOpt.suffix = "bmp";
+                        flatOpt.keepAlpha = true;   // BMP 不支持透明，应白底压平
+                        if (!FormatConvert::ConvertFile(alphaPng, alphaBmp, flatOpt, err)) {
+                            failReason = QString("PNG→BMP 失败：%1").arg(err);
+                        } else {
+                            BitmapImage loaded;
+                            QString err2;
+                            if (!BmpIO::ReadImageFile(alphaBmp.toStdString(), loaded, err2)) {
+                                failReason = QString("压平 BMP 无法读回：%1").arg(err2);
+                            } else {
+                                const size_t i =
+                                    (static_cast<size_t>(th - 1 - 2) * tw + (tw - 1)) * 3;
+                                if (!loaded.alphaData.empty() || loaded.imageData[i] != 255 ||
+                                    loaded.imageData[i + 1] != 255 ||
+                                    loaded.imageData[i + 2] != 255) {
+                                    failReason = QString("PNG→BMP 未按白底压平");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 源文件不存在时应失败并给出原因
+            if (failReason.isEmpty()) {
+                QString missingErr;
+                opt.suffix = "png";
+                if (FormatConvert::ConvertFile(tmpDir + "/iw_convert_missing.bmp", outPng,
+                                               opt, missingErr)) {
+                    failReason = QString("不存在的源文件却转换成功");
+                } else if (missingErr.isEmpty()) {
+                    failReason = QString("转换失败但没有给出原因");
+                }
+            }
+        }
+
+        // 文件菜单入口
+        if (failReason.isEmpty()) {
+            MainWindow win;
+            if (win.findChild<QAction *>("actionFormatConvert") == nullptr) {
+                failReason = QString("「文件」菜单缺少图片格式转换入口");
+            }
+        }
+
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 图片格式转换 : BMP/PNG/JPEG 互转、透明保留与白底压平均正确\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 图片格式转换 : " << failReason << "\n";
         }
         out().flush();
     }

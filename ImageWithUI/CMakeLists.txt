@@ -62,6 +62,8 @@ set(PROJECT_SOURCES
         src/tools/color_map.cpp
         include/tools/color_map.h
         ui/color_map.ui
+        src/tools/format_convert.cpp
+        include/tools/format_convert.h
 
         # 自检与资源
         src/tests/selftest.cpp
