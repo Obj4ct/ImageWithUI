@@ -195,6 +195,16 @@ QRect TextBlockRect(const LayerText &text)
                        std::max(1, lineHeight * std::max(1, lines.size()))));
 }
 
+// 画笔面板颜色色块(选择颜色与吸管取色共用)
+void ApplyBrushSwatch(QLabel *swatch, const QColor &color)
+{
+    if (swatch == nullptr) {
+        return;
+    }
+    swatch->setStyleSheet(QString("background:%1;border:1px solid #3b4455;border-radius:3px;")
+                              .arg(color.name()));
+}
+
 // QImage(BGR888) -> 内部 BGR 自底向上紧凑缓冲
 std::vector<uint8_t> BgrFromQImage(const QImage &image)
 {
@@ -2217,6 +2227,26 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
         }
     }
 
+    // 吸管：按下即取色，按住左键拖动连续取色(只改画笔颜色，不改像素、不写历史)
+    if (IsCanvasWidget(watched) && m_eyedropperToolAction != nullptr &&
+        m_eyedropperToolAction->isChecked() && !m_spaceHeld &&
+        (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseMove)) {
+        QMouseEvent *mouse = static_cast<QMouseEvent *>(event);
+        const bool press = event->type() == QEvent::MouseButtonPress &&
+                           mouse->button() == Qt::LeftButton;
+        const bool dragging = event->type() == QEvent::MouseMove &&
+                              (mouse->buttons() & Qt::LeftButton);
+        if (press || dragging) {
+            QWidget *source = qobject_cast<QWidget *>(watched);
+            if (source != nullptr) {
+                PickCanvasColorAt(CanvasLabelPos(source, mouse->pos()));
+            }
+            if (press) {
+                return true;   // 不交给覆盖层，避免开始选区/画笔等拖拽
+            }
+        }
+    }
+
     if (event->type() == QEvent::KeyPress) {
         const QKeyEvent *key = static_cast<QKeyEvent *>(event);
         const QLineEdit *edit = qobject_cast<QLineEdit *>(watched);
@@ -2599,6 +2629,40 @@ void MainWindow::ClearPixelProbe()
 }
 
 // ------------------------------------------------------------------
+// 吸管取色：按显示矩形把标签坐标换算成图像像素，取当前画面颜色
+// 写入画笔颜色。只改工具参数，不改像素、不写历史。
+// ------------------------------------------------------------------
+
+void MainWindow::PickCanvasColorAt(const QPoint &labelPos)
+{
+    const QRect dr = CanvasDisplayRect();
+    const int32_t w = myValue.bmpInfo.GetWidth();
+    const int32_t h = myValue.bmpInfo.GetHeight();
+    if (dr.isEmpty() || w <= 0 || h <= 0 || m_canvasBaseImage.isNull() ||
+        !dr.contains(labelPos)) {
+        return;
+    }
+    const int x = qBound(0, static_cast<int>(static_cast<qint64>(labelPos.x() - dr.left()) * w /
+                                             std::max(1, dr.width())), w - 1);
+    const int y = qBound(0, static_cast<int>(static_cast<qint64>(labelPos.y() - dr.top()) * h /
+                                             std::max(1, dr.height())), h - 1);
+    const int ix = qBound(0, static_cast<int>(static_cast<qint64>(x) *
+                                              m_canvasBaseImage.width() / w),
+                          m_canvasBaseImage.width() - 1);
+    const int iy = qBound(0, static_cast<int>(static_cast<qint64>(y) *
+                                              m_canvasBaseImage.height() / h),
+                          m_canvasBaseImage.height() - 1);
+    const QColor color = m_canvasBaseImage.pixelColor(ix, iy);
+
+    m_brushColor = color;
+    ApplyBrushSwatch(m_brushSwatch, color);
+    UpdateBrushParams();
+    UpdateStatus(QString("吸管：已取色 RGB %1, %2, %3（%4），已设为画笔颜色")
+                     .arg(color.red()).arg(color.green()).arg(color.blue())
+                     .arg(color.name().toUpper()));
+}
+
+// ------------------------------------------------------------------
 // 直方图面板：统计当前文档合成后的画面(与保存/显示口径一致)
 // ------------------------------------------------------------------
 
@@ -2808,6 +2872,11 @@ void MainWindow::SetupSelectionTool()
     m_shapeToolAction->setCheckable(true);
     m_shapeToolAction->setToolTip(QString("拖拽绘制矩形/椭圆/直线，松开生成独立形状图层；Shift 约束正方形/正圆/45°"));
 
+    m_eyedropperToolAction = new QAction(QString("吸管"), this);
+    m_eyedropperToolAction->setObjectName("actionEyedropper");
+    m_eyedropperToolAction->setCheckable(true);
+    m_eyedropperToolAction->setToolTip(QString("在画布上单击或拖动取色，颜色直接设为画笔颜色(不改像素、不写历史)"));
+
     // 所有画布工具共用一套状态同步：任一被勾选时启用覆盖层，并切换工具类型
     auto applyToolState = [this]() {
         // 切换工具时放弃未提交的拖拽变换，避免手柄状态残留
@@ -2823,6 +2892,7 @@ void MainWindow::SetupSelectionTool()
         const bool gradient = m_gradientToolAction->isChecked();
         const bool text = m_textToolAction->isChecked();
         const bool shape = m_shapeToolAction->isChecked();
+        const bool eyedrop = m_eyedropperToolAction->isChecked();
         const int kind = magnet ? 3 : poly ? 2 : lasso ? 1 : 0;
         if (m_overlay != nullptr) {
             m_overlay->setToolKind(kind);
@@ -2831,10 +2901,14 @@ void MainWindow::SetupSelectionTool()
             m_overlay->setTextMode(text);
             m_overlay->setShapeMode(shape);
             m_overlay->setShapeType(m_shapeType);
+            // 吸管不交给覆盖层处理，由主窗口的事件过滤器直接取色
             m_overlay->setToolActive(rect || lasso || poly || magnet || brush || eraser ||
                                      gradient || text || shape);
         }
-        if (brush) {
+        ui->imageLabel->setCursor(eyedrop ? Qt::CrossCursor : Qt::ArrowCursor);
+        if (eyedrop) {
+            UpdateStatus(QString("吸管：在画布上单击/拖动取色，颜色直接设为画笔颜色"));
+        } else if (brush) {
             UpdateStatus(QString("画笔：按住左键在活动图层上绘制；笔迹遵守选区"));
         } else if (eraser) {
             UpdateStatus(QString("橡皮：把活动图层擦成透明；笔迹遵守选区"));
@@ -2864,6 +2938,7 @@ void MainWindow::SetupSelectionTool()
     toolGroup->addAction(m_gradientToolAction);
     toolGroup->addAction(m_textToolAction);
     toolGroup->addAction(m_shapeToolAction);
+    toolGroup->addAction(m_eyedropperToolAction);
     connect(m_selectionToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
     connect(m_lassoToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
     connect(m_polyToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
@@ -2873,6 +2948,7 @@ void MainWindow::SetupSelectionTool()
     connect(m_gradientToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
     connect(m_textToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
     connect(m_shapeToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
+    connect(m_eyedropperToolAction, &QAction::toggled, this, [applyToolState](bool) { applyToolState(); });
     ui->toolBox->addAction(m_selectionToolAction);
     ui->toolBox->addAction(m_lassoToolAction);
     ui->toolBox->addAction(m_polyToolAction);
@@ -2882,6 +2958,7 @@ void MainWindow::SetupSelectionTool()
     ui->toolBox->addAction(m_gradientToolAction);
     ui->toolBox->addAction(m_textToolAction);
     ui->toolBox->addAction(m_shapeToolAction);
+    ui->toolBox->addAction(m_eyedropperToolAction);
 
     // "选择"菜单(放在"编辑"之后、"图像模糊"之前)
     m_selectionMenu = new QMenu(QString("选择"), this);
@@ -3050,6 +3127,7 @@ void MainWindow::SetupSelectionTool()
     toolMenu->addAction(m_gradientToolAction);
     toolMenu->addAction(m_textToolAction);
     toolMenu->addAction(m_shapeToolAction);
+    toolMenu->addAction(m_eyedropperToolAction);
     menuBar()->insertMenu(m_selectionMenu->menuAction(), toolMenu);
 
     menuBar()->insertMenu(ui->menu_blur->menuAction(), m_selectionMenu);
@@ -5200,8 +5278,8 @@ void MainWindow::SetupBrushPanel()
     colorButton->setCursor(Qt::PointingHandCursor);
     QLabel *swatch = new QLabel(colorRow);
     swatch->setFixedSize(26, 18);
-    swatch->setStyleSheet(QString("background:%1;border:1px solid #3b4455;border-radius:3px;")
-                              .arg(m_brushColor.name()));
+    ApplyBrushSwatch(swatch, m_brushColor);
+    m_brushSwatch = swatch;   // 供吸管取色后同步色块
     colorLay->addWidget(colorTitle);
     colorLay->addWidget(colorButton);
     colorLay->addWidget(swatch, 1);
@@ -5212,9 +5290,7 @@ void MainWindow::SetupBrushPanel()
             return;
         }
         m_brushColor = color;
-        swatch->setStyleSheet(
-            QString("background:%1;border:1px solid #3b4455;border-radius:3px;")
-                .arg(color.name()));
+        ApplyBrushSwatch(swatch, color);
         UpdateBrushParams();
     });
 

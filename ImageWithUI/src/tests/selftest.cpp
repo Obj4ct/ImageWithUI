@@ -3859,6 +3859,79 @@ int Run(const QString &imagePath)
         out().flush();
     }
 
+    // ---------- 31. 吸管取色 ----------
+    {
+        QString failReason;
+        {
+            MainWindow win;
+            QLabel *label = win.findChild<QLabel *>("imageLabel");
+            QAction *eyedropper = win.findChild<QAction *>("actionEyedropper");
+            if (!win.OpenImage(path)) {
+                failReason = "无法打开样例图";
+            } else if (label == nullptr || eyedropper == nullptr) {
+                failReason = "找不到画布标签或吸管工具";
+            } else if (label->pixmap() == nullptr || label->pixmap()->isNull()) {
+                failReason = "适应窗口下没有显示位图";
+            } else {
+                eyedropper->setChecked(true);
+                // 先用一个哨兵色，确认取色确实写入了画笔颜色
+                win.SetBrushParams(win.BrushSize(), 70, 0.8, QColor(255, 0, 255));
+
+                const int32_t w = win.myValue.bmpInfo.GetWidth();
+                const int32_t h = win.myValue.bmpInfo.GetHeight();
+                const QSize shown = label->pixmap()->size();
+                const QRect area = label->contentsRect();
+                const QPoint topLeft =
+                    area.topLeft() + QPoint((area.width() - shown.width()) / 2,
+                                            (area.height() - shown.height()) / 2);
+                const QRect dr(topLeft, shown);
+                const QImage disp = ImageOps::ToDisplayImage(win.imageData, w, h);
+
+                auto expectColorAt = [&](const QPoint &labelPos) {
+                    const int x = qBound(0, static_cast<int>(static_cast<qint64>(
+                                                labelPos.x() - dr.left()) * w /
+                                                std::max(1, dr.width())), w - 1);
+                    const int y = qBound(0, static_cast<int>(static_cast<qint64>(
+                                                labelPos.y() - dr.top()) * h /
+                                                std::max(1, dr.height())), h - 1);
+                    return disp.pixelColor(x, y);
+                };
+
+                const QPoint first = topLeft + QPoint(shown.width() / 3, shown.height() / 3);
+                const QColor expect = expectColorAt(first);
+                QMouseEvent press(QEvent::MouseButtonPress, QPointF(first),
+                                  QPointF(label->mapToGlobal(first)), Qt::LeftButton,
+                                  Qt::LeftButton, Qt::NoModifier);
+                QApplication::sendEvent(label, &press);
+                if (win.BrushColor() != expect) {
+                    failReason = QString("单击取色不对(期望 %1 实际 %2)")
+                                     .arg(expect.name(), win.BrushColor().name());
+                } else {
+                    // 按住左键拖到另一处，颜色应连续更新
+                    const QPoint second = topLeft + QPoint(shown.width() * 2 / 3,
+                                                           shown.height() * 2 / 3);
+                    const QColor expect2 = expectColorAt(second);
+                    QMouseEvent move(QEvent::MouseMove, QPointF(second),
+                                     QPointF(label->mapToGlobal(second)), Qt::NoButton,
+                                     Qt::LeftButton, Qt::NoModifier);
+                    QApplication::sendEvent(label, &move);
+                    if (win.BrushColor() != expect2) {
+                        failReason = QString("拖动取色不对(期望 %1 实际 %2)")
+                                         .arg(expect2.name(), win.BrushColor().name());
+                    }
+                }
+            }
+        }
+        if (failReason.isEmpty()) {
+            ++g_pass;
+            out() << "[PASS] 吸管取色 : 单击与拖动都能把画布颜色设为画笔颜色\n";
+        } else {
+            ++g_fail;
+            out() << "[FAIL] 吸管取色 : " << failReason << "\n";
+        }
+        out().flush();
+    }
+
     out() << "------------------------------------------------\n";
     out() << "通过 " << g_pass << " 项，失败 " << g_fail << " 项\n";
     out().flush();

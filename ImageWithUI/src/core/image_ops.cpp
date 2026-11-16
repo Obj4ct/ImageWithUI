@@ -962,7 +962,7 @@ void ImageOps::FlipImage(std::vector<uint8_t> &imageData, int32_t &width, int32_
             case FlipMode::Horizontal:    sx = W - 1 - x;  break;
             case FlipMode::Vertical:      sy = H - 1 - yv; break;
             case FlipMode::Transpose:     sx = yv; sy = x; break;
-            case FlipMode::AntiTranspose: sx = H - 1 - yv; sy = W - 1 - x; break;
+            case FlipMode::AntiTranspose: sx = W - 1 - yv; sy = H - 1 - x; break;
             }
             const size_t src = (static_cast<size_t>(H - 1 - sy) * W + sx) * 3;
             const size_t dst = (static_cast<size_t>(outH - 1 - yv) * outW + x) * 3;

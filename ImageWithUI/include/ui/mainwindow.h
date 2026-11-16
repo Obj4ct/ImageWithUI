@@ -323,6 +323,7 @@ public:
     // 按下时记录快照，松开时作为一步历史提交。
     void PaintBrushStroke(const QPoint &from, const QPoint &to, bool erase = false);
     int BrushSize() const { return m_brushSize; }
+    QColor BrushColor() const { return m_brushColor; }
     void SetBrushParams(int size, int hardness, double opacity, const QColor &color);
 
     // ---- 渐变工具(在活动图层上填充；遵守选区覆盖度) ----
@@ -509,6 +510,8 @@ private:
     void UpdatePixelProbe(const QPoint &labelPos);   // 标签内坐标 → 坐标/颜色提示
     void UpdatePixelProbeFromCursor();               // 缩放/滚动后按当前光标刷新
     void ClearPixelProbe();
+    // ---- 吸管取色(只读当前画面，把颜色设为画笔颜色，不写历史) ----
+    void PickCanvasColorAt(const QPoint &labelPos);
     QLabel *m_probeLabel = nullptr;                  // 状态栏左侧的探针显示
     HistogramView *m_histogramView = nullptr;
     QGroupBox *m_histogramGroup = nullptr;
@@ -691,7 +694,9 @@ private:
     bool ApplyPendingBrush();
     QAction *m_brushToolAction = nullptr;
     QAction *m_eraserToolAction = nullptr;
+    QAction *m_eyedropperToolAction = nullptr;   // 吸管：取画面颜色设为画笔颜色
     QGroupBox *m_brushGroup = nullptr;
+    QLabel *m_brushSwatch = nullptr;       // 画笔面板里的颜色色块(吸管取色后同步)
     int m_brushSize = 20;                  // 直径(图像像素)
     int m_brushHardness = 70;              // 0~100
     double m_brushOpacity = 0.8;           // 0.0~1.0
